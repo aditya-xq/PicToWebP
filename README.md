@@ -35,6 +35,7 @@ git clone <repository_link>
 cd PicToWebP
 python convert_to_webp.py
 ```
+The script creates a new sub-folder with all the images converted to WebP format.
 
 ## Final Words 🎤
 
