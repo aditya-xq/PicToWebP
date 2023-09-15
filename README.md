@@ -4,7 +4,7 @@ Welcome to **PicToWebP**! 🎉
 
 Have you ever been so overwhelmed by the sheer size of your image collections that you thought, "If only these could magically weigh less without sacrificing the quality!"? Well, put on your wizard hat, because we're about to do some magic.✨
 
-## Why Should I Care? 🤔
+## Why Should You Care? 🤔
 
 Images are like cats on the internet: everywhere. But unlike cats, heavy images can slow down your site, eat up your storage, and make your users wait. Nobody likes waiting, especially your cat. 🐱
 
