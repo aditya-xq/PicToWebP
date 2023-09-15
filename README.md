@@ -31,7 +31,7 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 5. Sit back and watch the magic happen! (You can wear your wizard hat now.)
 
 ```bash
-git clone <repository_link>
+git clone https://github.com/aditya-xq/PicToWebP.git
 cd PicToWebP
 python convert_to_webp.py
 ```
