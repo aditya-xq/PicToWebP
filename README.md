@@ -12,7 +12,7 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 
 1. **Smaller Size, Same Quality**: WebP format is proven to have a smaller file size for the same quality when compared to formats like JPEG or PNG.
 2. **Faster Websites**: Smaller image sizes mean faster load times. Give your users a zippy experience!
-3. **Save on Storage Costs**: When you're running a site with thousands of images or have a huge image libray on the cloud (like on Google Drive), converting them to WebP can save you a lot of space, and as we all know, space costs money. 💰
+3. **Save on Storage Costs**: When you're running a site with thousands of images or have a huge image library on the cloud (like on Google Drive), converting them to WebP can save you a lot of space, and as we all know, space costs money. 💰
 4. **Environmentally Friendly**: Smaller files = Less server power = A happier Earth. 🌍❤️
 
 ## Features 🚀
