@@ -35,7 +35,7 @@ git clone https://github.com/aditya-xq/PicToWebP.git
 cd PicToWebP
 python convert_to_webp.py
 ```
-The script creates a new sub-folder with all the images converted to WebP format.
+The script creates a new sub-folder with all the images converted to WebP format. In some cases, it can reduce memory usage by over 90% without any noticeable change in the quality of the images!
 
 ## Final Words 🎤
 
