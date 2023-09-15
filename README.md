@@ -27,7 +27,7 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 1. Clone the repository.
 2. Navigate to the directory.
 3. Run the script.
-4. Provide the folder path.
+4. Provide the folder path with images you want to convert.
 5. Sit back and watch the magic happen! (You can wear your wizard hat now.)
 
 ```bash
