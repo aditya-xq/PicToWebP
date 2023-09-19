@@ -26,16 +26,17 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 
 1. Clone the repository.
 2. Navigate to the directory.
-3. Run the script.
-4. Provide the folder path with images you want to convert.
-5. Sit back and watch the magic happen! (You can wear your wizard hat now.)
+3. Install the required dependencies via pip- pillow, tqdm
+4. Run the script.
+5. Provide the folder path with images you want to convert.
+6. Sit back and watch the magic happen! (You can wear your wizard hat now.)
 
 ```bash
 git clone https://github.com/aditya-xq/PicToWebP.git
 cd PicToWebP
-python convert_to_webp.py
+python convert.py
 ```
-The script creates a new sub-folder with all the images converted to WebP format. In some cases, it can reduce memory usage by over 90% without any noticeable change in the quality of the images!
+The script creates a new sub-folder in the source folder with all the images converted to the chosen format. In some cases, it can reduce memory usage by over 90% without any noticeable change in the quality of the images!
 
 ## Final Words 🎤
 
