@@ -29,7 +29,8 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 3. Install the required dependencies via pip- pillow, tqdm
 4. Run the script.
 5. Provide the folder path with images you want to convert.
-6. Sit back and watch the magic happen! (You can wear your wizard hat now.)
+6. Provide the details for image quality and threads to process (press enter directly to use default values).
+7. Sit back and watch the magic happen! (You can wear your wizard hat now.)
 
 ```bash
 git clone https://github.com/aditya-xq/PicToWebP.git
