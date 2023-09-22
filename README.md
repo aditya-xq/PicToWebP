@@ -34,7 +34,7 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 
 ```bash
 git clone https://github.com/aditya-xq/PicToWebP.git
-cd PicToWebP
+cd PicToWebP/src
 python convert.py
 ```
 The script creates a new sub-folder in the source folder with all the images converted to the chosen format. In some cases, it can reduce memory usage by over 90% without any noticeable change in the quality of the images!
