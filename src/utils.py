@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 import shutil
-from typing import List, TypedDict, Tuple
+from typing import List, Tuple, TypedDict, Callable, Optional, Any
 
 from PIL import Image, UnidentifiedImageError
 
@@ -36,7 +36,8 @@ def get_user_input_for_folder(prompt: str, allowed_responses: set[str], max_retr
         logger.warning(f"Invalid input. Allowed responses are: {', '.join(allowed_responses)}.")
     raise ValueError("Maximum retries reached. Invalid input.")
 
-def validate_input(user_input, validation_func, conversion_func, error_message, default):
+def validate_input(user_input: str, validation_func: Callable[[Any], bool], conversion_func: Callable[[str], Any], 
+                   error_message: str, default: Optional[Any] = None) -> Optional[Any]:
     """
     Validate and convert user input using the provided validation and conversion functions.
     
@@ -53,15 +54,17 @@ def validate_input(user_input, validation_func, conversion_func, error_message, 
             if validation_func(converted_input):
                 return converted_input
             else:
-                print(error_message)
+                logger.warning(error_message)
         except ValueError:
-            print(error_message)
+            logger.warning(error_message)
     elif default is not None:
         return default
     else:
-        print(error_message)
+        logger.warning(error_message)
+    return None
 
-def get_user_input(prompt: str, validation_func: callable, conversion_func: callable, error_message: str, default=None):
+def get_user_input(prompt: str, validation_func: Callable[[Any], bool], conversion_func: Callable[[str], Any], 
+                   error_message: str, default: Optional[Any] = None) -> Any:
     """
     Get user input, convert it, and validate it using the provided validation and conversion functions.
     
@@ -77,6 +80,8 @@ def get_user_input(prompt: str, validation_func: callable, conversion_func: call
         valid_input = validate_input(user_input, validation_func, conversion_func, error_message, default)
         if valid_input is not None:
             return valid_input
+        else:
+            logger.error(error_message)  # Inform the user immediately
 
 def get_image_files(source_folder: Path) -> List[Path]:
     """
@@ -87,8 +92,9 @@ def get_image_files(source_folder: Path) -> List[Path]:
     :return: A list of image file paths.
     """
     image_files = []
-    for format in ImageFormat:
-        image_files.extend(source_folder.rglob(f"*.{format.value.lower()}"))
+    patterns = [f"*.{img_format.value.lower()}" for img_format in ImageFormat]
+    for pattern in patterns:
+        image_files.extend(source_folder.rglob(pattern))
     return image_files
 
 def create_output_folder(source_folder: Path, format: str) -> Path:
@@ -103,7 +109,6 @@ def create_output_folder(source_folder: Path, format: str) -> Path:
     """
     output_folder = source_folder.parent / f"{source_folder.name}_{format.lower()}"
     if output_folder.is_dir():
-        print("Warning: All contents of the existing output folder will be deleted!")
         user_input = get_user_input_for_folder("Output folder already exists. Do you want to replace it? (y/n): ", {'y', 'n'})
         if user_input == 'n':
             raise OperationCancelledError("Operation cancelled by the user.")
@@ -130,7 +135,7 @@ def process_file(file_path: Path, source_folder: Path, output_folder: Path, qual
     try:
         with Image.open(file_path) as img:
             img.convert("RGB").save(output_file_path, format, quality=quality)  # Convert to RGB as some formats don't support RGBA
-    except UnidentifiedImageError as error:
+    except (UnidentifiedImageError, PermissionError, FileNotFoundError) as error:
         logger.error(f"Error processing file {file_path}. Error: {error}")
         return (0, 0, 0)
 
