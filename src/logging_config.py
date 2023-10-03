@@ -3,7 +3,7 @@ import logging
 # Define the log level, format, and the name of the log file
 LOG_LEVEL = logging.INFO
 LOG_FORMAT = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
-LOG_FILE = 'project_logs.log'
+LOG_FILE = 'app.log'
 
 def setup_logging():
     """
