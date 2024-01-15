@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from threading import Lock
 import time
 from flask import Flask, request, render_template, jsonify, Response, stream_with_context
 from convert import convert_images
@@ -7,6 +8,7 @@ from enums import OutputImageFormat
 from convert import global_conversion_progress
 
 app = Flask(__name__)
+conversion_lock = Lock()
 
 @app.route('/', methods=['GET'])
 def index():
@@ -60,8 +62,12 @@ def convert():
             # Handle any other exceptions
             return f"An error occurred: {e}", 500
 
-    message, status_code = validate_and_convert()
-    return jsonify({"message": message}), status_code
+    if conversion_lock.locked():
+        return jsonify({"message": "Conversion is already in progress"}), 429
+
+    with conversion_lock:
+        message, status_code = validate_and_convert()
+        return jsonify({"message": message}), status_code
 
 if __name__ == '__main__':
     app.run(debug=True)  # Set debug=False in a production environment

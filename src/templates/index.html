@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PicToWebP 🖼️➡️🌐</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -75,8 +76,6 @@
         const threads = document.getElementById('threads');
         const submitButton = document.getElementById('submit-button');
         const evtSource = new EventSource("/progress");
-
-        console.log('s', sourceFolder.textContent);
     
         // Early exit if essential elements are missing
         if (!form || !progressBar || !statsDisplay || !sourceFolder || !quality || !threads || !submitButton) {
@@ -136,6 +135,7 @@
                     evtSource.close();
                     displayStats(data['stats']);
                     setFormDisabled(false); // Re-enable the form
+                    validateInputs();
                 }
             } catch (error) {
                 console.error('Error parsing JSON:', error);
@@ -146,6 +146,8 @@
         // Handle form submission
         form.addEventListener('submit', function(e) {
             e.preventDefault();
+            statsDisplay.classList.add('hidden');
+
             const formData = new FormData(form);
         
             fetch('/convert', {
@@ -174,8 +176,9 @@
             evtSource.close();
         };
         
-        // Initial validation check
+        // Initial setup
         validateInputs();
+        progressBar.parentElement.style.display = 'none';
     });
     </script>
 </head>
@@ -194,7 +197,7 @@
                 <input type="number" id="quality" name="quality" value="80" min="1" max="100" class="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-600 focus:outline-none focus:border-indigo-500">
             </div>
             <div class="mb-4">
-                <label for="threads">Threads (default 16):</label>
+                <label for="threads">Threads (Default 16):</label>
                 <input type="number" id="threads" name="threads" value="16" placeholder="Number of threads" class="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-600 focus:outline-none focus:border-indigo-500">
             </div>
             <div class="flex justify-center">
@@ -203,7 +206,7 @@
         </form>
         <div class="mt-6 pb-8">
             <div class="relative pt-1">
-                <div class="overflow-hidden h-6 mb-4 text-xs flex rounded bg-indigo-200" style="width: 70%; margin:auto">
+                <div class="overflow-hidden h-6 mb-4 text-xs flex rounded-full bg-indigo-200" style="width: 70%; margin:auto">
                     <div id="progress-bar" style="width:0%;" class="shadow-none h-6 flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500"></div>
                 </div>
             </div>
