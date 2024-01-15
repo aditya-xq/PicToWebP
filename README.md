@@ -2,13 +2,15 @@
 
 Welcome to **PicToWebP**! 🎉
 
+<img src="https://github.com/aditya-xq/PicToWebP/assets/32733783/8cdc0fd6-109e-4161-b63e-0632e477d105" alt="alt text" width="250" height="250">
+
 Have you ever been so overwhelmed by the sheer size of your image collections that you thought, "If only these could magically weigh less without sacrificing the quality!"? Well, put on your wizard hat, because we're about to do some magic.✨
 
 ## Why Should You Care? 🤔
 
 Images are like cats on the internet: everywhere. But unlike cats, heavy images can slow down your site, eat up your storage, and make your users wait. Nobody likes waiting, especially your cat. 🐱
 
-**PicToWebP** takes your chunky images and turns them into lightweight WebP beauties, without compromising on the quality. Here are some solid reasons to get excited:
+**PicToWebP** takes your chunky images and turns them into lightweight WebP beauties without compromising on quality. Here are some solid reasons to get excited:
 
 1. **Smaller Size, Same Quality**: WebP format is proven to have a smaller file size for the same quality when compared to formats like JPEG or PNG.
 2. **Faster Websites**: Smaller image sizes mean faster load times. Give your users a zippy experience!
@@ -39,12 +41,12 @@ python convert.py
 ```
 The script creates a new sub-folder in the source folder with all the images converted to the chosen format. In some cases, it can reduce memory usage by over 90% without any noticeable change in the quality of the images!
 
-If you'd like a sleek user interface instead of command line, run the flask app in src folder. Visit localhost:5000 to access the UI.
+If you'd like a sleek user interface instead of a command line, run the Flask app in the src folder. Visit localhost:5000 to access the UI.
 ```bash
 python app.py
 ```
 
-Are you a rusteacean? Check out the rust version at src_rust folder. Use the below command to run it.
+Are you a rusteacean? Check out the rust version in the src_rust folder. Use the below command to run it.
 ```bash
 cd src_rust
 cargo run --release
