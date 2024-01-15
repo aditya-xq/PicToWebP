@@ -39,6 +39,17 @@ python convert.py
 ```
 The script creates a new sub-folder in the source folder with all the images converted to the chosen format. In some cases, it can reduce memory usage by over 90% without any noticeable change in the quality of the images!
 
+If you'd like a sleek user interface instead of command line, run the flask app in src folder. Visit localhost:5000 to access the UI.
+```bash
+python app.py
+```
+
+Are you a rusteacean? Check out the rust version at src_rust folder. Use the below command to run it.
+```bash
+cd src_rust
+cargo run --release
+```
+
 ## Final Words 🎤
 
 If you're tired of your images taking up more space than they should, give **PicToWebP** a try. It's like putting your images on a fun diet, where they lose weight but none of the charm!
