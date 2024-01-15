@@ -1,6 +1,5 @@
 from enum import Enum
 
-
 class OutputImageFormat(str, Enum):
     WEBP = 'WEBP'
     # add other formats as needed

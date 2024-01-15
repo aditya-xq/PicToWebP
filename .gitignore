@@ -1,2 +1,4 @@
 __pycache__
 app.log
+src_rust/cargo.lock
+src_rust/target

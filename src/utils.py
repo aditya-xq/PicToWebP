@@ -1,3 +1,4 @@
+import datetime
 import logging
 from pathlib import Path
 import shutil
@@ -7,6 +8,7 @@ from PIL import Image, UnidentifiedImageError
 
 from enums import ImageFormat
 from exceptions import OperationCancelledError
+from constants import DEFAULT_QUALITY, DEFAULT_THREADS
 
 # Create a logger for this module
 logger = logging.getLogger(__name__)
@@ -107,7 +109,8 @@ def create_output_folder(source_folder: Path, format: str) -> Path:
     :return: The output folder path.
     :raises OperationCancelledError: If the operation is cancelled by the user.
     """
-    output_folder = source_folder.parent / f"{source_folder.name}_{format.lower()}"
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_folder = source_folder.parent / f"{source_folder.name}_{format.lower()}_{timestamp}"
     if output_folder.is_dir():
         user_input = get_user_input_for_folder("Output folder already exists. Do you want to replace it? (y/n): ", {'y', 'n'})
         if user_input == 'n':
@@ -142,6 +145,36 @@ def process_file(file_path: Path, source_folder: Path, output_folder: Path, qual
     converted_size = output_file_path.stat().st_size
     return (original_size, converted_size, 1)
 
+def get_user_settings():
+    """
+    Get user settings like source folder, quality and number of threads.
+    :return: Tuple containing source folder, quality and number of threads.
+    """
+    source_folder = get_user_input(
+        "Enter the path to the source folder: ",
+        Path.is_dir,
+        Path,
+        "Invalid directory path. Please enter a valid path."
+    )
+
+    quality = get_user_input(
+        f"Enter the quality (default {DEFAULT_QUALITY}): ",
+        lambda x: isinstance(x, int) and x > 0,
+        int,
+        "Invalid input. Please enter a valid number.",
+        DEFAULT_QUALITY
+    )
+
+    threads = get_user_input(
+        f"Enter the number of threads (default {DEFAULT_THREADS}): ",
+        lambda x: isinstance(x, int) and x > 0,
+        int,
+        "Invalid input. Please enter a valid number.",
+        DEFAULT_THREADS
+    )
+
+    return source_folder, quality, threads
+
 def generate_report(stats: Stats):
     """
     Generate a report of the conversion, logging the total memory reduced, 
@@ -155,3 +188,24 @@ def generate_report(stats: Stats):
     logger.info(f"Total memory reduced: {memory_reduced:.2f} MB ({reduction_percentage:.2f}%)")
     logger.info(f"Total number of images converted: {stats['conversion_count']}")
     logger.info(f"Total time taken: {stats['total_time']:.2f} seconds")
+
+def print_separator():
+    import random
+
+    # ASCII Art separators
+    ascii_art_separators = [
+        "------------------------------------------------------------\n"
+        "                     PicToWebP 🖼️➡️🌐                      \n"
+        "------------------------------------------------------------\n\n",
+        "************************************************************\n"
+        "                     PicToWebP 🖼️➡️🌐                      \n"
+        "************************************************************\n\n",
+        "############################################################\n"
+        "                     PicToWebP 🖼️➡️🌐                      \n"
+        "############################################################\n\n",
+        "==================== PicToWebP 🖼️➡️🌐 ====================\n"
+        "============================================================\n\n",
+    ]
+
+    # Randomly select and print a separator
+    print(random.choice(ascii_art_separators))

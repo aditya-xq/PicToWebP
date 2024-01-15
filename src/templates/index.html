@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PicToWebP 🖼️➡️🌐</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #1a202c;
+            color: #f7fafc;
+            text-align: center;
+            font-size: large;
+        }
+        h2, h3 {
+            margin-bottom: 50px;
+        }
+        form {
+            max-width: 500px;
+            margin: auto;
+            border-radius: 8px;
+            background-color: #2d3748;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            text-align: left;
+        }
+        input[type=text], input[type=number], input[type=submit] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            border: none;
+            background-color: #1a202c;
+            color: #f7fafc;
+        }
+        input[type=submit] {
+            background-color: #4c51bf;
+            color: white;
+            cursor: pointer;
+            width: 100px;
+            font-size: large;
+        }
+        input[type=submit]:hover {
+            background-color: #434190;
+        }
+        /* Styles for disabled inputs */
+        input:disabled {
+            background-color: #2d3748; /* Darker background for disabled inputs */
+            color: #a0aec0; /* Lighter text color for disabled inputs */
+            cursor: not-allowed; /* Cursor to indicate the input is not interactive */
+        }
+
+        #progress-bar {
+            transition: width 0.5s ease-in-out;
+        }
+
+        #stats-display {
+            transition: opacity 0.5s ease-in-out;
+            max-width: 450px;
+            text-align: left;
+            margin: auto;
+            padding: 20px;
+        }
+    </style>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('form');
+        const progressBar = document.getElementById('progress-bar');
+        const statsDisplay = document.getElementById('stats-display');
+        const sourceFolder = document.getElementById('source_folder');
+        const quality = document.getElementById('quality');
+        const threads = document.getElementById('threads');
+        const submitButton = document.getElementById('submit-button');
+        const evtSource = new EventSource("/progress");
+
+        console.log('s', sourceFolder.textContent);
+    
+        // Early exit if essential elements are missing
+        if (!form || !progressBar || !statsDisplay || !sourceFolder || !quality || !threads || !submitButton) {
+            console.error('One or more essential elements are missing in the DOM');
+            return;
+        }
+    
+        // Function to validate inputs
+        function validateInputs() {
+            const isSourceFolderValid = sourceFolder.value.trim() !== '';
+            const isQualityValid = quality.value >= 1 && quality.value <= 100;
+            const isThreadsValid = threads.value !== '';
+            submitButton.disabled = !(isSourceFolderValid && isQualityValid && isThreadsValid);
+        }
+    
+        // Function to set form disabled state
+        function setFormDisabled(disabled) {
+            form.querySelectorAll('input').forEach(input => {
+                input.disabled = disabled;
+            });
+        }
+    
+        // Add event listeners to input fields
+        [sourceFolder, quality, threads].forEach(element => {
+            element.addEventListener('input', validateInputs);
+        });
+    
+        // Function to display stats
+        function displayStats(stats) {
+            const memoryReducedElement = document.getElementById('memory-reduced').querySelector('span');
+            const imagesConvertedElement = document.getElementById('images-converted').querySelector('span');
+            const totalTimeElement = document.getElementById('total-time').querySelector('span');
+            if (!memoryReducedElement || !imagesConvertedElement || !totalTimeElement) {
+                console.error('One or more stat display elements are missing in the DOM');
+                return;
+            }
+            // Calculate and display stats
+            const memoryReduced = (stats['total_original_size'] - stats['total_converted_size']) / (1024 * 1024);
+            const reductionPercentage = ((stats['total_original_size'] - stats['total_converted_size']) / stats['total_original_size']) * 100;
+            memoryReducedElement.textContent = `${memoryReduced.toFixed(2)} MB (${reductionPercentage.toFixed(2)}%)`;
+            imagesConvertedElement.textContent = stats['conversion_count'];
+            totalTimeElement.textContent = `${stats['total_time'].toFixed(2)} seconds`;
+            statsDisplay.classList.remove('hidden');
+        }
+    
+        // Handle EventSource messages
+        evtSource.onmessage = function(e) {
+            try {
+                const data = JSON.parse(e.data);
+                const progressPercentage = data && data['stats'] ? (data['stats']['conversion_count'] / data['num_files']) * 100 : 0;
+                progressBar.style.width = progressPercentage + '%';
+                progressBar.textContent = progressPercentage.toFixed(0) + '%';
+                if (data && data['stats'] && data['stats']['conversion_count'] === data['num_files']) {
+                    progressBar.style.backgroundColor = '#48BB78'; // Green color on completion
+                    progressBar.textContent = 'Completed!';
+                    progressBar.style.color = '#000';
+                    evtSource.close();
+                    displayStats(data['stats']);
+                    setFormDisabled(false); // Re-enable the form
+                }
+            } catch (error) {
+                console.error('Error parsing JSON:', error);
+                setFormDisabled(false); // Re-enable the form in case of error
+            }
+        };
+    
+        // Handle form submission
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(form);
+        
+            fetch('/convert', {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json())
+            .then(data => {
+                console.log(data);
+                // Additional response handling
+            }).catch(error => {
+                console.error('Error:', error);
+                setFormDisabled(false); // Re-enable the form in case of error
+            });
+        
+            progressBar.style.width = '0%';
+            progressBar.style.backgroundColor = '#4c51bf'; // Reset progress bar color
+            progressBar.textContent = '';
+            setFormDisabled(true); // Disable form elements
+        
+            // Show the progress bar
+            progressBar.parentElement.style.display = 'block';
+        });
+    
+        // Clean up when the window is unloaded
+        window.onunload = function() {
+            evtSource.close();
+        };
+        
+        // Initial validation check
+        validateInputs();
+    });
+    </script>
+</head>
+<body class="dark:bg-gray-800 dark:text-gray-200">
+    <div class="container mx-auto px-4">
+        <h1 class="text-3xl font-bold text-center my-6">PicToWebP 🖼️➡️🌐</h1>
+        <h2 class="text-xl text-center mb-6">A blazingly fast, lightweight bulk image to WebP converter that can help you save over 90% of disk space.</h2>
+        <h3 class="text-xl text-center mb-6">(Note: Runs completely locally on your system ✨)</h3>
+        <form action="/convert" method="post" class="bg-gray-700 p-8 rounded-lg shadow-lg text-center">
+            <div class="mb-4">
+                <label for="source_folder">Source Folder Path:</label>
+                <input type="text" id="source_folder" name="source_folder" placeholder="Enter source folder path" class="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-600 focus:outline-none focus:border-indigo-500">
+            </div>
+            <div class="mb-4">
+                <label for="quality">Quality (1-100; Default: 80):</label>
+                <input type="number" id="quality" name="quality" value="80" min="1" max="100" class="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-600 focus:outline-none focus:border-indigo-500">
+            </div>
+            <div class="mb-4">
+                <label for="threads">Threads (default 16):</label>
+                <input type="number" id="threads" name="threads" value="16" placeholder="Number of threads" class="w-full px-3 py-2 rounded-md bg-gray-800 border border-gray-600 focus:outline-none focus:border-indigo-500">
+            </div>
+            <div class="flex justify-center">
+                <input type="submit" value="Convert" id="submit-button" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring focus:ring-indigo-300 focus:ring-opacity-50">
+            </div>
+        </form>
+        <div class="mt-6 pb-8">
+            <div class="relative pt-1">
+                <div class="overflow-hidden h-6 mb-4 text-xs flex rounded bg-indigo-200" style="width: 70%; margin:auto">
+                    <div id="progress-bar" style="width:0%;" class="shadow-none h-6 flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500"></div>
+                </div>
+            </div>
+        </div>        
+        <div id="stats-display" class="hidden mt-6 p-4 rounded-lg bg-gray-600 text-center">
+            <h3 class="text-lg font-bold">📈 Stats</h3>
+            <p id="memory-reduced">🗃️ Memory reduced: <b><span></span></b> MB</p>
+            <p id="images-converted">🖼️ Images converted: <b><span></span></b></p>
+            <p id="total-time">⏲️ Time taken: <b><span></span></b> seconds</p>
+        </div>   
+    </div>
+</body>
+</html>

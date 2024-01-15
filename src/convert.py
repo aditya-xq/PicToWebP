@@ -10,7 +10,8 @@ from constants import DEFAULT_QUALITY, DEFAULT_THREADS
 from enums import OutputImageFormat
 from logging_config import setup_logging
 from utils import (
-    get_user_input,
+    get_user_settings,
+    print_separator,
     process_file,
     get_image_files,
     create_output_folder,
@@ -54,35 +55,7 @@ def update_conversion_stats(stats, original_size, converted_size, files_converte
     stats['conversion_count'] += files_converted
     return stats
 
-def get_user_settings():
-    """
-    Get user settings like source folder, quality and number of threads.
-    :return: Tuple containing source folder, quality and number of threads.
-    """
-    source_folder = get_user_input(
-        "Enter the path to the source folder: ",
-        Path.is_dir,
-        Path,
-        "Invalid directory path. Please enter a valid path."
-    )
-
-    quality = get_user_input(
-        f"Enter the quality (default {DEFAULT_QUALITY}): ",
-        lambda x: isinstance(x, int) and x > 0,
-        int,
-        "Invalid input. Please enter a valid number.",
-        DEFAULT_QUALITY
-    )
-
-    threads = get_user_input(
-        f"Enter the number of threads (default {DEFAULT_THREADS}): ",
-        lambda x: isinstance(x, int) and x > 0,
-        int,
-        "Invalid input. Please enter a valid number.",
-        DEFAULT_THREADS
-    )
-
-    return source_folder, quality, threads
+global_conversion_progress = {}
 
 def convert_images(source_folder_path: Path, quality: int = DEFAULT_QUALITY, threads: int = DEFAULT_THREADS,
                    format: Enum = OutputImageFormat.WEBP):
@@ -94,8 +67,11 @@ def convert_images(source_folder_path: Path, quality: int = DEFAULT_QUALITY, thr
     :param format: Format to convert the images to.
     """
     conversion_stats = {'total_original_size': 0, 'total_converted_size': 0, 'conversion_count': 0}
+    global global_conversion_progress
 
     file_list = get_image_files(source_folder_path)
+    global_conversion_progress['num_files'] = len(file_list)
+
     if not file_list:
         logger.info("No image files found in the source folder.")
         return
@@ -111,7 +87,7 @@ def convert_images(source_folder_path: Path, quality: int = DEFAULT_QUALITY, thr
     start_time = time()
 
     # Create batches of file paths
-    batch_size = len(file_list) // threads
+    batch_size = len(file_list) // (threads * 32)
     batches_of_files = [file_list[i:i + batch_size] for i in range(0, len(file_list), batch_size)]
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
@@ -119,7 +95,7 @@ def convert_images(source_folder_path: Path, quality: int = DEFAULT_QUALITY, thr
                                  format=format)
         for batch_stats in tqdm(executor.map(worker_partial, batches_of_files), total=len(batches_of_files), unit="batch"):
             conversion_stats = update_conversion_stats(conversion_stats, batch_stats['total_original_size'], batch_stats['total_converted_size'], batch_stats['conversion_count'])
-
+            global_conversion_progress['stats'] = conversion_stats
     conversion_stats['total_time'] = time() - start_time
     generate_report(conversion_stats)
 
@@ -127,6 +103,7 @@ def main():
     """
     Main function to execute the script.
     """
+    print_separator()
     setup_logging()
     source_folder, quality, threads = get_user_settings()
     image_format = OutputImageFormat.WEBP
