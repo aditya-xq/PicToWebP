@@ -26,7 +26,7 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 
 1. Clone the repository.
 2. Navigate to the directory.
-3. Install the required dependencies via pip- pillow, tqdm
+3. Install the required dependencies via pip- pillow, tqdm, flask
 4. Run the script.
 5. Provide the folder path with images you want to convert.
 6. Provide the details for image quality and threads to process (press enter directly to use default values).
