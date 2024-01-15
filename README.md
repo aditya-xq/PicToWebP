@@ -2,7 +2,7 @@
 
 Welcome to **PicToWebP**! 🎉
 
-<img src="https://github.com/aditya-xq/PicToWebP/assets/32733783/8cdc0fd6-109e-4161-b63e-0632e477d105" alt="alt text" width="250" height="250">
+<img src="https://github.com/aditya-xq/PicToWebP/assets/32733783/8cdc0fd6-109e-4161-b63e-0632e477d105" alt="PicToWebP Logo" width="250" height="250">
 
 Have you ever been so overwhelmed by the sheer size of your image collections that you thought, "If only these could magically weigh less without sacrificing the quality!"? Well, put on your wizard hat, because we're about to do some magic.✨
 

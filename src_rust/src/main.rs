@@ -16,29 +16,30 @@ const DEFAULT_THREADS: usize = 16;
 struct UserSettings {
     source_folder: PathBuf,
     quality: i32,
+    threads: usize,
 }
 
 fn get_user_settings() -> UserSettings {
     let source_folder: PathBuf = get_user_input(
         "Enter the path to the source folder: ",
         |path: &PathBuf| path.is_dir(),
-        |input| PathBuf::from_str(input).map_err(|_| "Invalid path.".to_string()),
+        |input: &str| PathBuf::from_str(input).map_err(|_| "Invalid path.".to_string()),
         "Invalid directory path. Please enter a valid path.",
         None,
     );
 
-    let quality = get_user_input(
+    let quality: i32 = get_user_input(
         &format!("Enter the quality (default {}): ", DEFAULT_QUALITY),
         |num: &i32| *num > 0,
-        |input| i32::from_str(input).map_err(|_| "Invalid input. Please enter a valid number.".to_string()),
+        |input: &str| i32::from_str(input).map_err(|_| "Invalid input. Please enter a valid number.".to_string()),
         "Invalid input. Please enter a valid number.",
         Some(DEFAULT_QUALITY),
     );
 
-    let threads = get_user_input(
+    let threads: usize = get_user_input(
         &format!("Enter the number of threads (default {}): ", DEFAULT_THREADS),
         |num: &usize| *num > 0,
-        |input| usize::from_str(input).map_err(|_| "Invalid input. Please enter a valid number.".to_string()),
+        |input: &str| usize::from_str(input).map_err(|_| "Invalid input. Please enter a valid number.".to_string()),
         "Invalid input. Please enter a valid number.",
         Some(DEFAULT_THREADS),
     );
@@ -46,12 +47,13 @@ fn get_user_settings() -> UserSettings {
     UserSettings {
         source_folder,
         quality: quality.try_into().unwrap(),
+        threads,
     }
 }
 
 fn process_files(image_files: &[PathBuf], settings: &UserSettings, output_folder_path: &Path) {
     // Convert quality outside the loop
-    let quality = match settings.quality.try_into() {
+    let quality: u8 = match settings.quality.try_into() {
         Ok(q) => q,
         Err(_) => {
             eprintln!("Failed to convert quality setting");
@@ -59,19 +61,19 @@ fn process_files(image_files: &[PathBuf], settings: &UserSettings, output_folder
         }
     };
 
-    let counter = Arc::new(AtomicUsize::new(0));
-    let progress_bar = initialize_progress_bar(image_files.len());
-    let errors = Arc::new(Mutex::new(Vec::new()));
+    let counter: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
+    let progress_bar: indicatif::ProgressBar = initialize_progress_bar(image_files.len());
+    let errors: Arc<Mutex<Vec<anyhow::Error>>> = Arc::new(Mutex::new(Vec::new()));
 
     // Calculate batch size
-    let batch_size = (image_files.len() / (DEFAULT_THREADS * 32)).max(1);
+    let batch_size: usize = (image_files.len() / (settings.threads * 32)).max(1);
 
     image_files.par_chunks(batch_size).for_each_with((counter.clone(), errors.clone()), |(counter, errors), batch| {
-        batch.iter().for_each(|file| {
+        batch.iter().for_each(|file: &PathBuf| {
             match process_file(file, &settings.source_folder, output_folder_path, quality, OUTPUT_IMAGE_FORMAT) {
-            Ok(res) => println!("{:?}", res),
+            Ok(_) => {},
                 Err(e) => {
-                    let mut errors = errors.lock().unwrap();
+                    let mut errors: std::sync::MutexGuard<'_, Vec<anyhow::Error>> = errors.lock().unwrap();
                     errors.push(e);
                 }
             }
@@ -86,7 +88,7 @@ fn process_files(image_files: &[PathBuf], settings: &UserSettings, output_folder
     progress_bar.finish_with_message("Processing complete");
 
     // Handle errors after processing
-    let errors = Arc::try_unwrap(errors).unwrap().into_inner().unwrap();
+    let errors: Vec<anyhow::Error> = Arc::try_unwrap(errors).unwrap().into_inner().unwrap();
     if !errors.is_empty() {
         eprintln!("Errors occurred during processing:");
         for error in errors {
@@ -97,10 +99,10 @@ fn process_files(image_files: &[PathBuf], settings: &UserSettings, output_folder
 
 fn main() {
     print_separator();
-    let settings = get_user_settings();
-    let image_files = get_image_files(&settings.source_folder);
+    let settings: UserSettings = get_user_settings();
+    let image_files: Vec<PathBuf> = get_image_files(&settings.source_folder);
 
-    let output_folder_path = create_output_folder(&settings.source_folder, OUTPUT_IMAGE_FORMAT)
+    let output_folder_path: PathBuf = create_output_folder(&settings.source_folder, OUTPUT_IMAGE_FORMAT)
         .expect("Failed to create output folder");
     println!("{:?}", output_folder_path);
 
