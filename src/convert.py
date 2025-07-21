@@ -87,7 +87,7 @@ def convert_images(source_folder_path: Path, quality: int = DEFAULT_QUALITY, thr
     start_time = time()
 
     # Create batches of file paths
-    batch_size = len(file_list) // (threads * 32)
+    batch_size = max(1, len(file_list) // (threads * 32))
     batches_of_files = [file_list[i:i + batch_size] for i in range(0, len(file_list), batch_size)]
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
