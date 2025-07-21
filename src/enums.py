@@ -9,3 +9,4 @@ class ImageFormat(Enum):
     PNG = "png"
     JPEG = "jpeg"
     JPG = "jpg"
+    WEBP = "webp"
