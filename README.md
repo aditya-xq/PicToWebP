@@ -32,6 +32,7 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 - **Unique output folder names** — every run gets a fresh `<source>_webp_<timestamp>` directory next to the source; back-to-back runs never clash.
 - **Pretty colored output** — colors in the terminal, plain text when piped or when `NO_COLOR=1` is set.
 - **Local web UI** (Python) with a live progress view, folder browser, and one-click image upload.
+- **Browser-only edition** (TypeScript) — the same experience with **zero installs**: conversion happens entirely in your browser via the File System Access API, so images never touch a server (or even a local one).
 - **Two implementations, one workflow** — pick Python or Rust, the output is interchangeable.
 
 ## Supported Formats 🎨
@@ -64,7 +65,11 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 │       ├── convert.rs        # rayon-based conversion engine
 │       ├── discovery.rs      # recursive file walker
 │       └── paths.rs          # unique output-folder allocation
-└── tests/                    # Pytest suite (72 tests)
+└── web-ts/                   # Browser-only edition (Vite + TypeScript)
+    └── src/
+        ├── main.ts           # UI state, interactions, history, share-stats
+        ├── converter.ts      # Canvas → WebP encoding, folder enumeration
+        └── core.ts           # pure logic: collisions, resize math, formatting
 ```
 
 ## Quick Start 🏁
@@ -156,6 +161,34 @@ curl -X POST http://127.0.0.1:8000/convert \
   -H "Content-Type: application/json" \
   -d '{"source_folder": "C:/path/to/images", "quality": 85, "threads": 8, "lossless": false, "strip_metadata": true}'
 ```
+
+### Browser Edition (TypeScript)
+
+Same look and feel as the web UI above, but with **no backend at all** —
+images are decoded and re-encoded by your browser's own WebP encoder, and
+files are read/written directly from disk via the File System Access API.
+
+```bash
+cd web-ts
+npm install
+npm run dev            # dev server
+npm run build          # production build into dist/
+npm test               # unit tests for the conversion logic
+```
+
+Highlights:
+
+- **Nothing leaves your machine** — there is no server to trust, because there is no server.
+- **Pick a folder** (or drag one in) and the whole tree is converted with the structure preserved; save results back to any folder or download a ZIP.
+- **Single-image mode** with instant preview and a before/after size comparison — you can also just paste an image with `Ctrl+V`.
+- Live progress with ETA, savings stats, a shareable stats image, and conversion history (stored locally in your browser).
+- Same-stem collisions (e.g. `photo.png` + `photo.jpg`) are skipped and reported instead of silently overwritten, just like the CLIs.
+
+Honest limitations of doing everything in the browser:
+
+- Metadata (EXIF/GPS) is **always stripped** — canvas decoding cannot preserve it. For keep-metadata workflows, use the Python or Rust CLI.
+- There is no separate lossless mode; use the quality slider at 100 for the best the browser encoder offers.
+- Requires a Chromium-based browser (Chrome/Edge) for folder access; single-image mode works anywhere WebP encoding is supported.
 
 ### Rust CLI
 
@@ -280,14 +313,20 @@ cd src_rust
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
+
+# Browser edition: typecheck + build + test
+cd web-ts
+npm run build
+npm test
 ```
 
-Both test suites are expected to be green before submitting changes:
+All test suites are expected to be green before submitting changes:
 
-- `python -m pytest` — **72 tests** covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, and end-to-end flows.
-- `cargo test` — **27 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), resize behavior, EXIF embedding, atomic file writes, error report persistence, and CLI argument validation.
+- `python -m pytest` — **80 tests** covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, and end-to-end flows.
+- `cargo test` — **33 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), resize behavior, EXIF embedding, atomic file writes, error report persistence, and CLI argument validation.
+- `npm test` (in `web-ts/`) — **16 tests** covering collision detection, resize math (never upscales), output-name handling, and formatting helpers.
 
-Dependencies are declared in `pyproject.toml` (locked via `uv.lock`) and `src_rust/Cargo.toml` (locked via `Cargo.lock`).
+Dependencies are declared in `pyproject.toml` (locked via `uv.lock`), `src_rust/Cargo.toml` (locked via `Cargo.lock`), and `web-ts/package.json` (locked via `package-lock.json`).
 
 ## Final Words 🎤
 
