@@ -219,6 +219,7 @@
                             <div class="flex items-center gap-2">
                                 <div class="w-2 h-2 rounded-full bg-brand-400 pulse-ring"></div>
                                 <span class="text-sm font-medium text-white">Converting to WebP...</span>
+                                <span id="running-elapsed" class="text-xs text-surface-400 font-mono"></span>
                             </div>
                             <span id="progress-percent" class="text-sm font-mono text-brand-300">0%</span>
                         </div>
@@ -236,10 +237,10 @@
                             </div>
                             <div class="text-center">
                                 <div id="running-eta" class="text-2xl font-bold text-surface-200 font-mono">--</div>
-                                <div class="text-[10px] text-surface-400 uppercase mt-0.5">Elapsed</div>
+                                <div class="text-[10px] text-surface-400 uppercase mt-0.5">ETA</div>
                             </div>
                         </div>
-                        <button onclick="cancelConversion()" class="mt-auto w-full py-2.5 rounded-xl bg-danger-500/10 border border-danger-500/20 text-danger-400 text-sm font-medium hover:bg-danger-500/20 transition-colors">
+                        <button id="cancel-btn" onclick="cancelConversion()" class="mt-auto w-full py-2.5 rounded-xl bg-danger-500/10 border border-danger-500/20 text-danger-400 text-sm font-medium hover:bg-danger-500/20 transition-colors">
                             Cancel
                         </button>
                     </div>
@@ -436,17 +437,21 @@
     <script>
     (function() {
         var sourceFolder = '';
+        var folderValid = false;
         var qualitySlider = document.getElementById('quality');
         var qualityValue = document.getElementById('quality-value');
         var convertBtn = document.getElementById('convert-btn');
         var isConverting = false;
         var evtSource = null;
         var lastStats = null;
+        var previewUrl = null;
 
         function setSourceFolder(path) {
             sourceFolder = path;
             var badge = document.getElementById('source-badge');
             var badgeText = document.getElementById('source-badge-text');
+            var info = document.getElementById('folder-info-badge');
+            if (info) info.remove();
             if (path) {
                 badge.classList.remove('hidden');
                 badgeText.textContent = path;
@@ -454,7 +459,7 @@
                 validateFolder(path);
             } else {
                 badge.classList.add('hidden');
-                document.getElementById('folder-info-badge').classList.add('hidden');
+                folderValid = false;
                 updateConvertButton();
             }
         }
@@ -466,28 +471,29 @@
                 body: JSON.stringify({ source_folder: path })
             }).then(function(r) { return r.json(); }).then(function(d) {
                 var badge = document.getElementById('source-badge');
+                var info = document.createElement('span');
+                info.id = 'folder-info-badge';
                 if (d.valid) {
-                    var extra = document.createElement('span');
-                    extra.id = 'folder-info-badge';
-                    extra.className = 'text-[11px] text-success-400 font-medium';
-                    extra.textContent = d.total_files + ' images \u00b7 ' + d.total_size_display;
-                    var existing = document.getElementById('folder-info-badge');
-                    if (existing) existing.remove();
-                    badge.appendChild(extra);
+                    info.className = 'text-[11px] text-success-400 font-medium';
+                    info.textContent = d.total_files + ' images \u00b7 ' + d.total_size_display;
+                    folderValid = true;
                 } else {
-                    var existing = document.getElementById('folder-info-badge');
-                    if (existing) existing.remove();
+                    info.className = 'text-[11px] text-danger-400 font-medium';
+                    info.textContent = d.error || 'No convertible images found';
+                    folderValid = false;
                 }
-                updateConvertButton();
-            }).catch(function() {
                 var existing = document.getElementById('folder-info-badge');
                 if (existing) existing.remove();
+                badge.appendChild(info);
+                updateConvertButton();
+            }).catch(function() {
+                folderValid = false;
                 updateConvertButton();
             });
         }
 
         function updateConvertButton() {
-            convertBtn.disabled = !sourceFolder || isConverting;
+            convertBtn.disabled = !sourceFolder || isConverting || !folderValid;
         }
 
         // Quality slider
@@ -568,9 +574,10 @@
                     return blob.then(function(b) { return { blob: b, filename: filename }; });
                 })
                 .then(function(result) {
-                    var url = URL.createObjectURL(result.blob);
-                    document.getElementById('single-preview-img').src = url;
-                    document.getElementById('single-download-btn').href = url;
+                    if (previewUrl) URL.revokeObjectURL(previewUrl);
+                    previewUrl = URL.createObjectURL(result.blob);
+                    document.getElementById('single-preview-img').src = previewUrl;
+                    document.getElementById('single-download-btn').href = previewUrl;
                     document.getElementById('single-download-btn').download = result.filename;
                     var origSize = (file.size / 1024).toFixed(1);
                     var newSize = (result.blob.size / 1024).toFixed(1);
@@ -589,6 +596,8 @@
         window.convertAnotherSingle = function() {
             document.getElementById('single-result').classList.add('hidden');
             document.getElementById('single-upload').classList.remove('hidden');
+            if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+            document.getElementById('single-preview-img').src = '';
             singleFileInput.value = '';
         };
 
@@ -631,12 +640,16 @@
             evtSource.onmessage = function(e) {
                 var d = JSON.parse(e.data);
                 if (d.status === 'running') {
-                    var p = Number(d.fraction_complete) * 100;
+                    var frac = Number(d.fraction_complete);
+                    var elapsed = Number(d.elapsed_seconds);
+                    var p = frac * 100;
                     document.getElementById('progress-bar').style.width = p + '%';
                     document.getElementById('progress-percent').textContent = p.toFixed(0) + '%';
                     document.getElementById('running-processed').textContent = d.processed_files;
                     document.getElementById('running-total').textContent = d.total_files;
-                    document.getElementById('running-eta').textContent = d.elapsed_seconds.toFixed(1) + 's';
+                    document.getElementById('running-elapsed').textContent = elapsed.toFixed(1) + 's elapsed';
+                    document.getElementById('running-eta').textContent =
+                        (frac > 0 && frac < 1) ? (elapsed * (1 - frac) / frac).toFixed(0) + 's' : '--';
                 } else if (d.status === 'completed') {
                     isConverting = false;
                     convertBtn.disabled = true;
@@ -680,6 +693,8 @@
         }
 
         window.cancelConversion = function() {
+            var btn = document.getElementById('cancel-btn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Cancelling...'; }
             fetch('/convert/cancel', { method: 'POST' }).then(function() {
                 showToast('Cancelling...', 'warn');
             }).catch(function() {
@@ -692,6 +707,10 @@
                 document.getElementById('progress-' + id).classList.add('hidden');
             });
             document.getElementById('progress-' + s).classList.remove('hidden');
+            if (s === 'running') {
+                var btn = document.getElementById('cancel-btn');
+                if (btn) { btn.disabled = false; btn.textContent = 'Cancel'; }
+            }
         }
 
         window.resetUI = function() {
@@ -928,7 +947,8 @@
                     btn.className = 'browse-item w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left';
                     btn.dataset.path = entry.path;
                     btn.innerHTML = '<svg class="w-4 h-4 text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>' +
-                        '<span class="text-sm text-surface-200 truncate">' + entry.name + '</span>';
+                        '<span class="text-sm text-surface-200 truncate"></span>';
+                    btn.querySelector('span').textContent = entry.name;
                     btn.onclick = function() { browseTo(entry.path); };
                     list.appendChild(btn);
                 });
@@ -996,13 +1016,24 @@
                 var folder = h.source_folder.split(/[/\\]/).pop() || h.source_folder;
                 var card = document.createElement('div');
                 card.className = 'history-item glass-card rounded-lg p-3';
-                card.innerHTML = '<div class="flex items-center justify-between mb-1.5"><span class="text-[10px] font-mono text-surface-400">' + h.id + '</span><span class="text-[11px] text-surface-400">' + new Date(h.timestamp).toLocaleDateString() + '</span></div>' +
-                    '<div class="text-sm text-surface-200 mb-2 font-mono truncate" title="' + h.source_folder.replace(/"/g, '&quot;') + '">' + folder + '</div>' +
+                card.innerHTML = '<div class="flex items-center justify-between mb-1.5"><span class="text-[10px] font-mono text-surface-400"></span><span class="text-[11px] text-surface-400"></span></div>' +
+                    '<div class="text-sm text-surface-200 mb-2 font-mono truncate"></div>' +
                     '<div class="grid grid-cols-3 gap-2 text-center">' +
-                    '<div><div class="text-lg font-bold text-white">' + h.converted_files + '/' + h.total_files + '</div><div class="text-[8px] text-surface-400">FILES</div></div>' +
-                    '<div><div class="text-lg font-bold text-success-400">' + h.reduction_percent.toFixed(1) + '%</div><div class="text-[8px] text-surface-400">SAVED</div></div>' +
-                    '<div><div class="text-lg font-bold text-surface-200">' + h.elapsed_seconds.toFixed(1) + 's</div><div class="text-[8px] text-surface-400">TIME</div></div>' +
+                    '<div><div class="text-lg font-bold text-white"></div><div class="text-[8px] text-surface-400">FILES</div></div>' +
+                    '<div><div class="text-lg font-bold text-success-400"></div><div class="text-[8px] text-surface-400">SAVED</div></div>' +
+                    '<div><div class="text-lg font-bold text-surface-200"></div><div class="text-[8px] text-surface-400">TIME</div></div>' +
                     '</div>';
+                // Fill dynamic values via textContent (never innerHTML) so odd
+                // folder names cannot inject markup.
+                var textSpans = card.querySelectorAll('span, div');
+                textSpans[0].textContent = h.id;
+                textSpans[1].textContent = new Date(h.timestamp).toLocaleDateString();
+                var folderDiv = textSpans[2];
+                folderDiv.textContent = folder;
+                folderDiv.title = h.source_folder;
+                textSpans[3].textContent = h.converted_files + '/' + h.total_files;
+                textSpans[4].textContent = Number(h.reduction_percent).toFixed(1) + '%';
+                textSpans[5].textContent = Number(h.elapsed_seconds).toFixed(1) + 's';
                 list.appendChild(card);
             });
         }
@@ -1023,7 +1054,7 @@
             var cl = { success: 'border-success-500/30 bg-success-500/10', error: 'border-danger-500/30 bg-danger-500/10', warn: 'border-warn-500/30 bg-warn-500/10', info: 'border-brand-500/30 bg-brand-500/10' };
             var tc = { success: 'text-success-400', error: 'text-danger-400', warn: 'text-warn-400', info: 'text-brand-300' };
             var t = document.createElement('div');
-            t.className = 'toast border ' + (cl[type] || cl.info) + ' rounded-lg px-4 py-2.5 text-xl ' + (tc[type] || tc.info) + ' backdrop-blur-md';
+            t.className = 'toast border ' + (cl[type] || cl.info) + ' rounded-lg px-4 py-2.5 text-sm font-medium ' + (tc[type] || tc.info) + ' backdrop-blur-md';
             t.textContent = msg;
             c.appendChild(t);
             setTimeout(function() { t.remove(); }, 4000);

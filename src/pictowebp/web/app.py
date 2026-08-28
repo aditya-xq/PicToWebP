@@ -33,7 +33,7 @@ from PIL import Image
 
 from pictowebp import __version__
 from pictowebp.console import force_utf8_stdio
-from pictowebp.converter import convert_folder
+from pictowebp.converter import convert_folder, request_cancellation
 from pictowebp.logging_setup import setup_logging
 from pictowebp.progress import TERMINAL_STATUSES, ConversionProgress
 from pictowebp.utils import get_folder_info
@@ -144,11 +144,14 @@ def create_app() -> FastAPI:
 
     @app.post("/convert/cancel", status_code=status.HTTP_200_OK)
     def cancel_conversion() -> dict:
-        """Request cancellation of the current conversion."""
-        with conversion_lock:
-            if progress.status == "running":
-                progress.finish("cancelled", elapsed_seconds=0.0, error="Cancelled by user")
-                return {"message": "Conversion cancelled"}
+        """Request cooperative cancellation of the current conversion.
+
+        The conversion loop stops submitting new work and finishes the
+        in-flight files; the background job itself moves the tracker to the
+        ``cancelled`` status when it winds down.
+        """
+        if progress.status == "running" and request_cancellation():
+            return {"message": "Cancellation requested"}
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No conversion is currently running",

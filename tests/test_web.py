@@ -64,6 +64,44 @@ def test_convert_rejects_concurrent_jobs(client: TestClient, populated_source: P
     assert response.status_code == 429
 
 
+def test_cancel_returns_400_when_idle(client: TestClient):
+    response = client.post("/convert/cancel")
+    assert response.status_code == 400
+    assert "No conversion" in response.json()["detail"]
+
+
+def test_cancel_requests_cooperative_cancellation(client: TestClient, monkeypatch):
+    """The cancel endpoint must ask the converter to stop, not fake the status."""
+    import pictowebp.web.app as web_app
+
+    called: list[bool] = []
+    monkeypatch.setattr(web_app, "request_cancellation", lambda: called.append(True) or True)
+
+    client.app.state.progress.start(total_files=1)  # type: ignore[attr-defined]
+    response = client.post("/convert/cancel")
+
+    assert response.status_code == 200
+    assert called == [True]
+    # The endpoint must not touch the tracker directly; the conversion loop
+    # owns the terminal status.
+    assert client.app.state.progress.status == "running"  # type: ignore[attr-defined]
+
+
+def test_validate_matches_conversion_discovery(client: TestClient, image_factory, source_dir: Path):
+    """Images inside hidden directories are never converted, so don't count them."""
+    image_factory("visible.png")
+    hidden = source_dir / ".hidden"
+    hidden.mkdir()
+    image_factory(".hidden/secret.png")
+
+    response = client.post("/api/validate", json={"source_folder": str(source_dir)})
+    data = response.json()
+
+    assert data["valid"] is True
+    assert data["total_files"] == 1
+    assert data["total_size_bytes"] > 0
+
+
 def test_progress_stream_emits_terminal_snapshot(client: TestClient, populated_source: Path):
     # Complete a conversion first so the SSE stream terminates on its own.
     client.post("/convert", json={"source_folder": str(populated_source), "threads": 2})

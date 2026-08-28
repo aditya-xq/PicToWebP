@@ -252,19 +252,20 @@ def _resize_image(
 
 
 def get_folder_info(source_folder: Path) -> dict:
-    """Get detailed info about a folder for the validate endpoint."""
-    files: list[Path] = []
+    """Get detailed info about a folder for the validate endpoint.
+
+    Uses the same discovery rules as :func:`discover_images` (hidden
+    directories skipped, same supported suffixes) so the preview matches
+    what a conversion would actually process.
+    """
+    files = discover_images(source_folder)
     counts: dict[str, int] = {}
     total_size = 0
-    for path in source_folder.rglob("*"):
-        if path.is_file():
-            ext = path.suffix.lower()
-            if ext in INPUT_SUFFIXES:
-                files.append(path)
-                fmt = ext.lstrip(".")
-                counts[fmt] = counts.get(fmt, 0) + 1
-                with contextlib.suppress(OSError):
-                    total_size += path.stat().st_size
+    for path in files:
+        fmt = path.suffix.lower().lstrip(".")
+        counts[fmt] = counts.get(fmt, 0) + 1
+        with contextlib.suppress(OSError):
+            total_size += path.stat().st_size
 
     return {
         "valid": len(files) > 0,
