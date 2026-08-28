@@ -1,116 +1,143 @@
-mod utils;
+//! PicToWebP: blazingly fast bulk image-to-WebP conversion.
 
-use utils::{get_image_files, get_user_input};
+mod convert;
+mod discovery;
+mod paths;
+mod settings;
+mod style;
+mod ui;
 
-use std::{sync::{Arc, atomic::{AtomicUsize, Ordering}, Mutex}, time::Instant};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use rayon::prelude::*;
+use std::process::ExitCode;
+use std::time::Instant;
 
-use crate::utils::{process_file, create_output_folder, initialize_progress_bar, print_completion_message, print_separator};
-const OUTPUT_IMAGE_FORMAT: &str = "WebP";
-const DEFAULT_QUALITY: i32 = 80;
-const DEFAULT_THREADS: usize = 16;
+use clap::Parser;
 
-#[derive(Debug)]
-struct UserSettings {
-    source_folder: PathBuf,
-    quality: i32,
-    threads: usize,
-}
+use convert::CANCEL_REQUESTED;
+use style::paint;
 
-fn get_user_settings() -> UserSettings {
-    let source_folder: PathBuf = get_user_input(
-        "Enter the path to the source folder: ",
-        |path: &PathBuf| path.is_dir(),
-        |input: &str| PathBuf::from_str(input).map_err(|_| "Invalid path.".to_string()),
-        "Invalid directory path. Please enter a valid path.",
-        None,
-    );
+const TOTAL_FAILURE_EXIT_CODE: u8 = 3;
+const INVALID_ARGUMENT_EXIT_CODE: u8 = 2;
+const CANCELLED_EXIT_CODE: u8 = 130;
 
-    let quality: i32 = get_user_input(
-        &format!("Enter the quality (default {}): ", DEFAULT_QUALITY),
-        |num: &i32| *num > 0,
-        |input: &str| i32::from_str(input).map_err(|_| "Invalid input. Please enter a valid number.".to_string()),
-        "Invalid input. Please enter a valid number.",
-        Some(DEFAULT_QUALITY),
-    );
-
-    let threads: usize = get_user_input(
-        &format!("Enter the number of threads (default {}): ", DEFAULT_THREADS),
-        |num: &usize| *num > 0,
-        |input: &str| usize::from_str(input).map_err(|_| "Invalid input. Please enter a valid number.".to_string()),
-        "Invalid input. Please enter a valid number.",
-        Some(DEFAULT_THREADS),
-    );
-
-    UserSettings {
-        source_folder,
-        quality: quality.try_into().unwrap(),
-        threads,
+fn main() -> ExitCode {
+    match run() {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("Error: {error:#}");
+            ExitCode::FAILURE
+        }
     }
 }
 
-fn process_files(image_files: &[PathBuf], settings: &UserSettings, output_folder_path: &Path) {
-    // Convert quality outside the loop
-    let quality: u8 = match settings.quality.try_into() {
-        Ok(q) => q,
-        Err(_) => {
-            eprintln!("Failed to convert quality setting");
-            return;
+fn run() -> anyhow::Result<ExitCode> {
+    ui::print_banner();
+
+    // Reset the cancellation flag at the start of every run.
+    CANCEL_REQUESTED.store(false, std::sync::atomic::Ordering::SeqCst);
+
+    let cli = settings::Cli::parse();
+    if let Some(path) = &cli.path {
+        if !path.is_dir() {
+            eprintln!(
+                "Error: Source folder does not exist or is not a directory: {}",
+                path.display()
+            );
+            return Ok(ExitCode::from(INVALID_ARGUMENT_EXIT_CODE));
+        }
+    }
+    let settings = settings::resolve(cli)?;
+    let image_files = discovery::discover_images(&settings.source_folder);
+
+    if image_files.is_empty() {
+        ui::print_no_files_found(&settings.source_folder);
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let output_folder = paths::resolve_output_folder(&settings.source_folder)
+        .map_err(|error| anyhow::anyhow!("Failed to create output folder: {error:#}"))?;
+
+    ui::print_settings(
+        &settings.source_folder,
+        &output_folder,
+        settings.quality,
+        settings.threads.get().min(image_files.len()),
+        &settings,
+    );
+
+    let disk = style::check_disk_space(&output_folder);
+    ui::print_disk_warning(&disk);
+
+    install_ctrlc_handler();
+
+    let progress_bar = if settings.no_progress {
+        indicatif::ProgressBar::hidden()
+    } else {
+        ui::progress_bar(image_files.len())
+    };
+    let started = Instant::now();
+    let result = convert::convert_all(&image_files, &settings, &output_folder, progress_bar);
+    let error_report = match convert::write_error_report(
+        &output_folder,
+        &result.file_errors,
+        settings.report_path.as_deref(),
+    ) {
+        Ok(report) => report,
+        Err(error) => {
+            eprintln!("Could not write conversion error report: {error}");
+            None
         }
     };
 
-    let counter: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
-    let progress_bar: indicatif::ProgressBar = initialize_progress_bar(image_files.len());
-    let errors: Arc<Mutex<Vec<anyhow::Error>>> = Arc::new(Mutex::new(Vec::new()));
-
-    // Calculate batch size
-    let batch_size: usize = (image_files.len() / (settings.threads * 32)).max(1);
-
-    image_files.par_chunks(batch_size).for_each_with((counter.clone(), errors.clone()), |(counter, errors), batch| {
-        batch.iter().for_each(|file: &PathBuf| {
-            match process_file(file, &settings.source_folder, output_folder_path, quality, OUTPUT_IMAGE_FORMAT) {
-            Ok(_) => {},
-                Err(e) => {
-                    let mut errors: std::sync::MutexGuard<'_, Vec<anyhow::Error>> = errors.lock().unwrap();
-                    errors.push(e);
-                }
-            }
-        });
-        counter.fetch_add(1, Ordering::Relaxed);
-        if counter.load(Ordering::Relaxed) % 10 == 0 {
-            progress_bar.set_position(counter.load(Ordering::Relaxed) as u64);
+    let exit_code = if CANCEL_REQUESTED.load(std::sync::atomic::Ordering::SeqCst) {
+        ui::print_cancelled(&result, &output_folder, started.elapsed());
+        ExitCode::from(CANCELLED_EXIT_CODE)
+    } else {
+        ui::print_summary(
+            &result.summary,
+            &output_folder,
+            started.elapsed(),
+            &result.file_errors,
+            error_report.as_deref(),
+        );
+        // Exit non-zero only when nothing converted (a hard failure) or the
+        // user interrupted. Partial failures are reported in the summary and
+        // the error report, but do not warrant a non-zero exit code.
+        if result.summary.converted_files == 0 && result.summary.failed_files > 0 {
+            ExitCode::from(TOTAL_FAILURE_EXIT_CODE)
+        } else {
+            ExitCode::SUCCESS
         }
-    });
+    };
+    Ok(exit_code)
+}
 
-    progress_bar.set_position(image_files.len() as u64);
-    progress_bar.finish_with_message("Processing complete");
-
-    // Handle errors after processing
-    let errors: Vec<anyhow::Error> = Arc::try_unwrap(errors).unwrap().into_inner().unwrap();
-    if !errors.is_empty() {
-        eprintln!("Errors occurred during processing:");
-        for error in errors {
-            eprintln!("{}", error);
+fn install_ctrlc_handler() {
+    if let Err(error) = ctrlc::set_handler(|| {
+        use std::sync::atomic::Ordering;
+        if CANCEL_REQUESTED.swap(true, Ordering::SeqCst) {
+            // Second Ctrl+C: terminate immediately so users are not stuck.
+            std::process::exit(i32::from(CANCELLED_EXIT_CODE));
         }
+        eprintln!(
+            "\n{}",
+            paint(
+                "Cancellation requested. Finishing in-flight conversions and stopping.",
+                style::YELLOW
+            )
+        );
+    }) {
+        eprintln!("Could not install Ctrl+C handler: {error}");
     }
 }
 
-fn main() {
-    print_separator();
-    let settings: UserSettings = get_user_settings();
-    let image_files: Vec<PathBuf> = get_image_files(&settings.source_folder);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let output_folder_path: PathBuf = create_output_folder(&settings.source_folder, OUTPUT_IMAGE_FORMAT)
-        .expect("Failed to create output folder");
-    println!("{:?}", output_folder_path);
-
-    let progress_bar: indicatif::ProgressBar = initialize_progress_bar(image_files.len());
-    
-    let start_time: Instant = Instant::now();
-    process_files(&image_files, &settings, &output_folder_path);
-
-    progress_bar.finish_with_message("Processing complete");
-    print_completion_message(start_time);
+    #[test]
+    fn constants_use_documented_values() {
+        assert_eq!(TOTAL_FAILURE_EXIT_CODE, 3);
+        assert_eq!(INVALID_ARGUMENT_EXIT_CODE, 2);
+        assert_eq!(CANCELLED_EXIT_CODE, 130);
+    }
 }

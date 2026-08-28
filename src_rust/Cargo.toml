@@ -1,17 +1,32 @@
 [package]
-name = "src_rust"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+name = "pictowebp"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Blazingly fast bulk image-to-WebP converter"
+license = "MIT"
 
 [dependencies]
-anyhow = "1.0"
-image = "0.24.7"
-indicatif = "0.17.7"
-log = "0.4.20"
-rand = "0.8.5"
-rayon = "1.8.0"
-thiserror = "1.0"
-walkdir = "2.4.0"
-webp = "0.2.6"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
+image = "0.25"
+indicatif = { version = "0.18", features = ["rayon"] }
+rayon = "1"
+thiserror = "2"
+walkdir = "2"
+webp = "0.3"
+libwebp-sys = "0.9"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Storage_FileSystem",
+    "Win32_Foundation",
+] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
