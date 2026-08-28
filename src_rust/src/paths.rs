@@ -32,3 +32,51 @@ pub fn resolve_output_folder(source_folder: &Path) -> anyhow::Result<PathBuf> {
     }
     anyhow::bail!("Could not allocate a unique output folder")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn creates_unique_sibling_folders() {
+        let root = std::env::temp_dir().join(format!(
+            "pictowebp-paths-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
+        ));
+        let source = root.join("photos");
+        fs::create_dir_all(&source).unwrap();
+
+        let first = resolve_output_folder(&source).unwrap();
+        let second = resolve_output_folder(&source).unwrap();
+
+        assert!(first.is_dir());
+        assert!(second.is_dir());
+        assert_ne!(first, second);
+        assert_eq!(first.parent(), Some(root.as_path()));
+        assert!(
+            first
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("photos_webp_")
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn falls_back_to_images_name_for_root_paths() {
+        // A path with no file name component (e.g. "/") still resolves.
+        let root =
+            std::env::temp_dir().join(format!("pictowebp-paths-root-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let output = resolve_output_folder(&root).unwrap();
+        assert!(output.is_dir());
+        fs::remove_dir_all(&output).ok();
+        fs::remove_dir_all(&root).ok();
+    }
+}

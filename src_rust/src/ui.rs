@@ -10,7 +10,45 @@ use crate::convert::{ConvertResult, FileError, Summary};
 use crate::settings::Settings;
 use crate::style::{self, BOLD_CYAN, CYAN, DIM, GREEN, LINE, RED, YELLOW, paint, truncate_reason};
 
+const BYTES_PER_KIB: f64 = 1024.0;
 const BYTES_PER_MIB: f64 = 1024.0 * 1024.0;
+const BYTES_PER_GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+
+/// Format a count with thousands separators (e.g. `2590` -> `2,590`).
+pub fn format_count(value: usize) -> String {
+    let digits = value.to_string();
+    let mut grouped = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    grouped
+}
+
+/// Format a byte count for humans (e.g. `1.7 GB`, `512 B`).
+pub fn format_bytes(bytes: u64) -> String {
+    let bytes = bytes as f64;
+    if bytes >= BYTES_PER_GIB {
+        format!("{:.2} GB", bytes / BYTES_PER_GIB)
+    } else if bytes >= BYTES_PER_MIB {
+        format!("{:.1} MB", bytes / BYTES_PER_MIB)
+    } else if bytes >= BYTES_PER_KIB {
+        format!("{:.1} KB", bytes / BYTES_PER_KIB)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+/// Format an elapsed duration for humans (e.g. `46.1s`, `3m 05s`).
+pub fn format_duration(seconds: f64) -> String {
+    if seconds < 60.0 {
+        return format!("{seconds:.1}s");
+    }
+    let total = seconds as u64;
+    format!("{}m {:02}s", total / 60, total % 60)
+}
 
 /// Print a welcome banner.
 pub fn print_banner() {
@@ -20,10 +58,50 @@ pub fn print_banner() {
     println!();
 }
 
+/// Print how many images were discovered and their combined size.
+pub fn print_found(count: usize, total_bytes: u64) {
+    println!(
+        "  {} {} images ({})",
+        paint("Found", DIM),
+        format_count(count),
+        format_bytes(total_bytes)
+    );
+    println!();
+}
+
+/// Open a folder in the OS file explorer (best-effort, errors ignored).
+pub fn open_folder(path: &Path) {
+    #[cfg(target_os = "windows")]
+    let result = std::process::Command::new("explorer").arg(path).spawn();
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg(path).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = std::process::Command::new("xdg-open").arg(path).spawn();
+    let _ = result;
+}
+
+/// Ask whether to open the output folder, and do it when confirmed.
+///
+/// Only prompts when stdin and stdout are interactive terminals, so piped and
+/// scripted runs are never interrupted.
+pub fn maybe_open_output_folder(output_folder: &Path, converted: u64) {
+    use std::io::IsTerminal;
+    if converted == 0 || !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return;
+    }
+    print!("  Open the output folder? [Y/n] ");
+    use std::io::Write as _;
+    let _ = std::io::stdout().flush();
+    let answer = read_trimmed_line().unwrap_or_else(|| "n".to_string());
+    if answer.is_empty() || answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes") {
+        open_folder(output_folder);
+    }
+}
+
 /// Build a styled progress bar for `total` items.
 pub fn progress_bar(total: usize) -> ProgressBar {
     let style = ProgressStyle::with_template(
-        "  {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+        "  {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({per_sec}) ({eta})",
     )
     .expect("progress bar template should be valid")
     .progress_chars("##-");
@@ -54,13 +132,7 @@ fn section(title: &str, style: &str) {
 }
 
 /// Print the settings banner before conversion starts.
-pub fn print_settings(
-    source: &Path,
-    output: &Path,
-    quality: u8,
-    threads: usize,
-    settings: &Settings,
-) {
+pub fn print_settings(source: &Path, output: &Path, threads: usize, settings: &Settings) {
     println!();
     section("Configuration", BOLD_CYAN);
     println!();
@@ -77,7 +149,7 @@ pub fn print_settings(
     println!(
         "  {} {}{}",
         paint("Quality:", CYAN),
-        quality,
+        settings.quality,
         if settings.lossless { " (lossless)" } else { "" }
     );
     println!("  {} {threads}", paint("Threads:", CYAN));
@@ -143,19 +215,19 @@ pub fn print_summary(
     println!(
         "  {} {}/{}",
         paint("Images converted:", CYAN),
-        summary.converted_files,
-        summary.converted_files + summary.failed_files as u64,
+        format_count(summary.converted_files as usize),
+        format_count((summary.converted_files + summary.failed_files as u64) as usize),
     );
     println!(
-        "  {} {:.2} MB ({:.2}%)",
+        "  {} {} ({:.2}%)",
         paint("Memory reduced:", CYAN),
-        summary.bytes_saved() as f64 / BYTES_PER_MIB,
+        format_bytes(summary.bytes_saved()),
         summary.reduction_percent()
     );
     println!(
-        "  {} {:.2} seconds",
+        "  {} {}",
         paint("Time taken:", CYAN),
-        elapsed.as_secs_f64()
+        format_duration(elapsed.as_secs_f64())
     );
 
     print_failure_groups(file_errors, error_report);
@@ -177,13 +249,15 @@ pub fn print_cancelled(result: &ConvertResult, output_folder: &Path, elapsed: Du
     println!(
         "  {} {}/{}",
         paint("Files completed:", CYAN),
-        result.summary.converted_files,
-        result.summary.converted_files + result.summary.failed_files as u64,
+        format_count(result.summary.converted_files as usize),
+        format_count(
+            (result.summary.converted_files + result.summary.failed_files as u64) as usize
+        ),
     );
     println!(
-        "  {} {:.2} seconds",
+        "  {} {}",
         paint("Time before cancel:", CYAN),
-        elapsed.as_secs_f64()
+        format_duration(elapsed.as_secs_f64())
     );
 
     if !result.file_errors.is_empty() {
@@ -234,7 +308,7 @@ fn print_failure_groups(file_errors: &[FileError], error_report: Option<&Path>) 
             println!(
                 "  {} {display_reason} ({})",
                 paint(format!("{category}:"), YELLOW),
-                paths.len()
+                format_count(paths.len())
             );
             for path in paths {
                 println!("    {}", paint(style::display_path(path), DIM));
@@ -277,5 +351,42 @@ pub fn print_disk_warning(disk: &crate::style::DiskSpace) {
                 style::display_path(&disk.path)
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_count_groups_thousands() {
+        assert_eq!(format_count(0), "0");
+        assert_eq!(format_count(999), "999");
+        assert_eq!(format_count(1_000), "1,000");
+        assert_eq!(format_count(2_590), "2,590");
+        assert_eq!(format_count(1_234_567), "1,234,567");
+    }
+
+    #[test]
+    fn format_bytes_uses_readable_units() {
+        assert_eq!(format_bytes(512), "512 B");
+        assert_eq!(format_bytes(2048), "2.0 KB");
+        assert_eq!(format_bytes(5 * 1024 * 1024), "5.0 MB");
+        assert_eq!(format_bytes(3 * 1024 * 1024 * 1024), "3.00 GB");
+    }
+
+    #[test]
+    fn format_duration_stays_compact() {
+        assert_eq!(format_duration(7.24), "7.2s");
+        assert_eq!(format_duration(46.11), "46.1s");
+        assert_eq!(format_duration(65.0), "1m 05s");
+        assert_eq!(format_duration(186.0), "3m 06s");
+    }
+
+    #[test]
+    fn maybe_open_output_folder_never_prompts_when_not_a_tty() {
+        // Tests run with non-TTY stdio; the helper must return without
+        // reading stdin (which would block or consume test input).
+        maybe_open_output_folder(Path::new("."), 5);
     }
 }

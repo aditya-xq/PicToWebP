@@ -53,13 +53,19 @@ fn run() -> anyhow::Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
+    let total_source_bytes: u64 = image_files
+        .iter()
+        .filter_map(|file| std::fs::metadata(file).ok())
+        .map(|metadata| metadata.len())
+        .sum();
+    ui::print_found(image_files.len(), total_source_bytes);
+
     let output_folder = paths::resolve_output_folder(&settings.source_folder)
         .map_err(|error| anyhow::anyhow!("Failed to create output folder: {error:#}"))?;
 
     ui::print_settings(
         &settings.source_folder,
         &output_folder,
-        settings.quality,
         settings.threads.get().min(image_files.len()),
         &settings,
     );
@@ -99,6 +105,7 @@ fn run() -> anyhow::Result<ExitCode> {
             &result.file_errors,
             error_report.as_deref(),
         );
+        ui::maybe_open_output_folder(&output_folder, result.summary.converted_files);
         // Exit non-zero only when nothing converted (a hard failure) or the
         // user interrupted. Partial failures are reported in the summary and
         // the error report, but do not warrant a non-zero exit code.

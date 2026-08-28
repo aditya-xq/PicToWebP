@@ -3,7 +3,6 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use anyhow::bail;
 use clap::Parser;
 
 use crate::ui;
@@ -69,30 +68,33 @@ pub struct Cli {
 }
 
 /// Resolve command-line arguments, prompting for values that were omitted.
+///
+/// A CLI-provided path is assumed to have been validated by the caller.
 pub fn resolve(cli: Cli) -> anyhow::Result<Settings> {
     let source_folder = match cli.path {
-        Some(path) if path.is_dir() => path,
-        Some(path) => bail!(
-            "Source folder does not exist or is not a directory: {}",
-            path.display()
-        ),
+        Some(path) => path,
         None => prompt_input(
             "Enter the path to the source folder: ",
-            |raw| Some(PathBuf::from(raw)),
+            |raw| Some(normalize_path_input(raw)),
             |path| path.is_dir(),
             "Invalid directory path. Please enter a valid path.",
             None,
         ),
     };
-    let quality = cli.quality.unwrap_or_else(|| {
-        prompt_input(
-            &format!("Enter the quality 1-100 (default {DEFAULT_QUALITY}): "),
-            |raw| raw.parse::<u8>().ok(),
-            |quality| (1..=100).contains(quality),
-            "Invalid input. Please enter a number between 1 and 100.",
-            Some(DEFAULT_QUALITY),
-        )
-    });
+    // In lossless mode quality is ignored, so never prompt for it.
+    let quality = if cli.lossless {
+        DEFAULT_QUALITY
+    } else {
+        cli.quality.unwrap_or_else(|| {
+            prompt_input(
+                &format!("Enter the quality 1-100 (default {DEFAULT_QUALITY}): "),
+                |raw| raw.parse::<u8>().ok(),
+                |quality| (1..=100).contains(quality),
+                "Invalid input. Please enter a number between 1 and 100.",
+                Some(DEFAULT_QUALITY),
+            )
+        })
+    };
     let threads = cli.threads.unwrap_or_else(|| {
         NonZeroUsize::new(prompt_input(
             &format!(
@@ -172,6 +174,22 @@ fn default_thread_count() -> usize {
         .unwrap_or(16)
 }
 
+/// Clean up a hand-typed or pasted path: trim whitespace, strip surrounding
+/// quotes (Explorer's "Copy as path" adds them) and expand a leading `~`
+/// to the user's home directory.
+fn normalize_path_input(raw: &str) -> PathBuf {
+    let trimmed = raw.trim().trim_matches('"').trim();
+    if trimmed == "~" || trimmed.starts_with("~/") || trimmed.starts_with("~\\") {
+        if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+            let rest = trimmed
+                .trim_start_matches('~')
+                .trim_start_matches(['/', '\\']);
+            return PathBuf::from(home).join(rest);
+        }
+    }
+    PathBuf::from(trimmed)
+}
+
 /// Generic read-parse-validate prompt loop with optional default on empty input.
 ///
 /// Aborts the process when stdin closes, so a piped/redirected run can never
@@ -183,8 +201,12 @@ fn prompt_input<T: Clone>(
     invalid_message: &str,
     default: Option<T>,
 ) -> T {
+    use std::io::Write as _;
+
     loop {
-        println!("{prompt_text}");
+        // Print inline (no newline) so the user's answer appears on the same line.
+        print!("{prompt_text}");
+        let _ = std::io::stdout().flush();
 
         let trimmed = match ui::read_trimmed_line() {
             Some(line) => line,
@@ -221,5 +243,44 @@ mod tests {
         assert!(parse_resize_width("8").is_err());
         assert_eq!(parse_resize_height("768"), Ok(768));
         assert!(parse_resize_height("8").is_err());
+    }
+
+    #[test]
+    fn normalizes_pasted_paths() {
+        assert_eq!(
+            normalize_path_input(r#"  "C:\My Photos"  "#),
+            PathBuf::from(r"C:\My Photos")
+        );
+        assert_eq!(
+            normalize_path_input("/tmp/photos"),
+            PathBuf::from("/tmp/photos")
+        );
+    }
+
+    #[test]
+    fn expands_tilde_to_home_directory() {
+        let home = std::env::temp_dir().join("pictowebp-home-test");
+        let previous = (std::env::var_os("USERPROFILE"), std::env::var_os("HOME"));
+        // SAFETY: single-threaded test; restoring the originals afterwards.
+        unsafe {
+            std::env::set_var("USERPROFILE", &home);
+            std::env::remove_var("HOME");
+        }
+
+        assert_eq!(normalize_path_input("~"), home);
+        assert_eq!(normalize_path_input("~/pictures"), home.join("pictures"));
+
+        // SAFETY: restoring the values captured above.
+        unsafe {
+            match previous.0 {
+                Some(value) => std::env::set_var("USERPROFILE", value),
+                None => std::env::remove_var("USERPROFILE"),
+            }
+            match previous.1 {
+                Some(value) => std::env::set_var("HOME", value),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        std::fs::remove_dir(&home).ok();
     }
 }

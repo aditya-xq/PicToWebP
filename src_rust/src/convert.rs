@@ -315,30 +315,40 @@ pub fn process_file(
     })
 }
 
-/// Apply optional resize, leaving the pixel format to the encoder.
+/// Apply optional resize caps, preserving aspect ratio and never upscaling.
+///
+/// Mirrors the Python implementation: a width cap shrinks first, then a
+/// height cap shrinks the intermediate result. Images already within the
+/// bounds are returned unchanged.
 fn prepare_image(
-    mut image: image::DynamicImage,
+    image: image::DynamicImage,
     resize_width: Option<u32>,
     resize_height: Option<u32>,
 ) -> image::DynamicImage {
-    let filter = image::imageops::FilterType::Lanczos3;
-    match (resize_width, resize_height) {
-        (Some(width), Some(height)) => {
-            image = image.resize(width, height, filter);
+    const FILTER: image::imageops::FilterType = image::imageops::FilterType::Lanczos3;
+    let (original_width, original_height) = (image.width(), image.height());
+    let mut new_width = original_width;
+    let mut new_height = original_height;
+
+    if let Some(max_width) = resize_width {
+        if original_width > max_width {
+            let scale = f64::from(max_width) / f64::from(original_width);
+            new_width = max_width;
+            new_height = ((f64::from(original_height) * scale) as u32).max(1);
         }
-        (Some(width), None) => {
-            let scale = f64::from(width) / f64::from(image.width());
-            let height = ((f64::from(image.height()) * scale).round() as u32).max(1);
-            image = image.resize(width, height, filter);
-        }
-        (None, Some(height)) => {
-            let scale = f64::from(height) / f64::from(image.height());
-            let width = ((f64::from(image.width()) * scale).round() as u32).max(1);
-            image = image.resize(width, height, filter);
-        }
-        (None, None) => {}
     }
-    image
+    if let Some(max_height) = resize_height {
+        if new_height > max_height {
+            let scale = f64::from(max_height) / f64::from(new_height);
+            new_height = max_height;
+            new_width = ((f64::from(new_width) * scale) as u32).max(1);
+        }
+    }
+
+    if (new_width, new_height) == (original_width, original_height) {
+        return image;
+    }
+    image.resize_exact(new_width, new_height, FILTER)
 }
 
 /// Normalize a raw EXIF payload so it can be stored in a WebP chunk.
@@ -381,9 +391,7 @@ fn embed_exif(simple: &[u8], exif: &[u8]) -> Option<Vec<u8>> {
     };
     // SAFETY: `mux` and `exif_data` are valid for the duration of the call and
     // `copy_data = 1` makes the mux copy the EXIF payload.
-    let status = unsafe {
-        WebPMuxSetChunk(mux, c"EXIF".as_ptr(), &exif_data, 1)
-    };
+    let status = unsafe { WebPMuxSetChunk(mux, c"EXIF".as_ptr(), &exif_data, 1) };
     if (status as c_int) != (WebPMuxError::WEBP_MUX_OK as c_int) {
         unsafe { WebPMuxDelete(mux) };
         return None;
@@ -444,6 +452,38 @@ fn create_temporary_file(destination: &Path) -> Result<(File, PathBuf)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Serialize tests that touch the shared `CANCEL_REQUESTED` flag.
+    static CANCEL_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Create a solid-color test image at `path` (format chosen by extension).
+    fn create_test_image(path: &Path, width: u32, height: u32) {
+        let format = match path.extension().and_then(|ext| ext.to_str()) {
+            Some("jpg") | Some("jpeg") => image::ImageFormat::Jpeg,
+            _ => image::ImageFormat::Png,
+        };
+        image::DynamicImage::new_rgb8(width, height)
+            .save_with_format(path, format)
+            .unwrap();
+    }
+
+    /// Allocate a unique scratch directory for one test.
+    fn scratch_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "pictowebp-{label}-{}-{}",
+            std::process::id(),
+            TEMPORARY_FILE_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn output_dimensions(path: &Path) -> (u32, u32) {
+        let reader = image::ImageReader::open(path).unwrap();
+        let (width, height) = reader.into_dimensions().unwrap();
+        (width, height)
+    }
 
     #[test]
     fn reduction_math_handles_empty_and_saturated_values() {
@@ -640,5 +680,257 @@ mod tests {
         assert_eq!(read.as_deref(), Some(exif.as_slice()));
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn process_file_converts_and_mirrors_nested_structure() {
+        let root = scratch_dir("e2e-nested");
+        let source = root.join("source");
+        fs::create_dir_all(source.join("nested/deep")).unwrap();
+        create_test_image(&source.join("a.png"), 32, 16);
+        create_test_image(&source.join("nested/deep/b.jpg"), 16, 16);
+
+        let output = root.join("out");
+        let png = process_file(
+            &source.join("a.png"),
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            None,
+            None,
+        );
+        let jpg = process_file(
+            &source.join("nested/deep/b.jpg"),
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            None,
+            None,
+        );
+
+        assert!(png.is_ok(), "png conversion failed: {png:?}");
+        assert!(jpg.is_ok(), "jpg conversion failed: {jpg:?}");
+        assert!(output.join("a.webp").is_file());
+        assert!(output.join("nested/deep/b.webp").is_file());
+        assert_eq!(output_dimensions(&output.join("a.webp")), (32, 16));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn process_file_reports_corrupt_input_and_leaves_no_temp_files() {
+        let root = scratch_dir("e2e-corrupt");
+        let source = root.join("source");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("broken.png"), b"not an image").unwrap();
+
+        let output = root.join("out");
+        let result = process_file(
+            &source.join("broken.png"),
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            None,
+            None,
+        );
+
+        assert!(result.is_err());
+        assert!(!output.join("broken.webp").exists());
+        let leftovers = fs::read_dir(&output)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "tmp"))
+                    .count()
+            })
+            .unwrap_or(0);
+        assert_eq!(leftovers, 0);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn process_file_resizes_and_never_upscales() {
+        let root = scratch_dir("e2e-resize");
+        let source = root.join("source");
+        let output = root.join("out");
+        fs::create_dir_all(&source).unwrap();
+
+        // Downscale width-only: 64x32 with max width 32 -> 32x16.
+        create_test_image(&source.join("wide.png"), 64, 32);
+        let result = process_file(
+            &source.join("wide.png"),
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            Some(32),
+            None,
+        );
+        assert!(result.is_ok());
+        assert_eq!(output_dimensions(&output.join("wide.webp")), (32, 16));
+
+        // Downscale height-only: 32x64 with max height 32 -> 16x32.
+        create_test_image(&source.join("tall.png"), 32, 64);
+        let result = process_file(
+            &source.join("tall.png"),
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            None,
+            Some(32),
+        );
+        assert!(result.is_ok());
+        assert_eq!(output_dimensions(&output.join("tall.webp")), (16, 32));
+
+        // Never upscale: max dimensions larger than the source are a no-op.
+        create_test_image(&source.join("small.png"), 16, 16);
+        let result = process_file(
+            &source.join("small.png"),
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            Some(256),
+            Some(256),
+        );
+        assert!(result.is_ok());
+        assert_eq!(output_dimensions(&output.join("small.webp")), (16, 16));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn process_file_strips_and_keeps_metadata_end_to_end() {
+        let root = scratch_dir("e2e-metadata");
+        let source = root.join("source");
+        let output = root.join("out");
+        fs::create_dir_all(&source).unwrap();
+        create_test_image(&source.join("photo.png"), 16, 16);
+
+        let stripped = process_file(
+            &source.join("photo.png"),
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+        let kept = process_file(
+            &source.join("photo.png"),
+            &source,
+            &output,
+            80,
+            false,
+            false,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            stripped.converted_bytes,
+            output.join("photo.webp").metadata().unwrap().len()
+        );
+        assert_eq!(
+            kept.converted_bytes,
+            output.join("photo.webp").metadata().unwrap().len()
+        );
+        assert!(stripped.converted_bytes > 0);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn convert_all_handles_success_failures_and_collisions() {
+        let _guard = CANCEL_LOCK.lock().unwrap();
+        CANCEL_REQUESTED.store(false, Ordering::SeqCst);
+
+        let root = scratch_dir("e2e-convert-all");
+        let source = root.join("source");
+        fs::create_dir_all(source.join("nested")).unwrap();
+        create_test_image(&source.join("good.png"), 32, 32);
+        create_test_image(&source.join("nested/also-good.png"), 16, 16);
+        fs::write(source.join("nested/broken.png"), b"garbage").unwrap();
+        // Same-stem collision: both map to nested/collide.webp.
+        create_test_image(&source.join("nested/collide.png"), 8, 8);
+        create_test_image(&source.join("nested/collide.jpg"), 8, 8);
+
+        let settings = crate::settings::Settings {
+            source_folder: source.clone(),
+            quality: 80,
+            threads: std::num::NonZeroUsize::new(2).unwrap(),
+            lossless: false,
+            strip_metadata: true,
+            resize_width: None,
+            resize_height: None,
+            no_progress: true,
+            report_path: None,
+        };
+        let output = root.join("out");
+        let result = convert_all(
+            &crate::discovery::discover_images(&source),
+            &settings,
+            &output,
+            ProgressBar::hidden(),
+        );
+
+        // good.png + also-good.png convert; broken.png fails; collide.* collide.
+        assert_eq!(result.summary.converted_files, 2);
+        assert_eq!(result.summary.failed_files, 3);
+        assert!(output.join("good.webp").is_file());
+        assert!(output.join("nested/also-good.webp").is_file());
+        let categories: Vec<_> = result.file_errors.iter().map(|e| e.category).collect();
+        assert!(categories.contains(&"Output name collision"));
+        assert!(categories.contains(&"Corrupt or mislabeled image"));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn convert_all_stops_submitting_after_cancellation() {
+        let _guard = CANCEL_LOCK.lock().unwrap();
+        CANCEL_REQUESTED.store(false, Ordering::SeqCst);
+
+        let root = scratch_dir("e2e-cancel");
+        let source = root.join("source");
+        fs::create_dir_all(&source).unwrap();
+        for index in 0..8 {
+            create_test_image(&source.join(format!("img{index}.png")), 8, 8);
+        }
+
+        let settings = crate::settings::Settings {
+            source_folder: source.clone(),
+            quality: 80,
+            threads: std::num::NonZeroUsize::new(1).unwrap(),
+            lossless: false,
+            strip_metadata: true,
+            resize_width: None,
+            resize_height: None,
+            no_progress: true,
+            report_path: None,
+        };
+        let output = root.join("out");
+        // Cancel before any work runs: nothing should be submitted.
+        CANCEL_REQUESTED.store(true, Ordering::SeqCst);
+        let result = convert_all(
+            &crate::discovery::discover_images(&source),
+            &settings,
+            &output,
+            ProgressBar::hidden(),
+        );
+        CANCEL_REQUESTED.store(false, Ordering::SeqCst);
+
+        assert_eq!(result.summary.converted_files, 0);
+        assert_eq!(result.summary.failed_files, 0);
+        fs::remove_dir_all(&root).ok();
     }
 }

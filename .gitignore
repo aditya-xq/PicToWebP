@@ -1,4 +1,18 @@
-__pycache__
-app.log
-src_rust/cargo.lock
-src_rust/target
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Local logs
+*.log
+
+# Rust
+target/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db

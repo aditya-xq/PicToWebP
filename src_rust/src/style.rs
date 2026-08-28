@@ -101,7 +101,11 @@ fn free_space_bytes(path: &Path) -> Option<u64> {
     use windows_sys::Win32::Foundation::FALSE;
     use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
 
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
     let mut free_to_caller: u64 = 0;
     // SAFETY: `wide` is a nul-terminated UTF-16 string and `free_to_caller` is a
     // valid out-pointer for the duration of the call.

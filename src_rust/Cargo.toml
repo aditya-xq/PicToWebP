@@ -10,10 +10,11 @@ license = "MIT"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 ctrlc = "3"
-image = "0.25"
+# Only the codecs we discover (jpg/jpeg/png/webp) — keeps compile times and
+# binary size down.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 indicatif = { version = "0.18", features = ["rayon"] }
 rayon = "1"
-thiserror = "2"
 walkdir = "2"
 webp = "0.3"
 libwebp-sys = "0.9"
