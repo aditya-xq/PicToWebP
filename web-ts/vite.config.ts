@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite';
 import { resolve } from 'path';
 
@@ -35,6 +36,11 @@ function cspPlugin(): Plugin {
 }
 
 export default defineConfig({
+  // Vitest: unit tests only — Playwright specs live in e2e/ and run via
+  // `npm run test:e2e`; importing @playwright/test under vitest throws.
+  test: {
+    exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
+  },
   // GitHub Pages serves the site from a project subpath.
   base: '/PicToWebP/',
   build: {
