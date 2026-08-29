@@ -51,6 +51,11 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    // Allow the dev server to serve the shared stylesheet from the Python
+    // package directory (production builds bundle it, no restriction needed).
+    fs: {
+      allow: ['..'],
+    },
   },
   plugins: [cspPlugin()],
 });

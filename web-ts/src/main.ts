@@ -1,3 +1,6 @@
+// Shared design system — single source of truth used by the Python web UI too
+// (served from src/pictowebp/templates/, packaged with the Python app).
+import '../../src/pictowebp/templates/ui.css';
 import JSZip from 'jszip';
 import {
   FileResult,
@@ -187,7 +190,7 @@ function initUI(): void {
 function updateSliderFill(): void {
   const slider = $('quality-slider') as HTMLInputElement;
   const pct = ((Number(slider.value) - 1) / 99) * 100;
-  slider.style.background = `linear-gradient(90deg, var(--brand-500) 0%, var(--brand-500) ${pct}%, var(--surface-700) ${pct}%, var(--surface-700) 100%)`;
+  slider.style.background = `linear-gradient(90deg, var(--brand-500) 0%, var(--brand-500) ${pct}%, rgba(148, 163, 184, 0.16) ${pct}%, rgba(148, 163, 184, 0.16) 100%)`;
 }
 
 function setMode(next: Mode): void {

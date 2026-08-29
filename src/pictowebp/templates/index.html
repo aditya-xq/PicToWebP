@@ -1,100 +1,31 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PicToWebP - Bulk Image to WebP Converter</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        surface: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#d1d5db', 400: '#9ca3af', 500: '#6b7280', 600: '#4b5563', 700: '#1a2030', 800: '#111620', 900: '#0a0d14', 950: '#060810' },
-                        brand: { 50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81' },
-                        success: { 400: '#4ade80', 500: '#22c55e', 600: '#16a34a' },
-                        warn: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' },
-                        danger: { 400: '#f87171', 500: '#ef4444', 600: '#dc2626' },
-                    },
-                    fontFamily: { sans: ['"Inter"', 'system-ui', '-apple-system', 'sans-serif'], mono: ['"JetBrains Mono"', 'monospace'] },
-                }
-            }
-        }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        *, *::before, *::after { box-sizing: border-box; }
-        html, body { height: 100%; overflow: hidden; }
-        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #060810; color: #e2e8f0; }
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1a2030; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #283040; }
-        .scroll-y { overflow-y: auto; overscroll-behavior: contain; }
-        .bg-mesh {
-            background-image:
-                radial-gradient(at 20% 20%, rgba(99,102,241,0.05) 0px, transparent 50%),
-                radial-gradient(at 80% 80%, rgba(139,92,246,0.03) 0px, transparent 50%);
-        }
-        .glass { background: rgba(8,10,18,0.92); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
-        .glass-card { background: rgba(10,13,22,0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.07); }
-        .gradient-text { background: linear-gradient(135deg, #a5b4fc, #818cf8, #c4b5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .gradient-border { position: relative; }
-        .gradient-border::before { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: linear-gradient(135deg, rgba(99,102,241,0.4), rgba(139,92,246,0.25)); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
-        .progress-glow { box-shadow: 0 0 20px rgba(99,102,241,0.4), 0 0 40px rgba(99,102,241,0.15); }
-        .quality-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 5px; border-radius: 3px; background: linear-gradient(90deg, #1a2030, #283040); outline: none; }
-        .quality-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #818cf8, #6366f1); cursor: pointer; border: 2px solid #060810; box-shadow: 0 0 10px rgba(99,102,241,0.5); }
-        .quality-slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #818cf8, #6366f1); cursor: pointer; border: 2px solid #060810; }
-        .input-field { background: rgba(10,13,22,0.9); border: 1px solid rgba(255,255,255,0.12); color: #f1f5f9; transition: all 0.2s; }
-        .input-field::placeholder { color: #6b7280; }
-        .input-field:focus { border-color: rgba(99,102,241,0.6); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); outline: none; }
-        .btn-primary { background: linear-gradient(135deg, #6366f1, #4f46e5); transition: all 0.2s; }
-        .btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, #818cf8, #6366f1); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(99,102,241,0.35); }
-        .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
-        .btn-ghost { background: rgba(26,32,48,0.5); border: 1px solid rgba(255,255,255,0.12); transition: all 0.15s; color: #d1d5db; }
-        .btn-ghost:hover { background: rgba(30,40,60,0.8); border-color: rgba(255,255,255,0.2); color: #f1f5f9; }
-        .toggle-switch { position: relative; width: 36px; height: 20px; border-radius: 10px; background: #1a2030; cursor: pointer; transition: background 0.3s; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
-        .toggle-switch.active { background: #6366f1; border-color: rgba(99,102,241,0.5); }
-        .toggle-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #9ca3af; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .toggle-switch.active::after { transform: translateX(16px); background: white; }
-        .stat-card { transition: all 0.3s; }
-        .stat-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.12); }
-        .toast { animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1), fadeOut 0.3s 3.7s forwards; }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-        .pulse-ring { animation: pulseRing 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        @keyframes pulseRing { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .fade-in { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        kbd { background: #111620; border: 1px solid rgba(255,255,255,0.12); color: #d1d5db; }
-        .browse-item { transition: background 0.1s; border: 1px solid transparent; cursor: pointer; }
-        .browse-item:hover { background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.15); }
-        .browse-item.selected { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.3); }
-    </style>
+    <link rel="stylesheet" href="/static/ui.css">
 </head>
-<body class="h-screen bg-mesh flex flex-col overflow-hidden">
-    <div id="toast-container" class="fixed top-3 right-3 z-50 flex flex-col gap-1.5"></div>
+<body>
+    <div id="toast-container"></div>
 
     <!-- Nav -->
-    <nav class="glass border-b border-white/10 shrink-0">
-        <div class="max-w-[1300px] mx-auto px-5 h-11 flex items-center justify-between">
-            <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
-                    <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+    <nav class="nav">
+        <div class="nav-inner">
+            <div class="brand">
+                <div class="brand-logo">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                     </svg>
                 </div>
-                <span class="font-semibold text-white text-sm tracking-tight">PicToWebP</span>
-                <span class="text-[10px] font-medium text-surface-300 bg-surface-700 px-1.5 py-0.5 rounded-full">v1.0</span>
+                <span class="brand-name">PicToWebP</span>
+                <span class="badge">Local Server</span>
             </div>
-            <div class="flex items-center gap-2">
-                <button onclick="showShortcuts()" class="btn-ghost text-sm px-2 py-0.5 rounded-lg font-mono" title="Keyboard shortcuts">?</button>
-                <button onclick="showHistoryPanel()" class="btn-ghost text-sm px-2.5 py-1 rounded-lg flex items-center gap-1.5">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <div class="nav-actions">
+                <button onclick="showShortcuts()" class="btn btn-ghost" title="Keyboard shortcuts">?</button>
+                <button onclick="showHistoryPanel()" class="btn btn-ghost">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     History
                 </button>
             </div>
@@ -102,331 +33,294 @@
     </nav>
 
     <!-- Main -->
-    <div class="flex-1 min-h-0 max-w-[1300px] mx-auto w-full px-5 py-4">
-        <div class="text-center mb-4 fade-in">
-            <h1 class="text-4xl font-bold tracking-tight mb-1">
-                <span class="gradient-text">Pic</span><span class="text-white">To</span><span class="gradient-text">WebP</span>
-            </h1>
-            <p class="text-surface-400 text-sm">Drop your images in. Get smaller files out. Everything stays on your machine.</p>
-            <div class="flex flex-wrap justify-center gap-2 mt-3">
-                <span class="inline-flex items-center gap-1.5 text-[11px] font-medium text-success-400 bg-success-500/5 border border-success-500/20 px-2.5 py-1 rounded-full whitespace-nowrap" title="Runs as a localhost-only server (127.0.0.1) — no internet connection needed">
-                    <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                    Runs 100% on your machine
-                </span>
-                <span class="inline-flex items-center gap-1.5 text-[11px] font-medium text-success-400 bg-success-500/5 border border-success-500/20 px-2.5 py-1 rounded-full whitespace-nowrap" title="Images are processed locally — nothing is sent over the internet">
-                    <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M8.5 16.5a5.5 5.5 0 01-.31-10.98 7 7 0 0113.24 2.09A4.5 4.5 0 0119.5 16.5H8.5z"/></svg>
-                    No uploads, ever
-                </span>
-                <span class="inline-flex items-center gap-1.5 text-[11px] font-medium text-success-400 bg-success-500/5 border border-success-500/20 px-2.5 py-1 rounded-full whitespace-nowrap" title="No telemetry, analytics, accounts, or third-party services">
-                    <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
-                    No tracking, no telemetry
-                </span>
-                <span class="inline-flex items-center gap-1.5 text-[11px] font-medium text-success-400 bg-success-500/5 border border-success-500/20 px-2.5 py-1 rounded-full whitespace-nowrap" title="Metadata stripping is on by default — camera info and GPS tags are removed from every output">
-                    <svg class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path stroke-linecap="round" d="M8 11V7a4 4 0 018 0M12 15v2"/></svg>
-                    EXIF &amp; GPS stripped by default
-                </span>
-            </div>
+    <div class="main">
+        <div class="hero fade-in">
+            <h1 class="hero-title"><span class="grad-text">Pic</span>To<span class="grad-text">WebP</span></h1>
+            <p class="hero-sub">Drop your images in. Get smaller files out. Everything stays on your machine.</p>
         </div>
 
-        <div class="max-w-6xl mx-auto flex flex-col gap-4 min-h-0 scroll-y" style="height: calc(100% - 104px);">
-            <div class="grid grid-cols-2 gap-4 min-h-0">
+        <div class="privacy-strip fade-in" style="animation-delay:.04s">
+            <span class="pill" title="Runs as a localhost-only server (127.0.0.1) — no internet connection needed">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                Runs 100% on your machine
+            </span>
+            <span class="pill" title="Images are processed locally — nothing is sent over the internet">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M8.5 16.5a5.5 5.5 0 01-.31-10.98 7 7 0 0113.24 2.09A4.5 4.5 0 0119.5 16.5H8.5z"/></svg>
+                No uploads, ever
+            </span>
+            <span class="pill" title="No telemetry, analytics, accounts, or third-party services">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                No tracking, no telemetry
+            </span>
+            <span class="pill" title="Metadata stripping is on by default — camera info and GPS tags are removed from every output">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path stroke-linecap="round" d="M8 11V7a4 4 0 018 0M12 15v2"/></svg>
+                EXIF &amp; GPS stripped by default
+            </span>
+        </div>
+
+        <div class="shell">
             <!-- Config -->
-            <div class="glass-card rounded-xl p-4 fade-in flex flex-col gap-4">
+            <div class="card fade-in card-col">
                 <!-- Quality -->
                 <div>
-                    <div class="flex items-center justify-between mb-2.5">
-                        <label class="text-[10px] font-semibold text-surface-300 uppercase tracking-wider">Quality</label>
-                        <span class="text-xl font-bold text-white font-mono"><span id="quality-value">80</span><span class="text-[10px] text-surface-400 font-normal"> / 100</span></span>
+                    <div class="quality-head">
+                        <label class="label">Quality</label>
+                        <span class="quality-value"><span id="quality-value">80</span><small> / 100</small></span>
                     </div>
-                    <input type="range" id="quality" class="quality-slider" min="1" max="100" value="80">
-                    <div class="flex justify-between text-[11px] text-surface-400 mt-1"><span>Smallest file</span><span>Best quality</span></div>
-                    <div class="flex gap-1.5 mt-2.5">
-                        <button onclick="setQuality(60)" class="text-[11px] px-2.5 py-1 rounded-md bg-surface-700 text-surface-300 hover:text-white hover:bg-surface-600 transition-colors">Web (60)</button>
-                        <button onclick="setQuality(80)" class="text-[11px] px-2.5 py-1 rounded-md bg-surface-700 text-surface-300 hover:text-white hover:bg-surface-600 transition-colors">Balanced (80)</button>
-                        <button onclick="setQuality(95)" class="text-[11px] px-2.5 py-1 rounded-md bg-surface-700 text-surface-300 hover:text-white hover:bg-surface-600 transition-colors">High (95)</button>
+                    <input type="range" id="quality" class="slider" min="1" max="100" value="80">
+                    <div class="slider-hints"><span>Smallest file</span><span>Best quality</span></div>
+                    <div class="chips">
+                        <button onclick="setQuality(60)" class="chip">Web (60)</button>
+                        <button onclick="setQuality(80)" class="chip">Balanced (80)</button>
+                        <button onclick="setQuality(95)" class="chip">High (95)</button>
                     </div>
                 </div>
 
-                <div class="h-px bg-white/5"></div>
+                <div class="divider"></div>
 
                 <!-- Options -->
-                <div class="space-y-3">
-                    <div class="flex items-center justify-between">
+                <div class="stack">
+                    <div class="row">
                         <div>
-                            <div class="text-sm text-white font-medium">Lossless</div>
-                            <div class="text-[12px] text-surface-400">Keep every pixel — no quality loss, larger files</div>
+                            <div class="option-title">Lossless</div>
+                            <div class="option-desc">Keep every pixel — no quality loss, larger files</div>
                         </div>
-                        <div id="toggle-lossless" class="toggle-switch" onclick="toggleSwitch(this)"></div>
+                        <div id="toggle-lossless" class="toggle" onclick="toggleSwitch(this)"></div>
                     </div>
-                    <div class="flex items-center justify-between">
+                    <div class="row">
                         <div>
-                            <div class="text-sm text-white font-medium">Strip metadata</div>
-                            <div class="text-[12px] text-surface-400">Remove camera info and GPS tags for smaller files</div>
+                            <div class="option-title">Strip metadata</div>
+                            <div class="option-desc">Remove camera info and GPS tags for smaller files</div>
                         </div>
-                        <div id="toggle-metadata" class="toggle-switch active" onclick="toggleSwitch(this)"></div>
+                        <div id="toggle-metadata" class="toggle active" onclick="toggleSwitch(this)"></div>
                     </div>
                     <div>
-                        <div class="flex items-center justify-between mb-1.5">
+                        <div class="row" style="margin-bottom:6px">
                             <div>
-                                <div class="text-sm text-white font-medium">Resize</div>
-                                <div class="text-[12px] text-surface-400">Shrink images before converting — set a max width or height</div>
+                                <div class="option-title">Resize</div>
+                                <div class="option-desc">Shrink images before converting — set a max width or height</div>
                             </div>
-                            <div id="toggle-resize" class="toggle-switch" onclick="toggleResize()"></div>
+                            <div id="toggle-resize" class="toggle" onclick="toggleResize()"></div>
                         </div>
-                        <div id="resize-inputs" class="hidden grid grid-cols-2 gap-2">
+                        <div id="resize-inputs" class="field-grid hidden">
                             <div>
-                                <label class="text-[11px] text-surface-400 uppercase mb-1 block">Max Width</label>
-                                <input type="number" id="resize_width" class="input-field w-full px-2.5 py-1.5 rounded-lg text-sm font-mono" placeholder="px" min="16" max="16384">
+                                <label class="field-label" for="resize_width">Max Width</label>
+                                <input type="number" id="resize_width" class="field mono" placeholder="px" min="16" max="16384">
                             </div>
                             <div>
-                                <label class="text-[11px] text-surface-400 uppercase mb-1 block">Max Height</label>
-                                <input type="number" id="resize_height" class="input-field w-full px-2.5 py-1.5 rounded-lg text-sm font-mono" placeholder="px" min="16" max="16384">
+                                <label class="field-label" for="resize_height">Max Height</label>
+                                <input type="number" id="resize_height" class="field mono" placeholder="px" min="16" max="16384">
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="h-px bg-white/5"></div>
+                <div class="divider"></div>
 
                 <!-- Convert -->
                 <button id="convert-btn" onclick="startConversion()" disabled
-                    class="btn-primary w-full py-2.5 rounded-xl text-white font-semibold text-sm tracking-wide flex items-center justify-center gap-2 mt-auto">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    class="btn btn-primary btn-block mt-auto">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     <span id="convert-btn-text">Convert to WebP</span>
                 </button>
             </div>
 
             <!-- Progress -->
-            <div id="progress-card" class="glass-card rounded-xl p-4 flex-1 flex flex-col min-h-0 fade-in" style="animation-delay:.02s">
+            <div class="card fade-in grow" style="animation-delay:.02s">
                 <!-- Mode Tabs -->
-                <div id="mode-tabs" class="flex gap-1 p-1 rounded-lg bg-surface-800/50 border border-white/5 mb-4 shrink-0">
-                    <button onclick="setMode('folder')" id="tab-folder" class="flex-1 py-1.5 rounded-md text-sm font-medium transition-colors bg-brand-500/15 text-brand-300 border border-brand-500/20">
-                        <span class="flex items-center justify-center gap-1.5">
-                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                            Folder
-                        </span>
+                <div class="tabs">
+                    <button onclick="setMode('folder')" id="tab-folder" class="tab active">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                        Folder
                     </button>
-                    <button onclick="setMode('single')" id="tab-single" class="flex-1 py-1.5 rounded-md text-sm font-medium transition-colors text-surface-400 hover:text-surface-200">
-                        <span class="flex items-center justify-center gap-1.5">
-                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                            Single Image
-                        </span>
+                    <button onclick="setMode('single')" id="tab-single" class="tab">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        Single Image
                     </button>
                 </div>
 
                 <!-- Folder Mode -->
-                <div id="mode-folder" class="flex-1 flex flex-col min-h-0">
+                <div id="mode-folder" class="grow">
                     <!-- Idle -->
-                    <div id="progress-idle" class="flex-1 flex flex-col">
-                        <div onclick="openBrowser()" class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-surface-600 rounded-xl cursor-pointer transition-colors hover:border-brand-400/50 hover:bg-brand-500/5">
-                            <svg class="w-10 h-10 text-surface-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <div id="progress-idle" class="grow">
+                        <div onclick="openBrowser()" class="dropzone">
+                            <svg class="dz-icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                             </svg>
-                            <p class="text-surface-300 text-sm font-medium mb-1">Click to select a folder</p>
-                            <p class="text-surface-500 text-[11px]">Converts all images inside to WebP</p>
+                            <p class="dz-title">Click to select a folder</p>
+                            <p class="dz-sub">Converts all images inside to WebP</p>
                         </div>
-                        <div id="source-badge" class="hidden mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-800/80 border border-white/8">
-                            <svg class="w-3.5 h-3.5 text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                            <span id="source-badge-text" class="text-sm text-surface-200 font-mono truncate max-w-[280px]"></span>
+                        <div id="source-badge" class="source-badge hidden">
+                            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--brand-400);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                            <span id="source-badge-text" class="path"></span>
                         </div>
                     </div>
 
                     <!-- Running -->
-                    <div id="progress-running" class="hidden flex-1 flex flex-col">
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="flex items-center gap-2">
-                                <div class="w-2 h-2 rounded-full bg-brand-400 pulse-ring"></div>
-                                <span class="text-sm font-medium text-white">Converting to WebP...</span>
-                                <span id="running-elapsed" class="text-xs text-surface-400 font-mono"></span>
+                    <div id="progress-running" class="hidden grow">
+                        <div class="running-head">
+                            <div class="running-title">
+                                <div class="pulse-dot"></div>
+                                <span>Converting to WebP...</span>
+                                <span id="running-elapsed" class="running-elapsed"></span>
                             </div>
-                            <span id="progress-percent" class="text-sm font-mono text-brand-300">0%</span>
+                            <span id="progress-percent" class="progress-percent">0%</span>
                         </div>
-                        <div class="w-full h-2 rounded-full bg-surface-700 overflow-hidden mb-5">
-                            <div id="progress-bar" class="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400 transition-all duration-300 ease-out progress-glow" style="width:0%"></div>
+                        <div class="progress-track"><div id="progress-bar" class="progress-fill"></div></div>
+                        <div class="counters">
+                            <div class="counter"><div id="running-processed" class="value">0</div><div class="counter-label">Processed</div></div>
+                            <div class="counter"><div id="running-total" class="value">0</div><div class="counter-label">Total</div></div>
+                            <div class="counter"><div id="running-eta" class="value">--</div><div class="counter-label">ETA</div></div>
                         </div>
-                        <div class="grid grid-cols-3 gap-4 mb-5">
-                            <div class="text-center">
-                                <div id="running-processed" class="text-2xl font-bold text-white font-mono">0</div>
-                                <div class="text-[10px] text-surface-400 uppercase mt-0.5">Processed</div>
-                            </div>
-                            <div class="text-center">
-                                <div id="running-total" class="text-2xl font-bold text-surface-200 font-mono">0</div>
-                                <div class="text-[10px] text-surface-400 uppercase mt-0.5">Total</div>
-                            </div>
-                            <div class="text-center">
-                                <div id="running-eta" class="text-2xl font-bold text-surface-200 font-mono">--</div>
-                                <div class="text-[10px] text-surface-400 uppercase mt-0.5">ETA</div>
-                            </div>
-                        </div>
-                        <button id="cancel-btn" onclick="cancelConversion()" class="mt-auto w-full py-2.5 rounded-xl bg-danger-500/10 border border-danger-500/20 text-danger-400 text-sm font-medium hover:bg-danger-500/20 transition-colors">
+                        <button id="cancel-btn" onclick="cancelConversion()" class="btn btn-danger btn-block mt-auto">
                             Cancel
                         </button>
                     </div>
 
                     <!-- Complete -->
-                    <div id="progress-complete" class="hidden flex-1 flex flex-col">
-                        <div class="flex items-center gap-3 mb-4">
-                            <div class="w-10 h-10 rounded-xl bg-success-500/10 flex items-center justify-center shrink-0">
-                                <svg class="w-5 h-5 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                            </div>
+                    <div id="progress-complete" class="hidden grow">
+                        <div class="complete-head">
+                            <div class="complete-icon">✓</div>
                             <div>
-                                <div class="text-lg font-semibold text-white">WebP Conversion Complete</div>
-                                <div id="complete-time" class="text-sm text-surface-400"></div>
+                                <div class="complete-title">WebP Conversion Complete</div>
+                                <div id="complete-time" class="complete-time"></div>
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 gap-3 mb-4">
-                            <div class="stat-card glass rounded-lg p-3.5 gradient-border">
-                                <div class="text-[10px] text-surface-400 uppercase tracking-wider mb-1">Space Saved</div>
-                                <div id="stat-saved" class="text-xl font-bold text-white font-mono">0 MB</div>
-                                <div id="stat-saved-percent" class="text-sm text-success-400 font-medium">0%</div>
+                        <div class="stat-grid">
+                            <div class="stat-card">
+                                <div class="label">Space Saved</div>
+                                <div id="stat-saved" class="stat-value">0 MB</div>
+                                <div id="stat-saved-percent" class="stat-sub">0%</div>
                             </div>
-                            <div class="stat-card glass rounded-lg p-3.5 gradient-border">
-                                <div class="text-[10px] text-surface-400 uppercase tracking-wider mb-1">Files Converted</div>
-                                <div id="stat-converted" class="text-xl font-bold text-white font-mono">0</div>
-                                <div id="stat-failed" class="text-sm text-surface-300">0 failed</div>
+                            <div class="stat-card">
+                                <div class="label">Files Converted</div>
+                                <div id="stat-converted" class="stat-value">0</div>
+                                <div id="stat-failed" class="stat-sub muted">0 failed</div>
                             </div>
-                            <div class="stat-card glass rounded-lg p-3.5 gradient-border">
-                                <div class="text-[10px] text-surface-400 uppercase tracking-wider mb-1">Original Size</div>
-                                <div id="stat-original" class="text-xl font-bold text-white font-mono">0 MB</div>
+                            <div class="stat-card">
+                                <div class="label">Original Size</div>
+                                <div id="stat-original" class="stat-value">0 MB</div>
                             </div>
-                            <div class="stat-card glass rounded-lg p-3.5 gradient-border">
-                                <div class="text-[10px] text-surface-400 uppercase tracking-wider mb-1">WebP Size</div>
-                                <div id="stat-new" class="text-xl font-bold text-white font-mono">0 MB</div>
+                            <div class="stat-card">
+                                <div class="label">WebP Size</div>
+                                <div id="stat-new" class="stat-value">0 MB</div>
                             </div>
                         </div>
-                        <div id="stat-output-folder" class="hidden mb-3 p-2.5 rounded-lg bg-surface-800/50 border border-white/5">
-                            <div class="text-[10px] text-surface-400 uppercase mb-0.5">Output Folder</div>
-                            <div class="text-sm text-surface-200 font-mono break-all" id="stat-output-path"></div>
+                        <div id="stat-output-folder" class="output-folder hidden">
+                            <div class="label" style="margin-bottom:3px">Output Folder</div>
+                            <div class="path" id="stat-output-path"></div>
                         </div>
-                        <div class="flex gap-2 mt-auto">
-                            <button onclick="openOutputFolder()" id="open-folder-btn" class="hidden flex-1 py-2.5 rounded-xl bg-surface-700 border border-surface-600 text-surface-200 text-sm font-medium hover:bg-surface-600 hover:text-white transition-colors flex items-center justify-center gap-2">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                        <div class="action-row">
+                            <button onclick="openOutputFolder()" id="open-folder-btn" class="btn btn-secondary hidden">
+                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                                 Open Folder
                             </button>
-                            <button onclick="shareStats()" id="share-btn" class="hidden flex-1 py-2.5 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-300 text-sm font-medium hover:bg-brand-500/20 transition-colors flex items-center justify-center gap-2">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+                            <button onclick="shareStats()" id="share-btn" class="btn btn-accent hidden">
+                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
                                 Share Stats
                             </button>
                         </div>
-                        <button onclick="resetUI()" class="mt-2 w-full py-2.5 rounded-xl bg-surface-700 border border-surface-600 text-surface-200 text-sm font-medium hover:bg-surface-600 hover:text-white transition-colors flex items-center justify-center gap-2">
-                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                            Convert More
-                        </button>
+                        <div class="action-row" style="margin-top:10px">
+                            <button onclick="resetUI()" class="btn btn-secondary btn-block">
+                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                Convert More
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Error -->
-                    <div id="progress-error" class="hidden flex-1 flex flex-col items-center justify-center text-center">
-                        <div class="w-14 h-14 rounded-2xl bg-danger-500/10 flex items-center justify-center mb-4">
-                            <svg class="w-7 h-7 text-danger-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                        </div>
-                        <div class="text-lg font-semibold text-white mb-1">Conversion Failed</div>
-                        <div id="error-message" class="text-sm text-surface-300 mb-4"></div>
-                        <button onclick="resetUI()" class="px-5 py-2.5 rounded-xl bg-surface-700 border border-surface-600 text-surface-200 text-sm font-medium hover:bg-surface-600 hover:text-white transition-colors">Try Again</button>
+                    <div id="progress-error" class="hidden error-state">
+                        <div class="error-icon">⚠</div>
+                        <div class="title">Conversion Failed</div>
+                        <div id="error-message" class="message"></div>
+                        <button onclick="resetUI()" class="btn btn-secondary" style="flex:none;padding:11px 22px">Try Again</button>
                     </div>
                 </div>
 
                 <!-- Single Image Mode -->
-                <div id="mode-single" class="hidden flex-1 flex flex-col min-h-0">
+                <div id="mode-single" class="hidden grow">
                     <!-- Upload State -->
-                    <div id="single-upload" class="flex-1 flex flex-col">
-                        <div id="drop-zone" class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-surface-600 rounded-xl cursor-pointer transition-colors hover:border-brand-400/50 hover:bg-brand-500/5 min-h-[200px]">
-                            <svg class="w-10 h-10 text-surface-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                            <p class="text-surface-300 text-sm font-medium mb-1">Drop an image here</p>
-                            <p class="text-surface-500 text-[11px]">or click to browse</p>
+                    <div id="single-upload" class="grow">
+                        <div id="drop-zone" class="dropzone">
+                            <svg class="dz-icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <p class="dz-title">Drop an image here</p>
+                            <p class="dz-sub">or click to browse</p>
                             <input type="file" id="single-file-input" accept="image/*" class="hidden">
                         </div>
-                        <p class="text-center text-[11px] text-surface-500 mt-2">PNG, JPEG, BMP, TIFF, GIF — converts to WebP instantly</p>
+                        <p class="upload-hint">PNG, JPEG, BMP, TIFF, GIF — converts to WebP instantly</p>
                     </div>
 
                     <!-- Converting State -->
-                    <div id="single-converting" class="hidden flex-1 flex flex-col items-center justify-center">
-                        <div class="w-10 h-10 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mb-4"></div>
-                        <p class="text-surface-300 text-sm font-medium">Converting...</p>
+                    <div id="single-converting" class="hidden grow" style="align-items:center;justify-content:center">
+                        <div class="spinner"></div>
+                        <p class="spinner-label">Converting...</p>
                     </div>
 
                     <!-- Result State -->
-                    <div id="single-result" class="hidden flex-1 flex flex-col">
-                        <div class="flex items-center gap-3 mb-4">
-                            <div class="w-10 h-10 rounded-xl bg-success-500/10 flex items-center justify-center shrink-0">
-                                <svg class="w-5 h-5 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                            </div>
+                    <div id="single-result" class="hidden grow">
+                        <div class="complete-head">
+                            <div class="complete-icon">✓</div>
                             <div>
-                                <div class="text-lg font-semibold text-white">Converted to WebP</div>
-                                <div id="single-result-info" class="text-sm text-surface-400"></div>
+                                <div class="complete-title">Converted to WebP</div>
+                                <div id="single-result-info" class="complete-time"></div>
                             </div>
                         </div>
-                        <div id="single-preview" class="rounded-xl overflow-hidden border border-white/5 bg-surface-800/50 mb-4 flex items-center justify-center" style="max-height: 250px;">
-                            <img id="single-preview-img" class="max-w-full max-h-[250px] object-contain" alt="Preview">
+                        <div class="preview-box">
+                            <img id="single-preview-img" alt="Preview">
                         </div>
-                        <div class="flex gap-2 mt-auto">
-                            <a id="single-download-btn" href="#" download class="flex-1 py-2.5 rounded-xl bg-brand-500 text-white text-sm font-semibold hover:bg-brand-400 transition-colors flex items-center justify-center gap-2">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        <div class="action-row">
+                            <a id="single-download-btn" href="#" download class="btn btn-primary">
+                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                 Download WebP
                             </a>
-                            <button onclick="convertAnotherSingle()" class="flex-1 py-2.5 rounded-xl bg-surface-700 border border-surface-600 text-surface-200 text-sm font-medium hover:bg-surface-600 hover:text-white transition-colors flex items-center justify-center gap-2">
+                            <button onclick="convertAnotherSingle()" class="btn btn-secondary">
                                 Convert Another
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
-            </div>
-
-            <!-- Tips -->
-            <div class="text-center text-sm text-surface-400 py-2 fade-in flex items-center justify-center gap-6" style="animation-delay:.06s">
-                <span>Quality 80 gives 90%+ smaller files</span>
-                <span class="text-surface-600">|</span>
-                <span>WebP works in all modern browsers</span>
-                <span class="text-surface-600">|</span>
-                <span>Strip metadata to remove GPS and camera info</span>
-            </div>
         </div>
     </div>
 
     <!-- Browse modal -->
-    <div id="browse-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeBrowser()"></div>
-        <div class="relative glass rounded-2xl w-full max-w-lg flex flex-col" style="height: 70vh; max-height: 500px;">
-            <div class="flex items-center justify-between px-5 py-3 border-b border-white/8 shrink-0">
-                <h3 class="text-base font-semibold text-white">Select Folder</h3>
-                <button onclick="closeBrowser()" class="btn-ghost p-1.5 rounded-lg">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    <div id="browse-modal" class="modal-overlay hidden">
+        <div class="absolute-inset" onclick="closeBrowser()"></div>
+        <div class="modal browse-modal-body" style="top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:520px">
+            <div class="history-head">
+                <h3 class="modal-title">Select Folder</h3>
+                <button onclick="closeBrowser()" class="modal-close">✕</button>
+            </div>
+            <div class="browse-path">
+                <button id="browse-up-btn" class="btn btn-ghost" title="Go up">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
                 </button>
+                <div id="browse-current" class="browse-current"></div>
             </div>
-            <div class="px-4 py-2 border-b border-white/8 shrink-0">
-                <div class="flex items-center gap-2">
-                    <button id="browse-up-btn" class="btn-ghost p-1.5 rounded-lg shrink-0" title="Go up">
-                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
-                    </button>
-                    <div id="browse-current" class="text-sm text-surface-200 font-mono truncate flex-1"></div>
-                </div>
-            </div>
-            <div id="browse-list" class="flex-1 overflow-y-auto p-2 scroll-y"></div>
-            <div class="px-5 py-3 border-t border-white/8 flex items-center justify-between shrink-0">
-                <span id="browse-selected" class="text-sm text-surface-300 truncate max-w-[250px]"></span>
-                <div class="flex gap-2">
-                    <button onclick="closeBrowser()" class="btn-ghost px-3 py-1.5 rounded-lg text-sm">Cancel</button>
-                    <button id="browse-select-btn" class="btn-primary px-3 py-1.5 rounded-lg text-sm text-white disabled:opacity-35" disabled>Select</button>
+            <div id="browse-list" class="browse-list"></div>
+            <div class="browse-foot">
+                <span id="browse-selected" class="browse-selected"></span>
+                <div class="row-gap">
+                    <button onclick="closeBrowser()" class="btn btn-ghost">Cancel</button>
+                    <button id="browse-select-btn" class="btn btn-primary" disabled>Select</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- History panel -->
-    <div id="history-panel" class="fixed inset-0 z-50 hidden">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideHistoryPanel()"></div>
-        <div class="absolute right-0 top-0 h-full w-full max-w-sm glass border-l border-white/8 flex flex-col">
-            <div class="flex items-center justify-between px-5 py-3 border-b border-white/8 shrink-0">
-                <h2 class="text-base font-semibold text-white">Conversion History</h2>
-                <button onclick="hideHistoryPanel()" class="btn-ghost p-1.5 rounded-lg">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
+    <div id="history-panel" class="modal-overlay hidden">
+        <div class="absolute-inset" onclick="hideHistoryPanel()"></div>
+        <div class="history-panel">
+            <div class="history-head">
+                <h2 class="modal-title">Conversion History</h2>
+                <button onclick="hideHistoryPanel()" class="modal-close">✕</button>
             </div>
-            <div id="history-list" class="flex-1 overflow-y-auto p-4 space-y-2.5 scroll-y">
-                <p class="text-sm text-surface-400 text-center py-8">No conversions yet</p>
+            <div id="history-list" class="history-list">
+                <p class="empty-note">No conversions yet</p>
             </div>
-            <div id="history-actions" class="hidden px-4 py-3 border-t border-white/8 shrink-0">
-                <button onclick="clearHistory()" class="w-full py-2 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-sm font-medium hover:bg-danger-500/20 transition-colors">
+            <div id="history-actions" class="history-foot hidden">
+                <button onclick="clearHistory()" class="btn btn-danger btn-block">
                     Clear History
                 </button>
             </div>
@@ -434,20 +328,18 @@
     </div>
 
     <!-- Shortcuts modal -->
-    <div id="shortcuts-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideShortcuts()"></div>
-        <div class="relative glass rounded-2xl p-6 max-w-sm w-full">
-            <div class="flex items-center justify-between mb-5">
-                <h2 class="text-base font-semibold text-white">Keyboard Shortcuts</h2>
-                <button onclick="hideShortcuts()" class="btn-ghost p-1.5 rounded-lg">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
+    <div id="shortcuts-modal" class="modal-overlay hidden">
+        <div class="absolute-inset" onclick="hideShortcuts()"></div>
+        <div class="modal modal-centered">
+            <div class="modal-header">
+                <h2 class="modal-title">Keyboard Shortcuts</h2>
+                <button onclick="hideShortcuts()" class="modal-close">✕</button>
             </div>
-            <div class="space-y-2.5">
-                <div class="flex items-center justify-between text-sm"><span class="text-surface-200">Start conversion</span><kbd class="px-2.5 py-1 rounded-lg bg-surface-800 font-mono text-sm">Enter</kbd></div>
-                <div class="flex items-center justify-between text-sm"><span class="text-surface-200">Cancel</span><kbd class="px-2.5 py-1 rounded-lg bg-surface-800 font-mono text-sm">Esc</kbd></div>
-                <div class="flex items-center justify-between text-sm"><span class="text-surface-200">History</span><kbd class="px-2.5 py-1 rounded-lg bg-surface-800 font-mono text-sm">H</kbd></div>
-                <div class="flex items-center justify-between text-sm"><span class="text-surface-200">Browse folders</span><kbd class="px-2.5 py-1 rounded-lg bg-surface-800 font-mono text-sm">B</kbd></div>
+            <div class="stack" style="gap:12px">
+                <div class="shortcut-row"><span>Start conversion</span><kbd>Enter</kbd></div>
+                <div class="shortcut-row"><span>Cancel</span><kbd>Esc</kbd></div>
+                <div class="shortcut-row"><span>History</span><kbd>H</kbd></div>
+                <div class="shortcut-row"><span>Browse folders</span><kbd>B</kbd></div>
             </div>
         </div>
     </div>
@@ -492,11 +384,11 @@
                 var info = document.createElement('span');
                 info.id = 'folder-info-badge';
                 if (d.valid) {
-                    info.className = 'text-[11px] text-success-400 font-medium';
+                    info.className = 'badge-info';
                     info.textContent = d.total_files + ' images \u00b7 ' + d.total_size_display;
                     folderValid = true;
                 } else {
-                    info.className = 'text-[11px] text-danger-400 font-medium';
+                    info.className = 'badge-info invalid';
                     info.textContent = d.error || 'No convertible images found';
                     folderValid = false;
                 }
@@ -521,7 +413,7 @@
         });
         function updateSliderBg() {
             var pct = ((qualitySlider.value - 1) / 99) * 100;
-            qualitySlider.style.background = 'linear-gradient(90deg, #6366f1 0%, #6366f1 ' + pct + '%, #1a2030 ' + pct + '%, #1a2030 100%)';
+            qualitySlider.style.background = 'linear-gradient(90deg, #6366f1 0%, #6366f1 ' + pct + '%, rgba(148,163,184,0.16) ' + pct + '%, rgba(148,163,184,0.16) 100%)';
         }
         updateSliderBg();
         window.setQuality = function(v) { qualitySlider.value = v; qualityValue.textContent = v; updateSliderBg(); };
@@ -535,13 +427,13 @@
             var modeFolder = document.getElementById('mode-folder');
             var modeSingle = document.getElementById('mode-single');
             if (mode === 'folder') {
-                tabFolder.className = 'flex-1 py-1.5 rounded-md text-sm font-medium transition-colors bg-brand-500/15 text-brand-300 border border-brand-500/20';
-                tabSingle.className = 'flex-1 py-1.5 rounded-md text-sm font-medium transition-colors text-surface-400 hover:text-surface-200';
+                tabFolder.className = 'tab active';
+                tabSingle.className = 'tab';
                 modeFolder.classList.remove('hidden');
                 modeSingle.classList.add('hidden');
             } else {
-                tabSingle.className = 'flex-1 py-1.5 rounded-md text-sm font-medium transition-colors bg-brand-500/15 text-brand-300 border border-brand-500/20';
-                tabFolder.className = 'flex-1 py-1.5 rounded-md text-sm font-medium transition-colors text-surface-400 hover:text-surface-200';
+                tabSingle.className = 'tab active';
+                tabFolder.className = 'tab';
                 modeSingle.classList.remove('hidden');
                 modeFolder.classList.add('hidden');
             }
@@ -552,11 +444,11 @@
         var singleFileInput = document.getElementById('single-file-input');
 
         dropZone.addEventListener('click', function() { singleFileInput.click(); });
-        dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('border-brand-400', 'bg-brand-500/5'); });
-        dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('border-brand-400', 'bg-brand-500/5'); });
+        dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('drag-over'); });
         dropZone.addEventListener('drop', function(e) {
             e.preventDefault();
-            dropZone.classList.remove('border-brand-400', 'bg-brand-500/5');
+            dropZone.classList.remove('drag-over');
             if (e.dataTransfer.files.length > 0) handleSingleFile(e.dataTransfer.files[0]);
         });
         singleFileInput.addEventListener('change', function() {
@@ -815,12 +707,12 @@
 
             // Title
             ctx.fillStyle = '#f1f5f9';
-            ctx.font = 'bold 22px Inter, system-ui, sans-serif';
+            ctx.font = 'bold 22px system-ui, sans-serif';
             ctx.fillText('PicToWebP', 30, 50);
 
             // Subtitle
             ctx.fillStyle = '#6b7280';
-            ctx.font = '12px Inter, system-ui, sans-serif';
+            ctx.font = '12px system-ui, sans-serif';
             ctx.fillText('Bulk image to WebP conversion', 30, 72);
 
             // Divider
@@ -841,13 +733,13 @@
             stats.forEach(function(s, i) {
                 var x = 30 + i * 190;
                 ctx.fillStyle = '#9ca3af';
-                ctx.font = '600 10px Inter, system-ui, sans-serif';
+                ctx.font = '600 10px system-ui, sans-serif';
                 ctx.fillText(s.label, x, 125);
                 ctx.fillStyle = s.color;
-                ctx.font = 'bold 28px Inter, system-ui, sans-serif';
+                ctx.font = 'bold 28px system-ui, sans-serif';
                 ctx.fillText(s.value, x, 162);
                 ctx.fillStyle = '#6b7280';
-                ctx.font = '11px Inter, system-ui, sans-serif';
+                ctx.font = '11px system-ui, sans-serif';
                 ctx.fillText(s.sub, x, 182);
             });
 
@@ -868,7 +760,7 @@
             roundedRect(30, 225, origW, 16, 4);
             ctx.fill();
             ctx.fillStyle = '#9ca3af';
-            ctx.font = '10px Inter, system-ui, sans-serif';
+            ctx.font = '10px system-ui, sans-serif';
             ctx.fillText('Original: ' + lastStats.original, 30, 260);
 
             var barGrad = ctx.createLinearGradient(30, 0, 30 + webpW, 0);
@@ -939,10 +831,11 @@
                 if (d.drives && d.drives.length) {
                     d.drives.forEach(function(drive) {
                         var btn = document.createElement('button');
-                        btn.className = 'browse-item w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left';
+                        btn.className = 'browse-item';
                         btn.dataset.path = drive;
-                        btn.innerHTML = '<svg class="w-4 h-4 text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>' +
-                            '<span class="text-sm text-surface-200">' + drive + '</span>';
+                        btn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>' +
+                            '<span></span>';
+                        btn.querySelector('span').textContent = drive;
                         btn.onclick = function() { browseTo(drive); };
                         list.appendChild(btn);
                     });
@@ -951,10 +844,10 @@
                 // Parent
                 if (d.parent) {
                     var btn = document.createElement('button');
-                    btn.className = 'browse-item w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left';
+                    btn.className = 'browse-item';
                     btn.dataset.path = d.parent;
-                    btn.innerHTML = '<svg class="w-4 h-4 text-surface-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>' +
-                        '<span class="text-sm text-surface-300">..</span>';
+                    btn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>' +
+                        '<span>..</span>';
                     btn.onclick = function() { browseTo(d.parent); };
                     list.appendChild(btn);
                 }
@@ -962,10 +855,10 @@
                 // Entries
                 d.entries.forEach(function(entry) {
                     var btn = document.createElement('button');
-                    btn.className = 'browse-item w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left';
+                    btn.className = 'browse-item';
                     btn.dataset.path = entry.path;
-                    btn.innerHTML = '<svg class="w-4 h-4 text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>' +
-                        '<span class="text-sm text-surface-200 truncate"></span>';
+                    btn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>' +
+                        '<span></span>';
                     btn.querySelector('span').textContent = entry.name;
                     btn.onclick = function() { browseTo(entry.path); };
                     list.appendChild(btn);
@@ -973,7 +866,7 @@
 
                 if (!d.drives && !d.parent && !d.entries.length) {
                     var p = document.createElement('p');
-                    p.className = 'text-xl text-surface-400 text-center py-6';
+                    p.className = 'empty-note';
                     p.textContent = 'No subdirectories';
                     list.appendChild(p);
                 }
@@ -997,7 +890,12 @@
                     else browseTo('');
                 };
             }).catch(function() {
-                document.getElementById('browse-list').innerHTML = '<p class="text-xl text-surface-400 text-center py-6">Failed to load</p>';
+                var list = document.getElementById('browse-list');
+                list.innerHTML = '';
+                var p = document.createElement('p');
+                p.className = 'empty-note';
+                p.textContent = 'Failed to load';
+                list.appendChild(p);
             });
         }
 
@@ -1012,7 +910,12 @@
             fetch('/api/history').then(function(r) { return r.json(); }).then(function(d) {
                 renderHistory(d.history);
             }).catch(function() {
-                document.getElementById('history-list').innerHTML = '<p class="text-xl text-surface-400 text-center py-8">Failed to load</p>';
+                var list = document.getElementById('history-list');
+                list.innerHTML = '';
+                var p = document.createElement('p');
+                p.className = 'empty-note';
+                p.textContent = 'Failed to load';
+                list.appendChild(p);
             });
         };
 
@@ -1024,7 +927,11 @@
             var list = document.getElementById('history-list');
             var act = document.getElementById('history-actions');
             if (!items || !items.length) {
-                list.innerHTML = '<p class="text-sm text-surface-400 text-center py-8">No conversions yet</p>';
+                list.innerHTML = '';
+                var p = document.createElement('p');
+                p.className = 'empty-note';
+                p.textContent = 'No conversions yet';
+                list.appendChild(p);
                 act.classList.add('hidden');
                 return;
             }
@@ -1033,17 +940,17 @@
             items.slice().reverse().forEach(function(h) {
                 var folder = h.source_folder.split(/[/\\]/).pop() || h.source_folder;
                 var card = document.createElement('div');
-                card.className = 'history-item glass-card rounded-lg p-3';
-                card.innerHTML = '<div class="flex items-center justify-between mb-1.5"><span class="text-[10px] font-mono text-surface-400"></span><span class="text-[11px] text-surface-400"></span></div>' +
-                    '<div class="text-sm text-surface-200 mb-2 font-mono truncate"></div>' +
-                    '<div class="grid grid-cols-3 gap-2 text-center">' +
-                    '<div><div class="text-lg font-bold text-white"></div><div class="text-[8px] text-surface-400">FILES</div></div>' +
-                    '<div><div class="text-lg font-bold text-success-400"></div><div class="text-[8px] text-surface-400">SAVED</div></div>' +
-                    '<div><div class="text-lg font-bold text-surface-200"></div><div class="text-[8px] text-surface-400">TIME</div></div>' +
+                card.className = 'history-card';
+                card.innerHTML = '<div class="meta"><span class="meta-id"></span><span class="meta-date"></span></div>' +
+                    '<div class="name"></div>' +
+                    '<div class="stats">' +
+                    '<div><div class="v"></div><div class="l">Files</div></div>' +
+                    '<div><div class="v green"></div><div class="l">Saved</div></div>' +
+                    '<div><div class="v"></div><div class="l">Time</div></div>' +
                     '</div>';
                 // Fill dynamic values via textContent (never innerHTML) so odd
                 // folder names cannot inject markup.
-                var textSpans = card.querySelectorAll('span, div');
+                var textSpans = card.querySelectorAll('span, .name, .v');
                 textSpans[0].textContent = h.id;
                 textSpans[1].textContent = new Date(h.timestamp).toLocaleDateString();
                 var folderDiv = textSpans[2];
@@ -1058,7 +965,12 @@
 
         window.clearHistory = function() {
             fetch('/api/history', { method: 'DELETE' }).then(function() {
-                document.getElementById('history-list').innerHTML = '<p class="text-sm text-surface-400 text-center py-8">No conversions yet</p>';
+                var list = document.getElementById('history-list');
+                list.innerHTML = '';
+                var p = document.createElement('p');
+                p.className = 'empty-note';
+                p.textContent = 'No conversions yet';
+                list.appendChild(p);
                 document.getElementById('history-actions').classList.add('hidden');
                 showToast('Cleared', 'info');
             });
@@ -1069,10 +981,8 @@
 
         function showToast(msg, type) {
             var c = document.getElementById('toast-container');
-            var cl = { success: 'border-success-500/30 bg-success-500/10', error: 'border-danger-500/30 bg-danger-500/10', warn: 'border-warn-500/30 bg-warn-500/10', info: 'border-brand-500/30 bg-brand-500/10' };
-            var tc = { success: 'text-success-400', error: 'text-danger-400', warn: 'text-warn-400', info: 'text-brand-300' };
             var t = document.createElement('div');
-            t.className = 'toast border ' + (cl[type] || cl.info) + ' rounded-lg px-4 py-2.5 text-sm font-medium ' + (tc[type] || tc.info) + ' backdrop-blur-md';
+            t.className = 'toast toast-' + (type || 'info');
             t.textContent = msg;
             c.appendChild(t);
             setTimeout(function() { t.remove(); }, 4000);

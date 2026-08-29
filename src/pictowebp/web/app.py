@@ -79,6 +79,11 @@ def create_app() -> FastAPI:
     def index() -> FileResponse:
         return FileResponse(TEMPLATES_DIR / "index.html", media_type="text/html")
 
+    @app.get("/static/ui.css", include_in_schema=False)
+    def ui_css() -> FileResponse:
+        """Shared design system — the same stylesheet the browser edition bundles."""
+        return FileResponse(TEMPLATES_DIR / "ui.css", media_type="text/css")
+
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:
         return FileResponse(TEMPLATES_DIR / "favicon.ico")

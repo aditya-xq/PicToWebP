@@ -6,650 +6,213 @@
   <meta name="description" content="Bulk image to WebP converter that runs entirely in your browser — no uploads, no tracking.">
   <link rel="icon" href="data:,">
   <title>PicToWebP - Bulk Image to WebP Converter</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg: #060810;
-      --surface-800: #111620;
-      --surface-700: #1a2030;
-      --surface-600: #283040;
-      --surface-400: #9ca3af;
-      --surface-300: #d1d5db;
-      --surface-200: #e2e8f0;
-      --text: #f1f5f9;
-      --brand-300: #a5b4fc;
-      --brand-400: #818cf8;
-      --brand-500: #6366f1;
-      --brand-600: #4f46e5;
-      --success-400: #4ade80;
-      --success-500: #22c55e;
-      --danger-400: #f87171;
-      --danger-500: #ef4444;
-      --warn-400: #fbbf24;
-      --border: rgba(255, 255, 255, 0.08);
-      --card: rgba(10, 13, 22, 0.85);
-    }
-
-    html, body { height: 100%; overflow: hidden; }
-
-    body {
-      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-      background:
-        radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
-        radial-gradient(at 80% 80%, rgba(139, 92, 246, 0.03) 0px, transparent 50%),
-        var(--bg);
-      color: var(--surface-200);
-      display: flex;
-      flex-direction: column;
-    }
-
-    ::-webkit-scrollbar { width: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--surface-700); border-radius: 3px; }
-
-    .hidden { display: none !important; }
-
-    /* Nav */
-    .nav {
-      background: rgba(8, 10, 18, 0.92);
-      backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    .nav-inner {
-      max-width: 1300px;
-      margin: 0 auto;
-      padding: 0 20px;
-      height: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .nav-brand { display: flex; align-items: center; gap: 10px; }
-    .nav-logo {
-      width: 28px; height: 28px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, var(--brand-500), var(--brand-600));
-      display: flex; align-items: center; justify-content: center;
-      color: #fff; font-size: 14px; font-weight: 800;
-    }
-    .nav-title { font-weight: 600; color: #fff; font-size: 14px; letter-spacing: -0.01em; }
-    .nav-badge {
-      font-size: 10px; font-weight: 500;
-      color: var(--surface-300);
-      background: var(--surface-700);
-      padding: 2px 6px; border-radius: 9999px;
-    }
-    .nav-actions { display: flex; gap: 8px; }
-    .btn-ghost {
-      background: rgba(26, 32, 48, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      color: var(--surface-300);
-      font-size: 13px; font-weight: 500;
-      padding: 5px 12px; border-radius: 8px;
-      cursor: pointer; transition: all 0.15s;
-      display: inline-flex; align-items: center; gap: 6px;
-      font-family: inherit;
-    }
-    .btn-ghost:hover { background: rgba(30, 40, 60, 0.8); color: var(--text); }
-
-    /* Main */
-    .main {
-      flex: 1; min-height: 0;
-      max-width: 1300px; margin: 0 auto;
-      width: 100%; padding: 16px 20px;
-      display: flex; flex-direction: column;
-    }
-    .hero { text-align: center; margin-bottom: 16px; }
-    .hero h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
-    .hero h1 .grad {
-      background: linear-gradient(135deg, var(--brand-300), var(--brand-400), #c4b5fd);
-      -webkit-background-clip: text; background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .hero p { color: var(--surface-400); font-size: 14px; margin-top: 4px; }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      flex: 1; min-height: 0;
-    }
-
-    .card {
-      background: var(--card);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.07);
-      border-radius: 12px;
-      padding: 16px;
-      display: flex; flex-direction: column;
-      min-height: 0;
-    }
-
-    .divider { height: 1px; background: rgba(255, 255, 255, 0.05); }
-
-    .label {
-      font-size: 10px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.08em;
-      color: var(--surface-300);
-    }
-
-    /* Quality */
-    .quality-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .quality-value { font-size: 20px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
-    .quality-value small { font-size: 10px; color: var(--surface-400); font-weight: 400; }
-    .quality-slider {
-      -webkit-appearance: none; appearance: none;
-      width: 100%; height: 5px; border-radius: 3px;
-      background: linear-gradient(90deg, var(--brand-500) 0%, var(--surface-700) 80%);
-      outline: none; margin-bottom: 4px;
-    }
-    .quality-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 18px; height: 18px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--brand-400), var(--brand-500));
-      cursor: pointer; border: 2px solid var(--bg);
-      box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
-    }
-    .quality-slider::-moz-range-thumb {
-      width: 18px; height: 18px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--brand-400), var(--brand-500));
-      cursor: pointer; border: 2px solid var(--bg);
-    }
-    .quality-hints { display: flex; justify-content: space-between; font-size: 11px; color: var(--surface-400); margin-bottom: 10px; }
-    .presets { display: flex; gap: 6px; }
-    .preset-btn {
-      font-size: 11px; padding: 4px 10px; border-radius: 6px;
-      background: var(--surface-700); color: var(--surface-300);
-      border: none; cursor: pointer; transition: all 0.15s;
-      font-family: inherit;
-    }
-    .preset-btn:hover { color: #fff; background: var(--surface-600); }
-
-    /* Options */
-    .option-row { display: flex; align-items: center; justify-content: space-between; }
-    .option-title { font-size: 14px; font-weight: 500; color: #fff; }
-    .option-desc { font-size: 12px; color: var(--surface-400); }
-    .toggle-switch {
-      position: relative; width: 36px; height: 20px;
-      border-radius: 10px; background: var(--surface-700);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      cursor: pointer; transition: background 0.3s; flex-shrink: 0;
-    }
-    .toggle-switch.active { background: var(--brand-500); border-color: rgba(99, 102, 241, 0.5); }
-    .toggle-switch::after {
-      content: ''; position: absolute; top: 2px; left: 2px;
-      width: 14px; height: 14px; border-radius: 50%;
-      background: var(--surface-400);
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .toggle-switch.active::after { transform: translateX(16px); background: #fff; }
-
-    .resize-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-    .input-field {
-      background: rgba(10, 13, 22, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      color: var(--text); transition: all 0.2s;
-      padding: 6px 10px; border-radius: 8px; font-size: 14px;
-      font-family: inherit; width: 100%;
-    }
-    .input-field::placeholder { color: var(--surface-400); }
-    .input-field:focus { border-color: rgba(99, 102, 241, 0.6); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12); outline: none; }
-    .field-label { font-size: 11px; color: var(--surface-400); text-transform: uppercase; margin-bottom: 4px; display: block; }
-
-    .btn-primary {
-      background: linear-gradient(135deg, var(--brand-500), var(--brand-600));
-      color: #fff; border: none; border-radius: 12px;
-      padding: 10px; font-size: 14px; font-weight: 600; letter-spacing: 0.01em;
-      cursor: pointer; transition: all 0.2s; width: 100%;
-      font-family: inherit;
-    }
-    .btn-primary:hover:not(:disabled) {
-      background: linear-gradient(135deg, var(--brand-400), var(--brand-500));
-      transform: translateY(-1px);
-      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
-    }
-    .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
-
-    .btn-secondary {
-      background: var(--surface-700); border: 1px solid var(--surface-600);
-      color: var(--surface-300); border-radius: 12px;
-      padding: 10px; font-size: 14px; font-weight: 500;
-      cursor: pointer; transition: all 0.15s; flex: 1;
-      font-family: inherit;
-    }
-    .btn-secondary:hover { background: var(--surface-600); color: #fff; }
-    .btn-accent {
-      background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.2);
-      color: var(--brand-300); border-radius: 12px;
-      padding: 10px; font-size: 14px; font-weight: 500;
-      cursor: pointer; transition: all 0.15s; flex: 1;
-      font-family: inherit;
-    }
-    .btn-accent:hover { background: rgba(99, 102, 241, 0.2); }
-    .btn-danger {
-      background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2);
-      color: var(--danger-400); border-radius: 12px;
-      padding: 10px; font-size: 14px; font-weight: 500;
-      cursor: pointer; transition: all 0.15s; width: 100%;
-      font-family: inherit;
-    }
-    .btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.2); }
-    .btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    /* Mode tabs */
-    .mode-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 8px; background: rgba(17, 22, 32, 0.5); border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 16px; flex-shrink: 0; }
-    .mode-tab {
-      flex: 1; padding: 6px; border-radius: 6px;
-      background: transparent; border: 1px solid transparent;
-      color: var(--surface-400); font-size: 14px; font-weight: 500;
-      cursor: pointer; transition: all 0.15s; font-family: inherit;
-    }
-    .mode-tab.active { background: rgba(99, 102, 241, 0.15); color: var(--brand-300); border-color: rgba(99, 102, 241, 0.2); }
-
-    /* Drop zones */
-    .drop-zone {
-      flex: 1; min-height: 180px;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      border: 2px dashed var(--surface-600); border-radius: 12px;
-      cursor: pointer; transition: all 0.15s; text-align: center; padding: 16px;
-    }
-    .drop-zone:hover, .drop-zone.drag-over { border-color: rgba(129, 140, 248, 0.5); background: rgba(99, 102, 241, 0.05); }
-    .drop-zone .icon { font-size: 34px; margin-bottom: 10px; }
-    .drop-zone .title { color: var(--surface-300); font-size: 14px; font-weight: 500; margin-bottom: 4px; }
-    .drop-zone .sub { color: var(--surface-400); font-size: 11px; }
-
-    .source-badge {
-      margin-top: 12px; display: inline-flex; align-items: center; gap: 8px;
-      padding: 6px 12px; border-radius: 8px;
-      background: rgba(17, 22, 32, 0.8); border: 1px solid var(--border);
-      max-width: 100%;
-    }
-    .source-badge .path {
-      font-family: ui-monospace, 'Cascadia Mono', monospace;
-      font-size: 13px; color: var(--surface-200);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .source-badge .info { font-size: 11px; font-weight: 500; color: var(--success-400); }
-    .source-badge .info.invalid { color: var(--danger-400); }
-
-    /* Running */
-    .running-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    .running-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: #fff; }
-    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand-400); animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-    .progress-percent { font-size: 14px; color: var(--brand-300); font-variant-numeric: tabular-nums; }
-    .progress-track { width: 100%; height: 8px; border-radius: 9999px; background: var(--surface-700); overflow: hidden; margin-bottom: 20px; }
-    .progress-fill {
-      height: 100%; width: 0%; border-radius: 9999px;
-      background: linear-gradient(90deg, var(--brand-600), var(--brand-400));
-      transition: width 0.3s ease-out;
-      box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
-    }
-    .counters { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-    .counter { text-align: center; }
-    .counter .value { font-size: 24px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
-    .counter .label { font-size: 10px; color: var(--surface-400); text-transform: uppercase; margin-top: 2px; }
-
-    /* Complete */
-    .complete-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-    .complete-icon {
-      width: 40px; height: 40px; border-radius: 12px;
-      background: rgba(34, 197, 94, 0.1);
-      display: flex; align-items: center; justify-content: center;
-      color: var(--success-500); font-size: 18px; flex-shrink: 0;
-    }
-    .complete-header .title { font-size: 18px; font-weight: 600; color: #fff; }
-    .complete-header .time { font-size: 14px; color: var(--surface-400); }
-    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-    .stat-card {
-      background: rgba(8, 10, 18, 0.92);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 8px; padding: 14px;
-      transition: transform 0.3s;
-    }
-    .stat-card:hover { transform: translateY(-2px); }
-    .stat-card .label { margin-bottom: 4px; }
-    .stat-card .value { font-size: 20px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
-    .stat-card .sub { font-size: 14px; color: var(--success-400); font-weight: 500; }
-    .stat-card .sub.muted { color: var(--surface-300); }
-    .output-folder {
-      margin-bottom: 12px; padding: 10px; border-radius: 8px;
-      background: rgba(17, 22, 32, 0.5); border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    .output-folder .path {
-      font-family: ui-monospace, 'Cascadia Mono', monospace;
-      font-size: 13px; color: var(--surface-200); word-break: break-all;
-    }
-    .collisions {
-      margin-bottom: 12px; padding: 10px; border-radius: 8px;
-      background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2);
-      font-size: 13px; color: var(--warn-400);
-    }
-    .action-row { display: flex; gap: 8px; margin-top: auto; }
-
-    /* Error state */
-    .error-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-    .error-icon {
-      width: 56px; height: 56px; border-radius: 16px;
-      background: rgba(239, 68, 68, 0.1);
-      display: flex; align-items: center; justify-content: center;
-      color: var(--danger-500); font-size: 26px; margin-bottom: 16px;
-    }
-    .error-state .title { font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 4px; }
-    .error-state .message { font-size: 14px; color: var(--surface-300); margin-bottom: 16px; }
-
-    /* Single mode */
-    .spinner {
-      width: 40px; height: 40px;
-      border: 2px solid var(--brand-400); border-top-color: transparent;
-      border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .single-preview {
-      border-radius: 12px; overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      background: rgba(17, 22, 32, 0.5);
-      margin-bottom: 16px;
-      display: flex; align-items: center; justify-content: center;
-      max-height: 250px; flex: 1; min-height: 0;
-    }
-    .single-preview img { max-width: 100%; max-height: 250px; object-fit: contain; }
-
-    /* Modals */
-    .modal-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); }
-    .modal {
-      position: fixed; z-index: 51;
-      background: rgba(8, 10, 18, 0.92); backdrop-filter: blur(20px);
-      border: 1px solid var(--border); border-radius: 16px;
-    }
-    .modal-centered {
-      top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 100%; max-width: 384px; padding: 24px;
-    }
-    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-    .modal-header h2 { font-size: 16px; font-weight: 600; color: #fff; }
-    .modal-close {
-      background: rgba(26, 32, 48, 0.5); border: 1px solid rgba(255, 255, 255, 0.12);
-      color: var(--surface-300); border-radius: 8px;
-      width: 28px; height: 28px; cursor: pointer; font-size: 12px;
-      font-family: inherit;
-    }
-    .shortcut-row { display: flex; align-items: center; justify-content: space-between; font-size: 14px; margin-bottom: 10px; }
-    .shortcut-row span { color: var(--surface-200); }
-    kbd {
-      background: var(--surface-800); border: 1px solid rgba(255, 255, 255, 0.12);
-      color: var(--surface-300); border-radius: 8px;
-      padding: 4px 10px; font-family: ui-monospace, monospace; font-size: 13px;
-    }
-
-    /* History panel */
-    .history-panel {
-      position: fixed; top: 0; right: 0; height: 100%; width: 100%; max-width: 384px;
-      z-index: 51; background: rgba(8, 10, 18, 0.92); backdrop-filter: blur(20px);
-      border-left: 1px solid var(--border);
-      display: flex; flex-direction: column;
-    }
-    .history-list { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-    .history-card {
-      background: var(--card); border: 1px solid rgba(255, 255, 255, 0.07);
-      border-radius: 8px; padding: 12px;
-    }
-    .history-card .meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--surface-400); margin-bottom: 6px; }
-    .history-card .name {
-      font-family: ui-monospace, monospace; font-size: 13px; color: var(--surface-200);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 8px;
-    }
-    .history-card .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; }
-    .history-card .stats .v { font-size: 16px; font-weight: 700; color: #fff; }
-    .history-card .stats .v.green { color: var(--success-400); }
-    .history-card .stats .l { font-size: 8px; color: var(--surface-400); text-transform: uppercase; }
-    .empty-note { font-size: 14px; color: var(--surface-400); text-align: center; padding: 32px 0; }
-
-    /* Toasts */
-    #toast-container { position: fixed; top: 12px; right: 12px; z-index: 60; display: flex; flex-direction: column; gap: 6px; }
-    .toast {
-      border-radius: 8px; padding: 10px 16px;
-      font-size: 14px; font-weight: 500;
-      backdrop-filter: blur(12px);
-      animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1), fadeOut 0.3s 3.7s forwards;
-    }
-    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-    .toast-info { border: 1px solid rgba(99, 102, 241, 0.3); background: rgba(99, 102, 241, 0.1); color: var(--brand-300); }
-    .toast-success { border: 1px solid rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.1); color: var(--success-400); }
-    .toast-error { border: 1px solid rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); color: var(--danger-400); }
-    .toast-warn { border: 1px solid rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.1); color: var(--warn-400); }
-
-    .fade-in { animation: fadeIn 0.4s ease-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-
-    /* Privacy trust badges */
-    .privacy-strip { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-    .privacy-pill {
-      display: inline-flex; align-items: center; gap: 6px;
-      font-size: 11px; font-weight: 500; color: var(--success-400);
-      background: rgba(34, 197, 94, 0.06);
-      border: 1px solid rgba(34, 197, 94, 0.18);
-      padding: 4px 11px; border-radius: 9999px;
-      white-space: nowrap;
-    }
-    .privacy-pill svg { width: 12px; height: 12px; flex-shrink: 0; }
-
-    @media (max-width: 860px) {
-      .grid { grid-template-columns: 1fr; overflow-y: auto; }
-      html, body { overflow: auto; }
-    }
-  </style>
 </head>
 <body>
   <div id="toast-container"></div>
 
   <nav class="nav">
     <div class="nav-inner">
-      <div class="nav-brand">
-        <div class="nav-logo">P</div>
-        <span class="nav-title">PicToWebP</span>
-        <span class="nav-badge">Browser Edition</span>
+      <div class="brand">
+        <div class="brand-logo">P</div>
+        <span class="brand-name">PicToWebP</span>
+        <span class="badge">Browser Edition</span>
       </div>
       <div class="nav-actions">
-        <button id="shortcuts-btn" class="btn-ghost" title="Keyboard shortcuts">?</button>
-        <button id="history-btn" class="btn-ghost">History</button>
+        <button id="shortcuts-btn" class="btn btn-ghost" title="Keyboard shortcuts">?</button>
+        <button id="history-btn" class="btn btn-ghost">History</button>
       </div>
     </div>
   </nav>
 
   <div class="main">
     <div class="hero fade-in">
-      <h1><span class="grad">Pic</span>To<span class="grad">WebP</span></h1>
-      <p>Drop your images in. Get smaller files out. Nothing ever leaves your browser.</p>
+      <h1 class="hero-title"><span class="grad-text">Pic</span>To<span class="grad-text">WebP</span></h1>
+      <p class="hero-sub">Drop your images in. Get smaller files out. Nothing ever leaves your browser.</p>
     </div>
 
     <div class="privacy-strip fade-in" style="animation-delay: 0.04s;">
-      <span class="privacy-pill" title="Conversion runs entirely in this tab using your browser's built-in encoder">
+      <span class="pill" title="Conversion runs entirely in this tab using your browser's built-in encoder">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
         Runs 100% in your browser
       </span>
-      <span class="privacy-pill" title="Images are never uploaded — there is no server to upload to">
+      <span class="pill" title="Images are never uploaded — there is no server to upload to">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M8.5 16.5a5.5 5.5 0 01-.31-10.98 7 7 0 0113.24 2.09A4.5 4.5 0 0119.5 16.5H8.5z"/></svg>
         No uploads, ever
       </span>
-      <span class="privacy-pill" title="Zero analytics, cookies, or third-party requests — enforced by a strict Content-Security-Policy">
+      <span class="pill" title="Zero analytics, cookies, or third-party requests — enforced by a strict Content-Security-Policy">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
         No tracking, no analytics
       </span>
-      <span class="privacy-pill" title="Canvas decoding removes EXIF/GPS metadata from every converted file">
+      <span class="pill" title="Canvas decoding removes EXIF/GPS metadata from every converted file">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path stroke-linecap="round" d="M8 11V7a4 4 0 018 0M12 15v2"/></svg>
         EXIF &amp; GPS data stripped
       </span>
     </div>
 
-    <div class="grid">
+    <div class="shell">
       <!-- Config -->
-      <div class="card fade-in">
+      <div class="card fade-in card-col">
         <div>
-          <div class="quality-header">
+          <div class="quality-head">
             <span class="label">Quality</span>
             <span class="quality-value"><span id="quality-value">80</span><small> / 100</small></span>
           </div>
-          <input type="range" id="quality-slider" class="quality-slider" min="1" max="100" value="80">
-          <div class="quality-hints"><span>Smallest file</span><span>Best quality</span></div>
-          <div class="presets">
-            <button class="preset-btn" data-preset="60">Web (60)</button>
-            <button class="preset-btn" data-preset="80">Balanced (80)</button>
-            <button class="preset-btn" data-preset="95">High (95)</button>
-            <button class="preset-btn" data-preset="100">Max (100)</button>
+          <input type="range" id="quality-slider" class="slider" min="1" max="100" value="80">
+          <div class="slider-hints"><span>Smallest file</span><span>Best quality</span></div>
+          <div class="chips">
+            <button class="chip preset-btn" data-preset="60">Web (60)</button>
+            <button class="chip preset-btn" data-preset="80">Balanced (80)</button>
+            <button class="chip preset-btn" data-preset="95">High (95)</button>
+            <button class="chip preset-btn" data-preset="100">Max (100)</button>
           </div>
         </div>
 
-        <div class="divider" style="margin: 16px 0;"></div>
+        <div class="divider"></div>
 
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <div class="option-row">
+        <div class="stack">
+          <div class="row">
             <div>
               <div class="option-title">Resize</div>
               <div class="option-desc">Shrink images before converting — set a max width or height</div>
             </div>
-            <div class="toggle-switch" id="toggle-resize" role="switch" aria-checked="false" tabindex="0"></div>
+            <div class="toggle" id="toggle-resize" role="switch" aria-checked="false" tabindex="0"></div>
           </div>
-          <div id="resize-inputs" class="resize-inputs hidden">
+          <div id="resize-inputs" class="field-grid hidden">
             <div>
               <label class="field-label" for="resize-width">Max Width</label>
-              <input type="number" id="resize-width" class="input-field" placeholder="px" min="16" max="16384">
+              <input type="number" id="resize-width" class="field mono" placeholder="px" min="16" max="16384">
             </div>
             <div>
               <label class="field-label" for="resize-height">Max Height</label>
-              <input type="number" id="resize-height" class="input-field" placeholder="px" min="16" max="16384">
+              <input type="number" id="resize-height" class="field mono" placeholder="px" min="16" max="16384">
             </div>
           </div>
         </div>
 
-        <p style="font-size: 11px; color: var(--surface-400); margin-top: 16px;">
+        <p class="note">
           Note: browser conversion always strips EXIF/GPS metadata, and encoding
           uses the browser's built-in WebP encoder (no separate lossless mode).
         </p>
 
-        <div class="divider" style="margin: 16px 0;"></div>
+        <div class="divider"></div>
 
-        <button id="convert-btn" class="btn-primary" disabled style="margin-top: auto;">Convert to WebP</button>
+        <button id="convert-btn" class="btn btn-primary btn-block mt-auto" disabled>Convert to WebP</button>
       </div>
 
       <!-- Progress -->
-      <div class="card fade-in" style="animation-delay: 0.02s;">
-        <div class="mode-tabs">
-          <button class="mode-tab active" data-mode="folder" id="tab-folder">Folder</button>
-          <button class="mode-tab" data-mode="single" id="tab-single">Single Image</button>
+      <div class="card fade-in grow" style="animation-delay: 0.02s;">
+        <div class="tabs">
+          <button class="tab active mode-tab" data-mode="folder" id="tab-folder">Folder</button>
+          <button class="tab mode-tab" data-mode="single" id="tab-single">Single Image</button>
         </div>
 
         <!-- Folder mode -->
-        <div id="mode-folder" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
-          <div id="state-idle" style="flex: 1; display: flex; flex-direction: column;">
-            <div id="drop-zone" class="drop-zone">
-              <div class="icon">📁</div>
-              <div class="title">Click to select a folder</div>
-              <div class="sub">or drag a folder / images here — everything stays local</div>
+        <div id="mode-folder" class="grow">
+          <div id="state-idle" class="grow">
+            <div id="drop-zone" class="dropzone">
+              <div class="dz-icon">📁</div>
+              <div class="dz-title">Click to select a folder</div>
+              <div class="dz-sub">or drag a folder / images here — everything stays local</div>
             </div>
             <div id="source-badge" class="source-badge hidden">
               <span id="source-path" class="path"></span>
-              <span id="source-info" class="info"></span>
+              <span id="source-info" class="badge-info"></span>
             </div>
           </div>
 
-          <div id="state-running" class="hidden" style="flex: 1; display: flex; flex-direction: column;">
-            <div class="running-header">
+          <div id="state-running" class="hidden grow">
+            <div class="running-head">
               <div class="running-title"><div class="pulse-dot"></div>Converting to WebP...</div>
               <span id="progress-percent" class="progress-percent">0%</span>
             </div>
             <div class="progress-track"><div id="progress-bar" class="progress-fill"></div></div>
             <div class="counters">
-              <div class="counter"><div class="value" id="running-processed">0</div><div class="label">Processed</div></div>
-              <div class="counter"><div class="value" id="running-total">0</div><div class="label">Total</div></div>
-              <div class="counter"><div class="value" id="running-eta">--</div><div class="label">ETA</div></div>
+              <div class="counter"><div id="running-processed" class="value">0</div><div class="counter-label">Processed</div></div>
+              <div class="counter"><div id="running-total" class="value">0</div><div class="counter-label">Total</div></div>
+              <div class="counter"><div id="running-eta" class="value">--</div><div class="counter-label">ETA</div></div>
             </div>
-            <div id="running-elapsed" style="font-size: 12px; color: var(--surface-400); margin-bottom: 12px;"></div>
-            <button id="cancel-btn" class="btn-danger" style="margin-top: auto;">Cancel</button>
+            <div id="running-elapsed" class="running-elapsed" style="margin-bottom: 14px;"></div>
+            <button id="cancel-btn" class="btn btn-danger btn-block mt-auto">Cancel</button>
           </div>
 
-          <div id="state-complete" class="hidden" style="flex: 1; display: flex; flex-direction: column;">
-            <div class="complete-header">
+          <div id="state-complete" class="hidden grow">
+            <div class="complete-head">
               <div class="complete-icon">✓</div>
               <div>
-                <div class="title">WebP Conversion Complete</div>
-                <div class="time" id="complete-time"></div>
+                <div class="complete-title">WebP Conversion Complete</div>
+                <div id="complete-time" class="complete-time"></div>
               </div>
             </div>
-            <div class="stats-grid">
+            <div class="stat-grid">
               <div class="stat-card">
                 <div class="label">Space Saved</div>
-                <div class="value" id="stat-saved">0 B</div>
-                <div class="sub" id="stat-saved-pct">0%</div>
+                <div id="stat-saved" class="stat-value">0 B</div>
+                <div id="stat-saved-pct" class="stat-sub">0%</div>
               </div>
               <div class="stat-card">
                 <div class="label">Files Converted</div>
-                <div class="value" id="stat-converted">0 / 0</div>
-                <div class="sub muted" id="stat-failed">All successful</div>
+                <div id="stat-converted" class="stat-value">0 / 0</div>
+                <div id="stat-failed" class="stat-sub muted">All successful</div>
               </div>
               <div class="stat-card">
                 <div class="label">Original Size</div>
-                <div class="value" id="stat-original">0 B</div>
+                <div id="stat-original" class="stat-value">0 B</div>
               </div>
               <div class="stat-card">
                 <div class="label">WebP Size</div>
-                <div class="value" id="stat-new">0 B</div>
+                <div id="stat-new" class="stat-value">0 B</div>
               </div>
             </div>
             <div id="collisions-note" class="collisions hidden"></div>
             <div class="action-row">
-              <button id="save-folder-btn" class="btn-secondary">Save to Folder</button>
-              <button id="download-zip-btn" class="btn-secondary">Download ZIP</button>
+              <button id="save-folder-btn" class="btn btn-secondary">Save to Folder</button>
+              <button id="download-zip-btn" class="btn btn-secondary">Download ZIP</button>
             </div>
-            <div class="action-row" style="margin-top: 8px;">
-              <button id="share-btn" class="btn-accent">Share Stats</button>
-              <button id="convert-more-btn" class="btn-secondary">Convert More</button>
+            <div class="action-row" style="margin-top: 10px;">
+              <button id="share-btn" class="btn btn-accent">Share Stats</button>
+              <button id="convert-more-btn" class="btn btn-secondary">Convert More</button>
             </div>
           </div>
 
           <div id="state-error" class="hidden error-state">
             <div class="error-icon">⚠</div>
             <div class="title">Conversion Failed</div>
-            <div class="message" id="error-message"></div>
-            <button id="try-again-btn" class="btn-secondary" style="flex: none; padding: 10px 20px;">Try Again</button>
+            <div id="error-message" class="message"></div>
+            <button id="try-again-btn" class="btn btn-secondary" style="flex: none; padding: 11px 22px;">Try Again</button>
           </div>
         </div>
 
         <!-- Single mode -->
-        <div id="mode-single" class="hidden" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
-          <div id="single-upload" style="flex: 1; display: flex; flex-direction: column;">
-            <div id="single-drop-zone" class="drop-zone">
-              <div class="icon">🖼️</div>
-              <div class="title">Drop an image here</div>
-              <div class="sub">or click to browse</div>
+        <div id="mode-single" class="hidden grow">
+          <div id="single-upload" class="grow">
+            <div id="single-drop-zone" class="dropzone">
+              <div class="dz-icon">🖼️</div>
+              <div class="dz-title">Drop an image here</div>
+              <div class="dz-sub">or click to browse</div>
             </div>
             <input type="file" id="single-file-input" accept="image/*" class="hidden">
-            <p style="text-align: center; font-size: 11px; color: var(--surface-400); margin-top: 8px;">
+            <p class="upload-hint">
               PNG, JPEG, BMP, GIF, WebP — converts instantly. You can also paste with Ctrl+V.
             </p>
           </div>
 
-          <div id="single-converting" class="hidden" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+          <div id="single-converting" class="hidden grow" style="align-items: center; justify-content: center;">
             <div class="spinner"></div>
-            <p style="color: var(--surface-300); font-size: 14px; font-weight: 500;">Converting...</p>
+            <p class="spinner-label">Converting...</p>
           </div>
 
-          <div id="single-result" class="hidden" style="flex: 1; display: flex; flex-direction: column;">
-            <div class="complete-header">
+          <div id="single-result" class="hidden grow">
+            <div class="complete-head">
               <div class="complete-icon">✓</div>
               <div>
-                <div class="title">Converted to WebP</div>
-                <div class="time" id="single-result-info"></div>
+                <div class="complete-title">Converted to WebP</div>
+                <div id="single-result-info" class="complete-time"></div>
               </div>
             </div>
-            <div class="single-preview"><img id="single-preview-img" alt="Preview"></div>
+            <div class="preview-box"><img id="single-preview-img" alt="Preview"></div>
             <div class="action-row">
-              <a id="single-download-btn" class="btn-primary" href="#" download style="text-decoration: none; text-align: center;">Download WebP</a>
-              <button id="convert-another-btn" class="btn-secondary">Convert Another</button>
+              <a id="single-download-btn" class="btn btn-primary" href="#" download>Download WebP</a>
+              <button id="convert-another-btn" class="btn btn-secondary">Convert Another</button>
             </div>
           </div>
         </div>
@@ -660,15 +223,15 @@
   <!-- History panel -->
   <div id="history-overlay" class="modal-overlay hidden"></div>
   <div id="history-panel" class="history-panel hidden">
-    <div class="modal-header" style="padding: 12px 20px; border-bottom: 1px solid var(--border);">
-      <h2>Conversion History</h2>
+    <div class="history-head">
+      <h2 class="modal-title">Conversion History</h2>
       <button id="history-close-btn" class="modal-close">✕</button>
     </div>
     <div id="history-list" class="history-list">
       <p class="empty-note">No conversions yet</p>
     </div>
-    <div id="history-actions" class="hidden" style="padding: 12px 16px; border-top: 1px solid var(--border);">
-      <button id="history-clear-btn" class="btn-danger" style="border-radius: 8px; padding: 8px;">Clear History</button>
+    <div id="history-actions" class="history-foot hidden">
+      <button id="history-clear-btn" class="btn btn-danger btn-block">Clear History</button>
     </div>
   </div>
 
@@ -676,7 +239,7 @@
   <div id="shortcuts-overlay" class="modal-overlay hidden"></div>
   <div id="shortcuts-modal" class="modal modal-centered hidden">
     <div class="modal-header">
-      <h2>Keyboard Shortcuts</h2>
+      <h2 class="modal-title">Keyboard Shortcuts</h2>
       <button id="shortcuts-close-btn" class="modal-close">✕</button>
     </div>
     <div class="shortcut-row"><span>Start conversion</span><kbd>Enter</kbd></div>

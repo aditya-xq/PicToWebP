@@ -36,6 +36,13 @@ def test_favicon_is_served(client: TestClient):
     assert response.status_code == 200
 
 
+def test_shared_stylesheet_is_served(client: TestClient):
+    response = client.get("/static/ui.css")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/css")
+    assert ".card" in response.text
+
+
 def test_convert_validates_payload(client: TestClient):
     response = client.post("/convert", json={})
     assert response.status_code == 422
