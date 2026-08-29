@@ -21,9 +21,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -33,6 +33,10 @@ jobs:
         working-directory: web-ts
         run: npm ci
 
+      - name: Install Playwright browser
+        working-directory: web-ts
+        run: npx playwright install --with-deps chromium
+
       - name: Test
         working-directory: web-ts
         run: npm test
@@ -41,13 +45,19 @@ jobs:
         working-directory: web-ts
         run: npm run build
 
+      - name: E2E smoke tests
+        working-directory: web-ts
+        env:
+          CI: 'true'
+        run: npm run test:e2e
+
       - name: Verify build output
         working-directory: web-ts
         run: |
           test -f dist/index.html
           grep -q 'Content-Security-Policy' dist/index.html
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: web-ts/dist
 
@@ -59,4 +69,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

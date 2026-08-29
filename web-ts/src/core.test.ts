@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_CANVAS_AREA,
+  MAX_CANVAS_SIDE,
+  clampToCanvasLimits,
   computeResize,
   estimateEtaSeconds,
   findCollisions,
@@ -102,5 +105,35 @@ describe('estimateEtaSeconds', () => {
     expect(estimateEtaSeconds(10, 0)).toBeNull();
     expect(estimateEtaSeconds(10, 1)).toBeNull();
     expect(estimateEtaSeconds(0, 0.5)).toBeNull();
+  });
+});
+
+describe('clampToCanvasLimits', () => {
+  it('passes normal sizes through untouched', () => {
+    expect(clampToCanvasLimits(1920, 1080)).toEqual({ width: 1920, height: 1080 });
+    expect(clampToCanvasLimits(MAX_CANVAS_SIDE, MAX_CANVAS_SIDE)).toEqual({
+      width: MAX_CANVAS_SIDE,
+      height: MAX_CANVAS_SIDE,
+    });
+  });
+
+  it('clamps oversized sides while preserving aspect ratio', () => {
+    const r = clampToCanvasLimits(32768, 16384);
+    expect(r.width).toBe(MAX_CANVAS_SIDE);
+    expect(r.height).toBe(MAX_CANVAS_SIDE / 2);
+    expect(r.height).toBeLessThanOrEqual(MAX_CANVAS_SIDE);
+  });
+
+  it('clamps oversized total area (huge square-ish images)', () => {
+    const r = clampToCanvasLimits(20000, 20000); // 400MP > 268MP cap
+    expect(r.width).toBeLessThanOrEqual(MAX_CANVAS_SIDE);
+    expect(r.height).toBeLessThanOrEqual(MAX_CANVAS_SIDE);
+    expect(r.width * r.height).toBeLessThanOrEqual(MAX_CANVAS_AREA);
+  });
+
+  it('never returns zero or negative dimensions', () => {
+    const r = clampToCanvasLimits(MAX_CANVAS_SIDE + 1, 1);
+    expect(r.width).toBeGreaterThanOrEqual(1);
+    expect(r.height).toBeGreaterThanOrEqual(1);
   });
 });

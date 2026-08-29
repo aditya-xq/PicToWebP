@@ -72,6 +72,8 @@ def create_app() -> FastAPI:
     # A non-reentrant guard so only one conversion runs at a time.
     conversion_lock = Lock()
     conversion_history: list[dict] = []
+    # Output folder of the most recent successful job (for ZIP download).
+    last_output: dict = {"folder": ""}
     app.state.progress = progress
     app.state.conversion_lock = conversion_lock
 
@@ -83,6 +85,16 @@ def create_app() -> FastAPI:
     def ui_css() -> FileResponse:
         """Shared design system — the same stylesheet the browser edition bundles."""
         return FileResponse(TEMPLATES_DIR / "ui.css", media_type="text/css")
+
+    @app.get("/static/ui-core.js", include_in_schema=False)
+    def ui_core_js() -> FileResponse:
+        """Shared UI helpers for the local web UI."""
+        return FileResponse(TEMPLATES_DIR / "ui-core.js", media_type="text/javascript")
+
+    @app.get("/static/app.js", include_in_schema=False)
+    def app_js() -> FileResponse:
+        """Web UI application logic (kept out of the template for a strict CSP)."""
+        return FileResponse(TEMPLATES_DIR / "app.js", media_type="text/javascript")
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:
@@ -137,6 +149,7 @@ def create_app() -> FastAPI:
                 conversion_history.append(history_entry)
                 if len(conversion_history) > MAX_HISTORY:
                     conversion_history.pop(0)
+                last_output["folder"] = snap.get("output_folder", "")
             except Exception:
                 logger.exception("Conversion of %s failed", source_folder)
                 if progress.status not in TERMINAL_STATUSES:
@@ -160,6 +173,51 @@ def create_app() -> FastAPI:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No conversion is currently running",
+        )
+
+    @app.get("/api/download-zip", include_in_schema=False)
+    def download_zip() -> StreamingResponse:
+        """Stream the most recent conversion output folder as a ZIP archive."""
+        import tempfile
+        import zipfile
+
+        folder = Path(last_output["folder"]) if last_output["folder"] else None
+        if not folder or not folder.is_dir():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No completed conversion output available",
+            )
+
+        files = sorted(p for p in folder.rglob("*") if p.is_file())
+        if not files:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Output folder is empty",
+            )
+
+        # Spool to a temp file so large batches don't inflate memory. The
+        # handle deliberately outlives this function — the streaming response
+        # closes it in its finally block.
+        tmp = tempfile.TemporaryFile()  # noqa: SIM115
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path in files:
+                zf.write(path, path.relative_to(folder))
+
+        tmp.seek(0)
+
+        def chunks():
+            try:
+                while chunk := tmp.read(1024 * 256):
+                    yield chunk
+            finally:
+                tmp.close()
+
+        return StreamingResponse(
+            chunks(),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{folder.name}.zip"',
+            },
         )
 
     @app.get("/progress")
@@ -335,36 +393,38 @@ def create_app() -> FastAPI:
                 detail="Could not read the uploaded image",
             ) from None
 
-        # Prepare image
-        from pictowebp.utils import _prepare_image
+        def encode() -> bytes:
+            """CPU-bound Pillow work — runs in a worker thread so the event
+            loop (and any SSE progress stream) stays responsive."""
+            from pictowebp.utils import _prepare_image
 
-        prepared = _prepare_image(
-            img,
-            resize_width=resize_width,
-            resize_height=resize_height,
-        )
+            prepared = _prepare_image(
+                img,
+                resize_width=resize_width,
+                resize_height=resize_height,
+            )
+            buf = io.BytesIO()
+            save_kwargs: dict = {
+                "format": "WEBP",
+                "quality": quality,
+                "lossless": lossless,
+            }
+            if not strip_metadata:
+                if exif := img.info.get("exif"):
+                    save_kwargs["exif"] = exif
+                if icc := img.info.get("icc_profile"):
+                    save_kwargs["icc_profile"] = icc
+            prepared.save(buf, **save_kwargs)
+            return buf.getvalue()
 
-        # Save to in-memory buffer
-        buf = io.BytesIO()
-        save_kwargs: dict = {
-            "format": "WEBP",
-            "quality": quality,
-            "lossless": lossless,
-        }
-        if not strip_metadata:
-            if exif := img.info.get("exif"):
-                save_kwargs["exif"] = exif
-            if icc := img.info.get("icc_profile"):
-                save_kwargs["icc_profile"] = icc
-        prepared.save(buf, **save_kwargs)
-        buf.seek(0)
+        data = await asyncio.to_thread(encode)
 
         # Build download filename
         stem = Path(file.filename).stem if file.filename else "image"
         download_name = f"{stem}.webp"
 
         return Response(
-            content=buf.read(),
+            content=data,
             media_type="image/webp",
             headers={
                 "Content-Disposition": f'attachment; filename="{download_name}"',

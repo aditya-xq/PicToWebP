@@ -28,10 +28,11 @@ cd src_rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings &&
 
 # Browser edition
 cd web-ts && npm test && npm run build   # build runs tsc (typecheck)
+cd web-ts && npm run test:e2e            # Playwright smoke tests (chromium)
 ```
 
-All suites are expected green before committing (currently 80 pytest, 33 cargo
-test, 16 vitest).
+All suites are expected green before committing (currently 84 pytest, 33 cargo
+test, 20 vitest, 2 Playwright e2e).
 
 ## Non-negotiable privacy guarantees
 
@@ -62,6 +63,17 @@ Features shared across editions — keep them consistent when changing one:
   `main.ts`). Restyle both UIs there only — never one independently. The
   Python UI must load no external assets (Tailwind CDN and web fonts were
   removed).
+- The Python UI enforces a CSP meta tag and loads all scripts externally
+  (`/static/app.js`, `/static/ui-core.js`) — no inline event handlers; bind
+  with `addEventListener` and keep it that way.
+- Both UIs must stay behaviorally consistent: full-window drag-and-drop
+  overlay, keyboard-operable drop zones, `aria-live` toasts, quality slider
+  `aria-valuetext`, and a light/dark theme driven purely by CSS tokens
+  (`prefers-color-scheme`) in `ui.css`.
+- TS conversions run in an OffscreenCanvas worker pool
+  (`web-ts/src/worker.ts`, pooled in `converter.ts`); the main-thread path is
+  a fallback — keep both working. Canvas-limit clamping lives in `core.ts`
+  because the worker imports it.
 
 ## Conventions
 

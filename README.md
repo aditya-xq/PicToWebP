@@ -29,8 +29,11 @@ No install? No problem — use it right now:
 
 - **Bulk convert** — pick a folder and every image inside (including subfolders) is converted, with the directory structure preserved.
 - **Single-image convert** — drop one image, get its WebP instantly.
-- **Uses every CPU core** — Python and Rust both convert many images at once.
+- **Drag anywhere** — drop files or folders on any part of the window; a full-screen overlay catches them.
+- **Automatic light & dark theme** — follows your OS preference, no toggle needed.
+- **Uses every CPU core** — Python and Rust convert many images at once; the browser edition converts off the main thread so the UI never stutters.
 - **Live progress bar** with elapsed time, ETA, and per-image updates.
+- **One-click ZIP download** of the converted results (browser edition and web UI).
 - **Rich savings report** at the end of every run (bytes saved, % reduction, time).
 - **Detailed failure report** — anything that couldn't be converted is listed on screen and saved to `conversion-errors.txt`.
 - **Optional resizing** — set a maximum width and/or height; images are never enlarged, only shrunk, and aspect ratio is preserved.

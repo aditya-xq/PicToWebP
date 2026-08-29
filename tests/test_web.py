@@ -43,6 +43,29 @@ def test_shared_stylesheet_is_served(client: TestClient):
     assert ".card" in response.text
 
 
+def test_static_assets_served(client: TestClient):
+    app_js = client.get("/static/app.js")
+    assert app_js.status_code == 200
+    assert app_js.headers["content-type"].startswith("text/javascript")
+    assert "startConversion" in app_js.text
+
+    ui_core = client.get("/static/ui-core.js")
+    assert ui_core.status_code == 200
+    assert ui_core.headers["content-type"].startswith("text/javascript")
+    assert "formatBytes" in ui_core.text
+
+
+def test_index_links_static_assets_and_sets_csp(client: TestClient):
+    response = client.get("/")
+    assert "/static/ui.css" in response.text
+    assert "/static/app.js" in response.text
+    assert "Content-Security-Policy" in response.text
+    # No external assets — the UI must work fully offline.
+    body = response.text.replace("http://127.0.0.1", "").replace("http://localhost", "")
+    assert "http://" not in body
+    assert "https://" not in body
+
+
 def test_convert_validates_payload(client: TestClient):
     response = client.post("/convert", json={})
     assert response.status_code == 422
@@ -127,3 +150,37 @@ def test_progress_stream_emits_terminal_snapshot(client: TestClient, populated_s
     assert final_event is not None
     assert final_event["status"] == "completed"
     assert final_event["converted_files"] == 1
+
+
+def test_download_zip_requires_completed_conversion(client: TestClient):
+    response = client.get("/api/download-zip")
+    assert response.status_code == 404
+
+
+def test_download_zip_returns_output_archive(client: TestClient, populated_source: Path):
+    import io
+    import zipfile
+
+    client.post("/convert", json={"source_folder": str(populated_source), "threads": 2})
+    response = client.get("/api/download-zip")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/zip")
+    assert "attachment" in response.headers["content-disposition"]
+
+    with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+        names = zf.namelist()
+    assert len(names) == 1
+    assert names[0].endswith(".webp")
+
+
+def test_convert_single_runs_off_event_loop(client: TestClient, image_factory, source_dir: Path):
+    """Large single conversions must not block the event loop (SSE stays live)."""
+    image_factory("solo.png")
+    png = source_dir / "solo.png"
+    response = client.post(
+        "/api/convert-single",
+        files={"file": ("solo.png", png.read_bytes(), "image/png")},
+        data={"quality": "80"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/webp")

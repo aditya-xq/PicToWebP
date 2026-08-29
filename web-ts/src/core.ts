@@ -91,6 +91,32 @@ export function computeResize(
   return { width: newWidth, height: newHeight };
 }
 
+/**
+ * Canvas limits: browsers silently fail (or return blank/empty output) beyond
+ * these, so oversized inputs are downscaled instead of producing corrupt files.
+ * Side cap matches Chromium; area cap matches Chromium's 268MP limit, which is
+ * the most generous of the major engines.
+ */
+export const MAX_CANVAS_SIDE = 16384;
+export const MAX_CANVAS_AREA = 268_435_456;
+
+/** Clamp dimensions to what the canvas implementation can actually encode. */
+export function clampToCanvasLimits(width: number, height: number): { width: number; height: number } {
+  let newWidth = width;
+  let newHeight = height;
+  if (newWidth > MAX_CANVAS_SIDE || newHeight > MAX_CANVAS_SIDE) {
+    const scale = Math.min(MAX_CANVAS_SIDE / newWidth, MAX_CANVAS_SIDE / newHeight);
+    newWidth = Math.max(Math.floor(newWidth * scale), 1);
+    newHeight = Math.max(Math.floor(newHeight * scale), 1);
+  }
+  if (newWidth * newHeight > MAX_CANVAS_AREA) {
+    const scale = Math.sqrt(MAX_CANVAS_AREA / (newWidth * newHeight));
+    newWidth = Math.max(Math.floor(newWidth * scale), 1);
+    newHeight = Math.max(Math.floor(newHeight * scale), 1);
+  }
+  return { width: newWidth, height: newHeight };
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

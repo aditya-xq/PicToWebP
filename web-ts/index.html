@@ -8,7 +8,15 @@
   <title>PicToWebP - Bulk Image to WebP Converter</title>
 </head>
 <body>
-  <div id="toast-container"></div>
+  <div id="toast-container" role="status" aria-live="polite"></div>
+
+  <div id="drag-overlay" class="drag-overlay hidden">
+    <div class="drag-overlay-box">
+      <div class="dz-icon">🖼️</div>
+      <div class="drag-overlay-title">Drop to convert</div>
+      <div class="dz-sub">Images and folders — nothing leaves your device</div>
+    </div>
+  </div>
 
   <nav class="nav">
     <div class="nav-inner">
@@ -57,7 +65,7 @@
             <span class="label">Quality</span>
             <span class="quality-value"><span id="quality-value">80</span><small> / 100</small></span>
           </div>
-          <input type="range" id="quality-slider" class="slider" min="1" max="100" value="80">
+          <input type="range" id="quality-slider" class="slider" min="1" max="100" value="80" aria-label="Quality">
           <div class="slider-hints"><span>Smallest file</span><span>Best quality</span></div>
           <div class="chips">
             <button class="chip preset-btn" data-preset="60">Web (60)</button>
@@ -91,7 +99,9 @@
 
         <p class="note">
           Note: browser conversion always strips EXIF/GPS metadata, and encoding
-          uses the browser's built-in WebP encoder (no separate lossless mode).
+          uses the browser's built-in WebP encoder — there is no separate
+          lossless mode, but quality 100 gives the best it can do. Python and
+          Rust CLIs offer true lossless encoding.
         </p>
 
         <div class="divider"></div>
@@ -109,7 +119,7 @@
         <!-- Folder mode -->
         <div id="mode-folder" class="grow">
           <div id="state-idle" class="grow">
-            <div id="drop-zone" class="dropzone">
+            <div id="drop-zone" class="dropzone" role="button" tabindex="0" aria-label="Select a folder to convert">
               <div class="dz-icon">📁</div>
               <div class="dz-title">Click to select a folder</div>
               <div class="dz-sub">or drag a folder / images here — everything stays local</div>
@@ -185,7 +195,7 @@
         <!-- Single mode -->
         <div id="mode-single" class="hidden grow">
           <div id="single-upload" class="grow">
-            <div id="single-drop-zone" class="dropzone">
+            <div id="single-drop-zone" class="dropzone" role="button" tabindex="0" aria-label="Select an image to convert">
               <div class="dz-icon">🖼️</div>
               <div class="dz-title">Drop an image here</div>
               <div class="dz-sub">or click to browse</div>

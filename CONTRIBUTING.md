@@ -33,8 +33,10 @@ from a pull request.
 └── web-ts/                   # Browser-only edition (Vite + TypeScript)
     └── src/
         ├── main.ts           # UI state, interactions, history, share-stats
-        ├── converter.ts      # Canvas → WebP encoding, folder enumeration
+        ├── converter.ts      # worker pool, Canvas→WebP fallback, folder enumeration
+        ├── worker.ts         # OffscreenCanvas conversion worker
         └── core.ts           # pure logic: collisions, resize math, formatting
+    └── e2e/                  # Playwright smoke tests (chromium)
 ```
 
 ## Development Setup
@@ -82,13 +84,18 @@ cargo test
 cd web-ts
 npm run build
 npm test
+
+# Browser edition E2E (builds must exist; chromium via `npx playwright install chromium`)
+cd web-ts
+npm run test:e2e
 ```
 
 All test suites are expected to be green before submitting changes:
 
-- `python -m pytest` — **80 tests** covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, and end-to-end flows.
+- `python -m pytest` — **84 tests** covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, static UI assets, and end-to-end flows.
 - `cargo test` — **33 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), resize behavior, EXIF embedding, atomic file writes, error report persistence, and CLI argument validation.
-- `npm test` (in `web-ts/`) — **16 tests** covering collision detection, resize math (never upscales), output-name handling, and formatting helpers.
+- `npm test` (in `web-ts/`) — **20 tests** covering collision detection, canvas-limit clamping, resize math (never upscales), output-name handling, and formatting helpers.
+- `npm run test:e2e` (in `web-ts/`) — **2 Playwright smoke tests** driving the built site in real Chromium (UI load + single-image conversion with download).
 
 Dependencies are declared in `pyproject.toml` (locked via `uv.lock`), `src_rust/Cargo.toml` (locked via `Cargo.lock`), and `web-ts/package.json` (locked via `package-lock.json`).
 
@@ -179,6 +186,10 @@ API. Only one conversion runs at a time; concurrent requests get `429 Too Many R
 | `/api/history` | DELETE | Clear conversion history |
 | `/api/open-folder` | POST | Open a folder in the OS file explorer |
 | `/api/convert-single` | POST | Convert one uploaded image and stream the result back |
+| `/api/download-zip` | GET | Stream the last conversion's output folder as a ZIP |
+| `/static/ui.css` | GET | Shared design system (bundled by the browser edition too) |
+| `/static/app.js` | GET | Web UI application logic |
+| `/static/ui-core.js` | GET | Shared UI helpers (formatting, toasts) |
 
 Example:
 

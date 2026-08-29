@@ -3,12 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
     <title>PicToWebP - Bulk Image to WebP Converter</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="stylesheet" href="/static/ui.css">
 </head>
 <body>
-    <div id="toast-container"></div>
+    <div id="toast-container" role="status" aria-live="polite"></div>
+
+    <div id="drag-overlay" class="drag-overlay hidden">
+        <div class="drag-overlay-box">
+            <div class="dz-icon">🖼️</div>
+            <div class="drag-overlay-title">Drop to convert</div>
+            <div class="dz-sub">Dropped images are converted one at a time — use a folder for bulk</div>
+        </div>
+    </div>
 
     <!-- Nav -->
     <nav class="nav">
@@ -23,8 +32,8 @@
                 <span class="badge">Local Server</span>
             </div>
             <div class="nav-actions">
-                <button onclick="showShortcuts()" class="btn btn-ghost" title="Keyboard shortcuts">?</button>
-                <button onclick="showHistoryPanel()" class="btn btn-ghost">
+                <button id="shortcuts-btn" class="btn btn-ghost" title="Keyboard shortcuts">?</button>
+                <button id="history-btn" class="btn btn-ghost">
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     History
                 </button>
@@ -64,15 +73,15 @@
                 <!-- Quality -->
                 <div>
                     <div class="quality-head">
-                        <label class="label">Quality</label>
+                        <label class="label" for="quality">Quality</label>
                         <span class="quality-value"><span id="quality-value">80</span><small> / 100</small></span>
                     </div>
-                    <input type="range" id="quality" class="slider" min="1" max="100" value="80">
+                    <input type="range" id="quality" class="slider" min="1" max="100" value="80" aria-label="Quality">
                     <div class="slider-hints"><span>Smallest file</span><span>Best quality</span></div>
                     <div class="chips">
-                        <button onclick="setQuality(60)" class="chip">Web (60)</button>
-                        <button onclick="setQuality(80)" class="chip">Balanced (80)</button>
-                        <button onclick="setQuality(95)" class="chip">High (95)</button>
+                        <button class="chip" data-preset="60">Web (60)</button>
+                        <button class="chip" data-preset="80">Balanced (80)</button>
+                        <button class="chip" data-preset="95">High (95)</button>
                     </div>
                 </div>
 
@@ -85,14 +94,14 @@
                             <div class="option-title">Lossless</div>
                             <div class="option-desc">Keep every pixel — no quality loss, larger files</div>
                         </div>
-                        <div id="toggle-lossless" class="toggle" onclick="toggleSwitch(this)"></div>
+                        <div id="toggle-lossless" class="toggle" role="switch" aria-checked="false" tabindex="0"></div>
                     </div>
                     <div class="row">
                         <div>
                             <div class="option-title">Strip metadata</div>
                             <div class="option-desc">Remove camera info and GPS tags for smaller files</div>
                         </div>
-                        <div id="toggle-metadata" class="toggle active" onclick="toggleSwitch(this)"></div>
+                        <div id="toggle-metadata" class="toggle active" role="switch" aria-checked="true" tabindex="0"></div>
                     </div>
                     <div>
                         <div class="row" style="margin-bottom:6px">
@@ -100,7 +109,7 @@
                                 <div class="option-title">Resize</div>
                                 <div class="option-desc">Shrink images before converting — set a max width or height</div>
                             </div>
-                            <div id="toggle-resize" class="toggle" onclick="toggleResize()"></div>
+                            <div id="toggle-resize" class="toggle" role="switch" aria-checked="false" tabindex="0"></div>
                         </div>
                         <div id="resize-inputs" class="field-grid hidden">
                             <div>
@@ -118,7 +127,7 @@
                 <div class="divider"></div>
 
                 <!-- Convert -->
-                <button id="convert-btn" onclick="startConversion()" disabled
+                <button id="convert-btn" disabled
                     class="btn btn-primary btn-block mt-auto">
                     <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     <span id="convert-btn-text">Convert to WebP</span>
@@ -129,11 +138,11 @@
             <div class="card fade-in grow" style="animation-delay:.02s">
                 <!-- Mode Tabs -->
                 <div class="tabs">
-                    <button onclick="setMode('folder')" id="tab-folder" class="tab active">
+                    <button id="tab-folder" class="tab active">
                         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                         Folder
                     </button>
-                    <button onclick="setMode('single')" id="tab-single" class="tab">
+                    <button id="tab-single" class="tab">
                         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                         Single Image
                     </button>
@@ -143,7 +152,7 @@
                 <div id="mode-folder" class="grow">
                     <!-- Idle -->
                     <div id="progress-idle" class="grow">
-                        <div onclick="openBrowser()" class="dropzone">
+                        <div id="pick-folder-btn" class="dropzone" role="button" tabindex="0" aria-label="Select a folder to convert">
                             <svg class="dz-icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                             </svg>
@@ -172,7 +181,7 @@
                             <div class="counter"><div id="running-total" class="value">0</div><div class="counter-label">Total</div></div>
                             <div class="counter"><div id="running-eta" class="value">--</div><div class="counter-label">ETA</div></div>
                         </div>
-                        <button id="cancel-btn" onclick="cancelConversion()" class="btn btn-danger btn-block mt-auto">
+                        <button id="cancel-btn" class="btn btn-danger btn-block mt-auto">
                             Cancel
                         </button>
                     </div>
@@ -211,17 +220,21 @@
                             <div class="path" id="stat-output-path"></div>
                         </div>
                         <div class="action-row">
-                            <button onclick="openOutputFolder()" id="open-folder-btn" class="btn btn-secondary hidden">
+                            <button id="open-folder-btn" class="btn btn-secondary hidden">
                                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                                 Open Folder
                             </button>
-                            <button onclick="shareStats()" id="share-btn" class="btn btn-accent hidden">
+                            <button id="download-zip-btn" class="btn btn-secondary hidden">
+                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                Download ZIP
+                            </button>
+                            <button id="share-btn" class="btn btn-accent hidden">
                                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
                                 Share Stats
                             </button>
                         </div>
                         <div class="action-row" style="margin-top:10px">
-                            <button onclick="resetUI()" class="btn btn-secondary btn-block">
+                            <button id="convert-more-btn" class="btn btn-secondary btn-block">
                                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                 Convert More
                             </button>
@@ -233,7 +246,7 @@
                         <div class="error-icon">⚠</div>
                         <div class="title">Conversion Failed</div>
                         <div id="error-message" class="message"></div>
-                        <button onclick="resetUI()" class="btn btn-secondary" style="flex:none;padding:11px 22px">Try Again</button>
+                        <button id="try-again-btn" class="btn btn-secondary" style="flex:none;padding:11px 22px">Try Again</button>
                     </div>
                 </div>
 
@@ -241,7 +254,7 @@
                 <div id="mode-single" class="hidden grow">
                     <!-- Upload State -->
                     <div id="single-upload" class="grow">
-                        <div id="drop-zone" class="dropzone">
+                        <div id="single-drop-zone" class="dropzone" role="button" tabindex="0" aria-label="Select an image to convert">
                             <svg class="dz-icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             <p class="dz-title">Drop an image here</p>
                             <p class="dz-sub">or click to browse</p>
@@ -273,7 +286,7 @@
                                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                 Download WebP
                             </a>
-                            <button onclick="convertAnotherSingle()" class="btn btn-secondary">
+                            <button id="convert-another-btn" class="btn btn-secondary">
                                 Convert Another
                             </button>
                         </div>
@@ -285,11 +298,11 @@
 
     <!-- Browse modal -->
     <div id="browse-modal" class="modal-overlay hidden">
-        <div class="absolute-inset" onclick="closeBrowser()"></div>
+        <div class="absolute-inset"></div>
         <div class="modal browse-modal-body" style="top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100% - 32px);max-width:520px">
             <div class="history-head">
                 <h3 class="modal-title">Select Folder</h3>
-                <button onclick="closeBrowser()" class="modal-close">✕</button>
+                <button id="browse-close-btn" class="modal-close">✕</button>
             </div>
             <div class="browse-path">
                 <button id="browse-up-btn" class="btn btn-ghost" title="Go up">
@@ -301,7 +314,7 @@
             <div class="browse-foot">
                 <span id="browse-selected" class="browse-selected"></span>
                 <div class="row-gap">
-                    <button onclick="closeBrowser()" class="btn btn-ghost">Cancel</button>
+                    <button id="browse-cancel-btn" class="btn btn-ghost">Cancel</button>
                     <button id="browse-select-btn" class="btn btn-primary" disabled>Select</button>
                 </div>
             </div>
@@ -310,17 +323,17 @@
 
     <!-- History panel -->
     <div id="history-panel" class="modal-overlay hidden">
-        <div class="absolute-inset" onclick="hideHistoryPanel()"></div>
+        <div class="absolute-inset"></div>
         <div class="history-panel">
             <div class="history-head">
                 <h2 class="modal-title">Conversion History</h2>
-                <button onclick="hideHistoryPanel()" class="modal-close">✕</button>
+                <button id="history-close-btn" class="modal-close">✕</button>
             </div>
             <div id="history-list" class="history-list">
                 <p class="empty-note">No conversions yet</p>
             </div>
             <div id="history-actions" class="history-foot hidden">
-                <button onclick="clearHistory()" class="btn btn-danger btn-block">
+                <button id="history-clear-btn" class="btn btn-danger btn-block">
                     Clear History
                 </button>
             </div>
@@ -329,11 +342,11 @@
 
     <!-- Shortcuts modal -->
     <div id="shortcuts-modal" class="modal-overlay hidden">
-        <div class="absolute-inset" onclick="hideShortcuts()"></div>
+        <div class="absolute-inset"></div>
         <div class="modal modal-centered">
             <div class="modal-header">
                 <h2 class="modal-title">Keyboard Shortcuts</h2>
-                <button onclick="hideShortcuts()" class="modal-close">✕</button>
+                <button id="shortcuts-close-btn" class="modal-close">✕</button>
             </div>
             <div class="stack" style="gap:12px">
                 <div class="shortcut-row"><span>Start conversion</span><kbd>Enter</kbd></div>
@@ -344,672 +357,6 @@
         </div>
     </div>
 
-    <script>
-    (function() {
-        var sourceFolder = '';
-        var folderValid = false;
-        var qualitySlider = document.getElementById('quality');
-        var qualityValue = document.getElementById('quality-value');
-        var convertBtn = document.getElementById('convert-btn');
-        var isConverting = false;
-        var evtSource = null;
-        var lastStats = null;
-        var previewUrl = null;
-
-        function setSourceFolder(path) {
-            sourceFolder = path;
-            var badge = document.getElementById('source-badge');
-            var badgeText = document.getElementById('source-badge-text');
-            var info = document.getElementById('folder-info-badge');
-            if (info) info.remove();
-            if (path) {
-                badge.classList.remove('hidden');
-                badgeText.textContent = path;
-                badgeText.title = path;
-                validateFolder(path);
-            } else {
-                badge.classList.add('hidden');
-                folderValid = false;
-                updateConvertButton();
-            }
-        }
-
-        function validateFolder(path) {
-            fetch('/api/validate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ source_folder: path })
-            }).then(function(r) { return r.json(); }).then(function(d) {
-                var badge = document.getElementById('source-badge');
-                var info = document.createElement('span');
-                info.id = 'folder-info-badge';
-                if (d.valid) {
-                    info.className = 'badge-info';
-                    info.textContent = d.total_files + ' images \u00b7 ' + d.total_size_display;
-                    folderValid = true;
-                } else {
-                    info.className = 'badge-info invalid';
-                    info.textContent = d.error || 'No convertible images found';
-                    folderValid = false;
-                }
-                var existing = document.getElementById('folder-info-badge');
-                if (existing) existing.remove();
-                badge.appendChild(info);
-                updateConvertButton();
-            }).catch(function() {
-                folderValid = false;
-                updateConvertButton();
-            });
-        }
-
-        function updateConvertButton() {
-            convertBtn.disabled = !sourceFolder || isConverting || !folderValid;
-        }
-
-        // Quality slider
-        qualitySlider.addEventListener('input', function() {
-            qualityValue.textContent = this.value;
-            updateSliderBg();
-        });
-        function updateSliderBg() {
-            var pct = ((qualitySlider.value - 1) / 99) * 100;
-            qualitySlider.style.background = 'linear-gradient(90deg, #6366f1 0%, #6366f1 ' + pct + '%, rgba(148,163,184,0.16) ' + pct + '%, rgba(148,163,184,0.16) 100%)';
-        }
-        updateSliderBg();
-        window.setQuality = function(v) { qualitySlider.value = v; qualityValue.textContent = v; updateSliderBg(); };
-
-        // Mode switching
-        var currentMode = 'folder';
-        window.setMode = function(mode) {
-            currentMode = mode;
-            var tabFolder = document.getElementById('tab-folder');
-            var tabSingle = document.getElementById('tab-single');
-            var modeFolder = document.getElementById('mode-folder');
-            var modeSingle = document.getElementById('mode-single');
-            if (mode === 'folder') {
-                tabFolder.className = 'tab active';
-                tabSingle.className = 'tab';
-                modeFolder.classList.remove('hidden');
-                modeSingle.classList.add('hidden');
-            } else {
-                tabSingle.className = 'tab active';
-                tabFolder.className = 'tab';
-                modeSingle.classList.remove('hidden');
-                modeFolder.classList.add('hidden');
-            }
-        };
-
-        // Single image upload
-        var dropZone = document.getElementById('drop-zone');
-        var singleFileInput = document.getElementById('single-file-input');
-
-        dropZone.addEventListener('click', function() { singleFileInput.click(); });
-        dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
-        dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('drag-over'); });
-        dropZone.addEventListener('drop', function(e) {
-            e.preventDefault();
-            dropZone.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) handleSingleFile(e.dataTransfer.files[0]);
-        });
-        singleFileInput.addEventListener('change', function() {
-            if (singleFileInput.files.length > 0) handleSingleFile(singleFileInput.files[0]);
-        });
-
-        function handleSingleFile(file) {
-            if (!file.type.startsWith('image/')) { showToast('Please select an image file', 'error'); return; }
-            document.getElementById('single-upload').classList.add('hidden');
-            document.getElementById('single-converting').classList.remove('hidden');
-
-            var quality = Number(qualitySlider.value);
-            var lossless = document.getElementById('toggle-lossless').classList.contains('active');
-            var stripMeta = document.getElementById('toggle-metadata').classList.contains('active');
-            var resizeW = document.getElementById('toggle-resize').classList.contains('active') ? (document.getElementById('resize_width').value || null) : null;
-            var resizeH = document.getElementById('toggle-resize').classList.contains('active') ? (document.getElementById('resize_height').value || null) : null;
-
-            var formData = new FormData();
-            formData.append('file', file);
-            formData.append('quality', quality);
-            formData.append('lossless', lossless);
-            formData.append('strip_metadata', stripMeta);
-            if (resizeW) formData.append('resize_width', resizeW);
-            if (resizeH) formData.append('resize_height', resizeH);
-
-            fetch('/api/convert-single', { method: 'POST', body: formData })
-                .then(function(resp) {
-                    if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.detail || 'Conversion failed'); });
-                    var blob = resp.blob();
-                    var disposition = resp.headers.get('Content-Disposition') || '';
-                    var match = disposition.match(/filename="?(.+?)"?$/);
-                    var filename = match ? match[1] : file.name.replace(/\.[^.]+$/, '') + '.webp';
-                    return blob.then(function(b) { return { blob: b, filename: filename }; });
-                })
-                .then(function(result) {
-                    if (previewUrl) URL.revokeObjectURL(previewUrl);
-                    previewUrl = URL.createObjectURL(result.blob);
-                    document.getElementById('single-preview-img').src = previewUrl;
-                    document.getElementById('single-download-btn').href = previewUrl;
-                    document.getElementById('single-download-btn').download = result.filename;
-                    var origSize = (file.size / 1024).toFixed(1);
-                    var newSize = (result.blob.size / 1024).toFixed(1);
-                    var saved = Math.max(0, ((1 - result.blob.size / file.size) * 100)).toFixed(0);
-                    document.getElementById('single-result-info').textContent = origSize + ' KB \u2192 ' + newSize + ' KB (' + saved + '% smaller)';
-                    document.getElementById('single-converting').classList.add('hidden');
-                    document.getElementById('single-result').classList.remove('hidden');
-                })
-                .catch(function(err) {
-                    document.getElementById('single-converting').classList.add('hidden');
-                    document.getElementById('single-upload').classList.remove('hidden');
-                    showToast(err.message || 'Conversion failed', 'error');
-                });
-        }
-
-        window.convertAnotherSingle = function() {
-            document.getElementById('single-result').classList.add('hidden');
-            document.getElementById('single-upload').classList.remove('hidden');
-            if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
-            document.getElementById('single-preview-img').src = '';
-            singleFileInput.value = '';
-        };
-
-        // Conversion
-        window.startConversion = function() {
-            if (isConverting || !sourceFolder) return;
-            isConverting = true;
-            updateConvertButton();
-            showState('running');
-            showToast('Converting to WebP...', 'info');
-
-            var payload = {
-                source_folder: sourceFolder,
-                quality: Number(qualitySlider.value),
-                lossless: document.getElementById('toggle-lossless').classList.contains('active'),
-                strip_metadata: document.getElementById('toggle-metadata').classList.contains('active'),
-                resize_width: document.getElementById('toggle-resize').classList.contains('active') ? (document.getElementById('resize_width').value ? Number(document.getElementById('resize_width').value) : null) : null,
-                resize_height: document.getElementById('toggle-resize').classList.contains('active') ? (document.getElementById('resize_height').value ? Number(document.getElementById('resize_height').value) : null) : null
-            };
-
-            fetch('/convert', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            }).then(function(r) {
-                if (!r.ok) return r.json().then(function(b) { throw new Error(b.detail || 'Failed'); });
-                startSSE();
-            }).catch(function(e) {
-                isConverting = false;
-                updateConvertButton();
-                showState('error');
-                document.getElementById('error-message').textContent = e.message;
-                showToast(e.message, 'error');
-            });
-        };
-
-        function startSSE() {
-            if (evtSource) evtSource.close();
-            evtSource = new EventSource('/progress');
-            evtSource.onmessage = function(e) {
-                var d = JSON.parse(e.data);
-                if (d.status === 'running') {
-                    var frac = Number(d.fraction_complete);
-                    var elapsed = Number(d.elapsed_seconds);
-                    var p = frac * 100;
-                    document.getElementById('progress-bar').style.width = p + '%';
-                    document.getElementById('progress-percent').textContent = p.toFixed(0) + '%';
-                    document.getElementById('running-processed').textContent = d.processed_files;
-                    document.getElementById('running-total').textContent = d.total_files;
-                    document.getElementById('running-elapsed').textContent = elapsed.toFixed(1) + 's elapsed';
-                    document.getElementById('running-eta').textContent =
-                        (frac > 0 && frac < 1) ? (elapsed * (1 - frac) / frac).toFixed(0) + 's' : '--';
-                } else if (d.status === 'completed') {
-                    isConverting = false;
-                    convertBtn.disabled = true;
-                    showState('complete');
-                    document.getElementById('complete-time').textContent = 'Finished in ' + Number(d.elapsed_seconds).toFixed(1) + 's';
-                    document.getElementById('stat-saved').textContent = fmtBytes(d.bytes_saved);
-                    document.getElementById('stat-saved-percent').textContent = Number(d.reduction_percent).toFixed(1) + '% reduction';
-                    document.getElementById('stat-converted').textContent = d.converted_files + ' / ' + d.total_files;
-                    document.getElementById('stat-failed').textContent = d.failed_files > 0 ? d.failed_files + ' failed' : 'All successful';
-                    document.getElementById('stat-original').textContent = fmtBytes(d.original_bytes);
-                    document.getElementById('stat-new').textContent = fmtBytes(d.converted_bytes);
-                    lastStats = {
-                        files: d.converted_files + ' / ' + d.total_files,
-                        saved: fmtBytes(d.bytes_saved),
-                        percent: Number(d.reduction_percent).toFixed(1) + '%',
-                        original: fmtBytes(d.original_bytes),
-                        webp: fmtBytes(d.converted_bytes),
-                        elapsed: Number(d.elapsed_seconds).toFixed(1) + 's',
-                        quality: qualitySlider.value
-                    };
-                    if (d.output_folder) {
-                        document.getElementById('stat-output-folder').classList.remove('hidden');
-                        document.getElementById('stat-output-path').textContent = d.output_folder;
-                        document.getElementById('open-folder-btn').classList.remove('hidden');
-                    } else {
-                        document.getElementById('stat-output-folder').classList.add('hidden');
-                        document.getElementById('open-folder-btn').classList.add('hidden');
-                    }
-                    document.getElementById('share-btn').classList.remove('hidden');
-                    showToast('WebP conversion complete!', 'success');
-                    if (evtSource) { evtSource.close(); evtSource = null; }
-                } else if (d.status === 'failed' || d.status === 'cancelled') {
-                    isConverting = false;
-                    convertBtn.disabled = true;
-                    showState('error');
-                    document.getElementById('error-message').textContent = d.error || ('Conversion ' + d.status);
-                    showToast('Conversion ' + d.status, 'error');
-                    if (evtSource) { evtSource.close(); evtSource = null; }
-                }
-            };
-        }
-
-        window.cancelConversion = function() {
-            var btn = document.getElementById('cancel-btn');
-            if (btn) { btn.disabled = true; btn.textContent = 'Cancelling...'; }
-            fetch('/convert/cancel', { method: 'POST' }).then(function() {
-                showToast('Cancelling...', 'warn');
-            }).catch(function() {
-                showToast('Failed to cancel', 'error');
-            });
-        };
-
-        function showState(s) {
-            ['idle', 'running', 'complete', 'error'].forEach(function(id) {
-                document.getElementById('progress-' + id).classList.add('hidden');
-            });
-            document.getElementById('progress-' + s).classList.remove('hidden');
-            if (s === 'running') {
-                var btn = document.getElementById('cancel-btn');
-                if (btn) { btn.disabled = false; btn.textContent = 'Cancel'; }
-            }
-        }
-
-        window.resetUI = function() {
-            showState('idle');
-            document.getElementById('progress-bar').style.width = '0%';
-            document.getElementById('open-folder-btn').classList.add('hidden');
-            document.getElementById('share-btn').classList.add('hidden');
-            document.getElementById('stat-output-folder').classList.add('hidden');
-            setSourceFolder('');
-            isConverting = false;
-            updateConvertButton();
-            // Close any lingering SSE connection from previous conversion
-            if (evtSource) { evtSource.close(); evtSource = null; }
-            // Reset single image mode
-            setMode('folder');
-            document.getElementById('single-upload').classList.remove('hidden');
-            document.getElementById('single-converting').classList.add('hidden');
-            document.getElementById('single-result').classList.add('hidden');
-            singleFileInput.value = '';
-        };
-
-        window.toggleSwitch = function(el) { el.classList.toggle('active'); };
-        window.toggleResize = function() {
-            document.getElementById('toggle-resize').classList.toggle('active');
-            document.getElementById('resize-inputs').classList.toggle('hidden');
-        };
-
-        window.openOutputFolder = function() {
-            var path = document.getElementById('stat-output-path').textContent;
-            if (!path) {
-                showToast('No output folder path', 'error');
-                return;
-            }
-            fetch('/api/open-folder', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ source_folder: path })
-            }).then(function(r) {
-                if (!r.ok) return r.json().then(function(b) { throw new Error(b.detail || 'Failed'); });
-                showToast('Folder opened', 'success');
-            }).catch(function(e) {
-                showToast('Could not open folder: ' + (e.message || 'Unknown error'), 'error');
-            });
-        };
-
-        window.shareStats = function() {
-            if (!lastStats) return;
-            var canvas = document.createElement('canvas');
-            canvas.width = 600;
-            canvas.height = 320;
-            var ctx = canvas.getContext('2d');
-
-            function roundedRect(x, y, w, h, r) {
-                ctx.beginPath();
-                ctx.moveTo(x + r, y);
-                ctx.lineTo(x + w - r, y);
-                ctx.arcTo(x + w, y, x + w, y + r, r);
-                ctx.lineTo(x + w, y + h - r);
-                ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-                ctx.lineTo(x + r, y + h);
-                ctx.arcTo(x, y + h, x, y + h - r, r);
-                ctx.lineTo(x, y + r);
-                ctx.arcTo(x, y, x + r, y, r);
-                ctx.closePath();
-            }
-
-            // Background
-            ctx.fillStyle = '#0a0d14';
-            roundedRect(0, 0, 600, 320, 16);
-            ctx.fill();
-
-            // Border
-            ctx.strokeStyle = 'rgba(99,102,241,0.3)';
-            ctx.lineWidth = 2;
-            roundedRect(1, 1, 598, 318, 16);
-            ctx.stroke();
-
-            // Gradient accent bar
-            var grad = ctx.createLinearGradient(0, 0, 600, 0);
-            grad.addColorStop(0, 'rgba(99,102,241,0.8)');
-            grad.addColorStop(1, 'rgba(139,92,246,0.6)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 600, 4);
-
-            // Title
-            ctx.fillStyle = '#f1f5f9';
-            ctx.font = 'bold 22px system-ui, sans-serif';
-            ctx.fillText('PicToWebP', 30, 50);
-
-            // Subtitle
-            ctx.fillStyle = '#6b7280';
-            ctx.font = '12px system-ui, sans-serif';
-            ctx.fillText('Bulk image to WebP conversion', 30, 72);
-
-            // Divider
-            ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(30, 90);
-            ctx.lineTo(570, 90);
-            ctx.stroke();
-
-            // Stats - big numbers
-            var stats = [
-                { label: 'SAVED', value: lastStats.saved, sub: lastStats.percent + ' smaller', color: '#4ade80' },
-                { label: 'FILES', value: lastStats.files, sub: 'converted', color: '#818cf8' },
-                { label: 'TIME', value: lastStats.elapsed, sub: '@ Q' + lastStats.quality, color: '#e2e8f0' },
-            ];
-
-            stats.forEach(function(s, i) {
-                var x = 30 + i * 190;
-                ctx.fillStyle = '#9ca3af';
-                ctx.font = '600 10px system-ui, sans-serif';
-                ctx.fillText(s.label, x, 125);
-                ctx.fillStyle = s.color;
-                ctx.font = 'bold 28px system-ui, sans-serif';
-                ctx.fillText(s.value, x, 162);
-                ctx.fillStyle = '#6b7280';
-                ctx.font = '11px system-ui, sans-serif';
-                ctx.fillText(s.sub, x, 182);
-            });
-
-            // Divider
-            ctx.beginPath();
-            ctx.moveTo(30, 205);
-            ctx.lineTo(570, 205);
-            ctx.stroke();
-
-            // Size comparison bar
-            var origBytes = parseFloat(lastStats.original);
-            var webpBytes = parseFloat(lastStats.webp);
-            var maxBar = 540;
-            var origW = maxBar;
-            var webpW = origBytes > 0 ? Math.max((webpBytes / origBytes) * maxBar, 20) : maxBar;
-
-            ctx.fillStyle = '#1a2030';
-            roundedRect(30, 225, origW, 16, 4);
-            ctx.fill();
-            ctx.fillStyle = '#9ca3af';
-            ctx.font = '10px system-ui, sans-serif';
-            ctx.fillText('Original: ' + lastStats.original, 30, 260);
-
-            var barGrad = ctx.createLinearGradient(30, 0, 30 + webpW, 0);
-            barGrad.addColorStop(0, '#6366f1');
-            barGrad.addColorStop(1, '#818cf8');
-            ctx.fillStyle = barGrad;
-            roundedRect(30, 275, webpW, 16, 4);
-            ctx.fill();
-            ctx.fillStyle = '#9ca3af';
-            ctx.fillText('WebP: ' + lastStats.webp, 30, 310);
-
-            canvas.toBlob(function(blob) {
-                if (!blob) {
-                    showToast('Failed to generate image', 'error');
-                    return;
-                }
-                var url = URL.createObjectURL(blob);
-                if (navigator.share && navigator.canShare) {
-                    var file = new File([blob], 'pictowebp-stats.png', { type: 'image/png' });
-                    var shareData = { title: 'PicToWebP Stats', text: 'I just converted images to WebP and saved ' + lastStats.percent + '!', files: [file] };
-                    if (navigator.canShare(shareData)) {
-                        navigator.share(shareData).catch(function() {});
-                        URL.revokeObjectURL(url);
-                        return;
-                    }
-                }
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = 'pictowebp-stats.png';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                showToast('Stats image downloaded', 'success');
-            }, 'image/png');
-        };
-
-        // Browse modal
-        var browseSelected = '';
-        var browseCurrentPath = '';
-
-        window.openBrowser = function() {
-            document.getElementById('browse-modal').classList.remove('hidden');
-            browseSelected = '';
-            document.getElementById('browse-selected').textContent = '';
-            document.getElementById('browse-select-btn').disabled = true;
-            document.getElementById('browse-up-btn').onclick = null;
-            browseTo(sourceFolder || '');
-        };
-
-        window.closeBrowser = function() {
-            document.getElementById('browse-modal').classList.add('hidden');
-        };
-
-        function browseTo(path) {
-            fetch('/api/browse', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ source_folder: path })
-            }).then(function(r) { return r.json(); }).then(function(d) {
-                document.getElementById('browse-current').textContent = d.current;
-                browseCurrentPath = d.current;
-
-                var list = document.getElementById('browse-list');
-                list.innerHTML = '';
-
-                // Drives
-                if (d.drives && d.drives.length) {
-                    d.drives.forEach(function(drive) {
-                        var btn = document.createElement('button');
-                        btn.className = 'browse-item';
-                        btn.dataset.path = drive;
-                        btn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>' +
-                            '<span></span>';
-                        btn.querySelector('span').textContent = drive;
-                        btn.onclick = function() { browseTo(drive); };
-                        list.appendChild(btn);
-                    });
-                }
-
-                // Parent
-                if (d.parent) {
-                    var btn = document.createElement('button');
-                    btn.className = 'browse-item';
-                    btn.dataset.path = d.parent;
-                    btn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>' +
-                        '<span>..</span>';
-                    btn.onclick = function() { browseTo(d.parent); };
-                    list.appendChild(btn);
-                }
-
-                // Entries
-                d.entries.forEach(function(entry) {
-                    var btn = document.createElement('button');
-                    btn.className = 'browse-item';
-                    btn.dataset.path = entry.path;
-                    btn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>' +
-                        '<span></span>';
-                    btn.querySelector('span').textContent = entry.name;
-                    btn.onclick = function() { browseTo(entry.path); };
-                    list.appendChild(btn);
-                });
-
-                if (!d.drives && !d.parent && !d.entries.length) {
-                    var p = document.createElement('p');
-                    p.className = 'empty-note';
-                    p.textContent = 'No subdirectories';
-                    list.appendChild(p);
-                }
-
-                // Auto-select current directory if it's not "This PC"
-                if (d.current !== 'This PC') {
-                    browseSelected = d.current;
-                    document.getElementById('browse-selected').textContent = d.current;
-                    document.getElementById('browse-select-btn').disabled = false;
-                } else {
-                    browseSelected = '';
-                    document.getElementById('browse-selected').textContent = 'Navigate to a folder';
-                    document.getElementById('browse-select-btn').disabled = true;
-                }
-
-                // Up button
-                document.getElementById('browse-up-btn').onclick = function() {
-                    if (browseCurrentPath === 'This PC') return;
-                    var parent = browseCurrentPath.replace(/[/\\][^/\\]+$/, '');
-                    if (parent !== browseCurrentPath) browseTo(parent);
-                    else browseTo('');
-                };
-            }).catch(function() {
-                var list = document.getElementById('browse-list');
-                list.innerHTML = '';
-                var p = document.createElement('p');
-                p.className = 'empty-note';
-                p.textContent = 'Failed to load';
-                list.appendChild(p);
-            });
-        }
-
-        document.getElementById('browse-select-btn').onclick = function() {
-            if (browseSelected) setSourceFolder(browseSelected);
-            closeBrowser();
-        };
-
-        // History
-        window.showHistoryPanel = function() {
-            document.getElementById('history-panel').classList.remove('hidden');
-            fetch('/api/history').then(function(r) { return r.json(); }).then(function(d) {
-                renderHistory(d.history);
-            }).catch(function() {
-                var list = document.getElementById('history-list');
-                list.innerHTML = '';
-                var p = document.createElement('p');
-                p.className = 'empty-note';
-                p.textContent = 'Failed to load';
-                list.appendChild(p);
-            });
-        };
-
-        window.hideHistoryPanel = function() {
-            document.getElementById('history-panel').classList.add('hidden');
-        };
-
-        function renderHistory(items) {
-            var list = document.getElementById('history-list');
-            var act = document.getElementById('history-actions');
-            if (!items || !items.length) {
-                list.innerHTML = '';
-                var p = document.createElement('p');
-                p.className = 'empty-note';
-                p.textContent = 'No conversions yet';
-                list.appendChild(p);
-                act.classList.add('hidden');
-                return;
-            }
-            act.classList.remove('hidden');
-            list.innerHTML = '';
-            items.slice().reverse().forEach(function(h) {
-                var folder = h.source_folder.split(/[/\\]/).pop() || h.source_folder;
-                var card = document.createElement('div');
-                card.className = 'history-card';
-                card.innerHTML = '<div class="meta"><span class="meta-id"></span><span class="meta-date"></span></div>' +
-                    '<div class="name"></div>' +
-                    '<div class="stats">' +
-                    '<div><div class="v"></div><div class="l">Files</div></div>' +
-                    '<div><div class="v green"></div><div class="l">Saved</div></div>' +
-                    '<div><div class="v"></div><div class="l">Time</div></div>' +
-                    '</div>';
-                // Fill dynamic values via textContent (never innerHTML) so odd
-                // folder names cannot inject markup.
-                var textSpans = card.querySelectorAll('span, .name, .v');
-                textSpans[0].textContent = h.id;
-                textSpans[1].textContent = new Date(h.timestamp).toLocaleDateString();
-                var folderDiv = textSpans[2];
-                folderDiv.textContent = folder;
-                folderDiv.title = h.source_folder;
-                textSpans[3].textContent = h.converted_files + '/' + h.total_files;
-                textSpans[4].textContent = Number(h.reduction_percent).toFixed(1) + '%';
-                textSpans[5].textContent = Number(h.elapsed_seconds).toFixed(1) + 's';
-                list.appendChild(card);
-            });
-        }
-
-        window.clearHistory = function() {
-            fetch('/api/history', { method: 'DELETE' }).then(function() {
-                var list = document.getElementById('history-list');
-                list.innerHTML = '';
-                var p = document.createElement('p');
-                p.className = 'empty-note';
-                p.textContent = 'No conversions yet';
-                list.appendChild(p);
-                document.getElementById('history-actions').classList.add('hidden');
-                showToast('Cleared', 'info');
-            });
-        };
-
-        window.showShortcuts = function() { document.getElementById('shortcuts-modal').classList.remove('hidden'); };
-        window.hideShortcuts = function() { document.getElementById('shortcuts-modal').classList.add('hidden'); };
-
-        function showToast(msg, type) {
-            var c = document.getElementById('toast-container');
-            var t = document.createElement('div');
-            t.className = 'toast toast-' + (type || 'info');
-            t.textContent = msg;
-            c.appendChild(t);
-            setTimeout(function() { t.remove(); }, 4000);
-        }
-
-        function fmtBytes(b) {
-            if (b < 1024) return b + ' B';
-            if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
-            if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
-            return (b / 1073741824).toFixed(2) + ' GB';
-        }
-
-        document.addEventListener('keydown', function(e) {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-            if (e.key === 'Enter' && !isConverting && sourceFolder) {
-                e.preventDefault();
-                window.startConversion();
-            } else if (e.key === 'Escape') {
-                if (!document.getElementById('browse-modal').classList.contains('hidden')) window.closeBrowser();
-                else if (!document.getElementById('shortcuts-modal').classList.contains('hidden')) window.hideShortcuts();
-                else if (!document.getElementById('history-panel').classList.contains('hidden')) window.hideHistoryPanel();
-                else if (isConverting) window.cancelConversion();
-            } else if (e.key === 'h' || e.key === 'H') window.showHistoryPanel();
-            else if (e.key === 'b' || e.key === 'B') window.openBrowser();
-            else if (e.key === '?') window.showShortcuts();
-        });
-    })();
-    </script>
+    <script type="module" src="/static/app.js"></script>
 </body>
 </html>

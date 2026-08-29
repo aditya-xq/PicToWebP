@@ -14,6 +14,7 @@ import {
   DirEntry,
   convertFile,
   enumerateFiles,
+  resolveEntryFile,
   supportsWebpEncoding,
   writeFileToDir,
 } from './converter';
@@ -82,6 +83,7 @@ function initUI(): void {
   const slider = $('quality-slider') as HTMLInputElement;
   slider.addEventListener('input', () => {
     $('quality-value').textContent = slider.value;
+    slider.setAttribute('aria-valuetext', `${slider.value} out of 100`);
     updateSliderFill();
   });
   updateSliderFill();
@@ -121,6 +123,7 @@ function initUI(): void {
   $('drop-zone').addEventListener('dragover', (e) => onDragOver(e, $('drop-zone')));
   $('drop-zone').addEventListener('dragleave', () => $('drop-zone').classList.remove('drag-over'));
   $('drop-zone').addEventListener('drop', (e) => onDrop(e));
+  wireZoneKeyboard($('drop-zone'), () => void pickFolder());
 
   // Single mode
   $('single-drop-zone').addEventListener('click', () => ($('single-file-input') as HTMLInputElement).click());
@@ -128,14 +131,23 @@ function initUI(): void {
   $('single-drop-zone').addEventListener('dragleave', () => $('single-drop-zone').classList.remove('drag-over'));
   $('single-drop-zone').addEventListener('drop', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     $('single-drop-zone').classList.remove('drag-over');
+    hideDragOverlay();
     const file = e.dataTransfer?.files[0];
     if (file) handleSingleFile(file);
   });
+  wireZoneKeyboard(
+    $('single-drop-zone'),
+    () => ($('single-file-input') as HTMLInputElement).click(),
+  );
   $('single-file-input').addEventListener('change', (e) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (file) handleSingleFile(file);
   });
+
+  // Full-window drag overlay — drop anywhere to convert.
+  wireDragOverlay();
 
   // Actions
   $('convert-btn').addEventListener('click', () => void startConversion());
@@ -187,10 +199,74 @@ function initUI(): void {
   });
 }
 
+/** Make a drop zone keyboard-operable (Enter/Space activate it). */
+function wireZoneKeyboard(zone: HTMLElement, activate: () => void): void {
+  zone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      activate();
+    }
+  });
+}
+
+/* --------------------- Full-window drag overlay ---------------------- */
+
+let dragDepth = 0;
+
+function showDragOverlay(): void {
+  $('drag-overlay').classList.remove('hidden');
+}
+
+function hideDragOverlay(): void {
+  dragDepth = 0;
+  $('drag-overlay').classList.add('hidden');
+}
+
+function wireDragOverlay(): void {
+  const hasFiles = (e: DragEvent): boolean =>
+    Array.from(e.dataTransfer?.types ?? []).includes('Files');
+
+  window.addEventListener('dragenter', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    showDragOverlay();
+  });
+  window.addEventListener('dragover', (e) => {
+    if (hasFiles(e)) e.preventDefault();
+  });
+  window.addEventListener('dragleave', (e) => {
+    if (!hasFiles(e)) return;
+    if (--dragDepth <= 0) hideDragOverlay();
+  });
+  window.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    hideDragOverlay();
+    if (isConverting) return;
+
+    // Drop anywhere: route by mode. Zone-level handlers stopPropagation, so
+    // this only fires for drops outside the drop zones.
+    const files = e.dataTransfer?.files;
+    if (!files?.length) return;
+    if (mode === 'single') {
+      setMode('single');
+      handleSingleFile(files[0]);
+      return;
+    }
+    void (async () => {
+      const entries = await entriesFromDrop(e.dataTransfer!.items, files);
+      const images = entries.filter((entry) => entry.file);
+      if (images.length > 0) setSelection(images, 'Dropped files');
+    })();
+  });
+}
+
 function updateSliderFill(): void {
   const slider = $('quality-slider') as HTMLInputElement;
   const pct = ((Number(slider.value) - 1) / 99) * 100;
-  slider.style.background = `linear-gradient(90deg, var(--brand-500) 0%, var(--brand-500) ${pct}%, rgba(148, 163, 184, 0.16) ${pct}%, rgba(148, 163, 184, 0.16) 100%)`;
+  slider.style.background = `linear-gradient(90deg, var(--brand-500) 0%, var(--brand-500) ${pct}%, var(--track-tail) ${pct}%, var(--track-tail) 100%)`;
 }
 
 function setMode(next: Mode): void {
@@ -207,18 +283,67 @@ function onDragOver(e: DragEvent, zone: HTMLElement): void {
   zone.classList.add('drag-over');
 }
 
+/**
+ * Walk dropped items via their filesystem entries so dropped *folders* work
+ * too, matching the CLIs' recursive behavior. `webkitGetAsEntry()` must be
+ * read synchronously — item lists are invalidated once the handler yields.
+ */
+async function entriesFromDrop(items: DataTransferItemList, files: FileList): Promise<DirEntry[]> {
+  const dropEntries = Array.from(items)
+    .map((item) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null))
+    .filter((entry): entry is FileSystemEntry => entry !== null);
+
+  if (dropEntries.length === 0) {
+    return Array.from(files)
+      .filter((f) => isSupportedImage(f.name))
+      .map((file) => ({ file, relativePath: file.name }));
+  }
+
+  const collected: DirEntry[] = [];
+  for (const entry of dropEntries) {
+    collected.push(...(await walkEntry(entry, '')));
+  }
+  return collected;
+}
+
+async function walkEntry(entry: FileSystemEntry, base: string, depth: number = 32): Promise<DirEntry[]> {
+  const path = base ? `${base}/${entry.name}` : entry.name;
+  if (entry.isFile) {
+    if (!isSupportedImage(entry.name)) return [];
+    const file = await new Promise<File>((resolve, reject) =>
+      (entry as FileSystemFileEntry).file(resolve, reject),
+    );
+    return [{ file, relativePath: path }];
+  }
+  if (entry.isDirectory && !entry.name.startsWith('.') && depth > 0) {
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    const out: DirEntry[] = [];
+    // readEntries returns at most ~100 entries per call — loop until empty.
+    for (;;) {
+      const batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
+        reader.readEntries(resolve, reject),
+      );
+      if (batch.length === 0) break;
+      for (const child of batch) {
+        out.push(...(await walkEntry(child, path, depth - 1)));
+      }
+    }
+    return out;
+  }
+  return [];
+}
+
 async function onDrop(e: DragEvent): Promise<void> {
   e.preventDefault();
+  e.stopPropagation();
   $('drop-zone').classList.remove('drag-over');
-  const files = e.dataTransfer?.files;
-  if (!files?.length) return;
+  hideDragOverlay();
+  if (!e.dataTransfer || isConverting) return;
 
-  const images = Array.from(files).filter((f) => isSupportedImage(f.name));
+  const entries = await entriesFromDrop(e.dataTransfer.items, e.dataTransfer.files);
+  const images = entries.filter((entry) => entry.file && isSupportedImage(entry.relativePath.split('/').pop() ?? ''));
   if (images.length > 0) {
-    setSelection(
-      images.map((file) => ({ file, relativePath: file.name })),
-      'Dropped files',
-    );
+    setSelection(images, 'Dropped files');
   }
 }
 
@@ -252,7 +377,10 @@ function renderSelection(label: string): void {
   badge.classList.remove('hidden');
 
   collidedPaths = findCollisions(files.map((f) => f.relativePath));
-  const totalBytes = files.reduce((sum, f) => sum + f.file.size, 0);
+  // Entries from picked folders keep lazy handles, so byte totals are only
+  // shown when every entry is an in-memory file (drops/pastes).
+  const knownBytes = files.every((f) => f.file);
+  const totalBytes = files.reduce((sum, f) => sum + (f.file?.size ?? 0), 0);
   const skipped = collidedPaths.size;
 
   if (files.length === 0) {
@@ -260,7 +388,8 @@ function renderSelection(label: string): void {
     info.classList.add('invalid');
   } else {
     info.textContent =
-      `${files.length} image${files.length === 1 ? '' : 's'} · ${formatBytes(totalBytes)}` +
+      `${files.length} image${files.length === 1 ? '' : 's'}` +
+      (knownBytes ? ` · ${formatBytes(totalBytes)}` : '') +
       (skipped > 0 ? ` · ${skipped} skipped (name conflicts)` : '');
     info.classList.remove('invalid');
   }
@@ -310,8 +439,21 @@ async function startConversion(): Promise<void> {
   const worker = async (): Promise<void> => {
     while (next < queue.length && !cancelRequested) {
       const entry = queue[next++];
-      const result = await convertFile(entry.file, options, entry.relativePath);
-      results.push(result);
+      try {
+        const file = await resolveEntryFile(entry);
+        const result = await convertFile(file, options, entry.relativePath);
+        results.push(result);
+      } catch (err) {
+        // File vanished or became unreadable between scan and convert.
+        results.push({
+          name: entry.relativePath,
+          relativePath: entry.relativePath,
+          originalSize: entry.file?.size ?? 0,
+          convertedSize: 0,
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
       updateProgress(results.length, files.length);
     }
   };
@@ -445,6 +587,9 @@ function resetUI(): void {
 /* ------------------------------ Single mode ------------------------------ */
 
 function handleSingleFile(file: File): void {
+  // Dropping/pasting/programmatically selecting a file always lands in
+  // single-image mode so the result is actually visible.
+  if (mode !== 'single') setMode('single');
   if (!file.type.startsWith('image/') && !isSupportedImage(file.name)) {
     showToast('Please select an image file', 'error');
     return;
