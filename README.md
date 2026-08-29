@@ -13,6 +13,19 @@ Images are like cats on the internet: everywhere. But unlike cats, heavy images 
 3. **Lower storage costs** — thousands of saved images add up to real money. 💰
 4. **Happier planet** — less server power. 🌍
 
+## Privacy First 🔒
+
+Every edition was audited to be private by architecture, not by policy:
+
+- **Nothing leaves your machine.** The browser edition has no server at all; the Python web UI binds to `127.0.0.1` only. Images are never uploaded anywhere — there is nothing to upload *to*.
+- **Zero network calls.** No analytics, telemetry, cookies, CDN scripts, or external fonts. The browser edition ships a strict `Content-Security-Policy` (`default-src 'none'; script-src 'self'; connect-src 'none'`) injected at build time — even a compromised dependency could not phone home.
+- **EXIF/GPS stripped by default** in all editions (and browser decoding cannot preserve it at all).
+- **No image data is ever persisted.** The browser edition keeps results in memory and releases the blobs after you export them; its local history stores only names and sizes.
+
+Try the browser edition live — it's deployed to GitHub Pages, fully static:
+
+**https://aditya-xq.github.io/PicToWebP/**
+
 ## Features 🚀
 
 - **Recursive folder conversion** with the source directory structure preserved.
@@ -172,13 +185,16 @@ files are read/written directly from disk via the File System Access API.
 cd web-ts
 npm install
 npm run dev            # dev server
-npm run build          # production build into dist/
+npm run build          # production build into dist/ (CSP injected, base path set for Pages)
 npm test               # unit tests for the conversion logic
 ```
+
+Deployment is automatic: a GitHub Actions workflow (`.github/workflows/deploy-web-ts.yml`) builds and tests the browser edition on every push to `main` and publishes it to GitHub Pages.
 
 Highlights:
 
 - **Nothing leaves your machine** — there is no server to trust, because there is no server.
+- **Hardened by a security audit** — strict build-time CSP, no remote origins, memory-conscious blob cleanup, and safe handling of oversized or corrupt images (browser canvas limits are clamped instead of silently failing).
 - **Pick a folder** (or drag one in) and the whole tree is converted with the structure preserved; save results back to any folder or download a ZIP.
 - **Single-image mode** with instant preview and a before/after size comparison — you can also just paste an image with `Ctrl+V`.
 - Live progress with ETA, savings stats, a shareable stats image, and conversion history (stored locally in your browser).

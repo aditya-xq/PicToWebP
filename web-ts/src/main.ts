@@ -65,6 +65,13 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
   initUI();
+  // Don't lose an in-flight batch to an accidental tab close.
+  window.addEventListener('beforeunload', (e) => {
+    if (isConverting) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 });
 
 function initUI(): void {
@@ -279,6 +286,11 @@ async function startConversion(): Promise<void> {
 
   const options = getOptions();
   const queue = files.filter((f) => !collidedPaths.has(f.relativePath));
+  if (queue.length === 0) {
+    isConverting = false;
+    showToast('All files were skipped due to name conflicts', 'error');
+    return;
+  }
   showState('running');
   updateProgress(0, files.length);
   showToast(`Converting ${files.length} image${files.length === 1 ? '' : 's'} to WebP...`, 'info');
@@ -484,16 +496,40 @@ async function saveToFolder(): Promise<void> {
   try {
     const outputHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
     showToast('Writing files...', 'info');
+    let written = 0;
+    const failures: string[] = [];
     for (const result of successful) {
       if (!result.blob) continue;
       // Preserve the folder structure of dropped folders; flat selections
       // have single-segment paths.
       const relative = resolveRelativePath(result);
-      await writeFileToDir(outputHandle, relative, result.blob);
+      try {
+        await writeFileToDir(outputHandle, relative, result.blob);
+        written++;
+      } catch {
+        failures.push(relative);
+      }
     }
-    showToast(`Saved ${successful.length} files to ${outputHandle.name}`, 'success');
+    if (failures.length > 0) {
+      // Keep every blob in memory so the failed writes can be retried.
+      showToast(`Saved ${written} files; failed to write ${failures.length} (you can retry)`, 'warn');
+    } else {
+      showToast(`Saved ${written} files to ${outputHandle.name}`, 'success');
+      releaseBlobs(successful);
+    }
   } catch (err) {
     if ((err as Error).name !== 'AbortError') showToast('Could not write files', 'error');
+  }
+}
+
+/**
+ * Drop encoded blobs from results once they are safely exported — for large
+ * batches this can free hundreds of MB while the completion screen is open.
+ */
+function releaseBlobs(exported: FileResult[]): void {
+  for (const result of exported) result.blob = undefined;
+  if (results.every((r) => !r.blob)) {
+    showToast('In-memory copies released — use Convert More for a new batch', 'info');
   }
 }
 
@@ -513,16 +549,27 @@ async function downloadZip(): Promise<void> {
     if (!result.blob) continue;
     zip.file(resolveRelativePath(result), result.blob);
   }
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = 'converted-images.zip';
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-  showToast(`Downloaded ${successful.length} files as ZIP`, 'success');
+  let url: string | null = null;
+  try {
+    const blob = await zip.generateAsync({ type: 'blob' });
+    url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'converted-images.zip';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    showToast(`Downloaded ${successful.length} files as ZIP`, 'success');
+    releaseBlobs(successful);
+  } catch {
+    showToast('Failed to create the ZIP archive (out of memory?)', 'error');
+  } finally {
+    if (url) {
+      // Revoke on a delay — revoking synchronously can abort the download.
+      const deadUrl = url;
+      setTimeout(() => URL.revokeObjectURL(deadUrl), 10_000);
+    }
+  }
 }
 
 /* -------------------------------- History -------------------------------- */
@@ -530,7 +577,11 @@ async function downloadZip(): Promise<void> {
 function pushHistory(entry: HistoryEntry): void {
   const all = readHistory();
   all.unshift(entry);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(all.slice(0, HISTORY_LIMIT)));
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(all.slice(0, HISTORY_LIMIT)));
+  } catch {
+    // Storage may be unavailable (private mode / quota) — history is optional.
+  }
 }
 
 function readHistory(): HistoryEntry[] {
@@ -695,7 +746,7 @@ function shareStats(): void {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
     showToast('Stats image downloaded', 'success');
   }, 'image/png');
 }
