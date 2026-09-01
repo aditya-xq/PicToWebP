@@ -28,11 +28,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
+from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
@@ -61,10 +61,35 @@ SPA_DIST = (
 )
 PROGRESS_POLL_SECONDS = 0.2
 
-# The tool is designed for local use; browsers only need read-only cross-origin access.
-CORS_ALLOW_ORIGINS = ["*"]
+# The SPA is served by this very server, so cross-origin requests are never
+# needed. Two guards keep other websites (and DNS-rebinding attacks) from
+# driving the local API "drive-by":
+#
+# 1. Host validation — the request's Host header must be a loopback name.
+#    Without this, a page on an attacker domain that rebinds its DNS to
+#    127.0.0.1 would send Host: attacker.com + Origin: https://attacker.com
+#    and pass any Origin-only check. Set PICTOWEBP_TRUSTED_HOSTS to a
+#    comma-separated list of extra hostnames to allow LAN access
+#    (e.g. `PICTOWEBP_TRUSTED_HOSTS=192.168.1.5` with --host 0.0.0.0).
+# 2. Origin validation — a foreign Origin header is rejected outright.
+MAX_UPLOAD_BYTES = 256 * 1024 * 1024
 
 MAX_HISTORY = 50
+
+
+def _hostname_from_host_header(host: str) -> str:
+    """Extract the bare hostname from a Host header (ports, IPv6 brackets)."""
+    if host.startswith("["):
+        end = host.find("]")
+        return host[1:end].lower() if end > 0 else ""
+    if ":" in host:
+        return host.rsplit(":", 1)[0].lower()
+    return host.lower()
+
+
+def _is_loopback_hostname(hostname: str) -> bool:
+    """True for names that only the local machine can reach."""
+    return hostname in {"localhost", "::1"} or hostname.startswith("127.")
 
 
 def _is_windows() -> bool:
@@ -155,12 +180,41 @@ def create_app() -> FastAPI:
     """Build a fully wired application instance (fresh state per app)."""
     app = FastAPI(title="PicToWebP API", version=__version__, lifespan=_lifespan)
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=CORS_ALLOW_ORIGINS,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    trusted_hosts = {
+        name.strip().lower()
+        for name in os.environ.get("PICTOWEBP_TRUSTED_HOSTS", "").split(",")
+        if name.strip()
+    }
+
+    @app.middleware("http")
+    async def guard_local_api(request: Request, call_next):
+        host = request.headers.get("host", "")
+        hostname = _hostname_from_host_header(host)
+        if not hostname or not (_is_loopback_hostname(hostname) or hostname in trusted_hosts):
+            return JSONResponse(
+                {"detail": "This API only accepts local requests"},
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+        origin = request.headers.get("origin")
+        if origin:
+            netloc = urlparse(origin).netloc
+            # Same-origin requests (netloc matching the Host header) are fine;
+            # anything else is another website poking the local API.
+            if netloc != host:
+                return JSONResponse(
+                    {"detail": "Cross-origin requests are not allowed"},
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+        # Reject oversized single-image uploads before the body is read
+        # (FastAPI would otherwise spool the whole request to disk first).
+        if request.url.path == "/api/convert-single":
+            content_length = request.headers.get("content-length", "")
+            if content_length.isdigit() and int(content_length) > MAX_UPLOAD_BYTES:
+                return JSONResponse(
+                    {"detail": "Image is too large to convert"},
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                )
+        return await call_next(request)
 
     progress = ConversionProgress()
     # A non-reentrant guard so only one conversion runs at a time.
@@ -271,9 +325,11 @@ def create_app() -> FastAPI:
 
         # Spool to a temp file so large batches don't inflate memory. The
         # handle deliberately outlives this function — the streaming response
-        # closes it in its finally block.
+        # closes it in its finally block. WebP payloads are already
+        # compressed, so STORE keeps zipping fast without wasting CPU on a
+        # pointless DEFLATE pass.
         tmp = tempfile.TemporaryFile()  # noqa: SIM115
-        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as zf:
             for path in files:
                 zf.write(path, path.relative_to(folder))
 
@@ -409,6 +465,11 @@ def create_app() -> FastAPI:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Uploaded file is not an image",
+            )
+        if file.size and file.size > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="Image is too large to convert",
             )
         try:
             contents = await file.read()

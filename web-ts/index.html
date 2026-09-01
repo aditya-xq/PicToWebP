@@ -194,12 +194,15 @@
               </div>
             </div>
             <div id="collisions-note" class="collisions hidden"></div>
+            <details id="failures-details" class="failures hidden">
+              <summary id="failures-summary"></summary>
+              <div id="failures-list" class="failures-list"></div>
+            </details>
             <div id="stat-output-folder" class="output-folder hidden">
               <div class="label" style="margin-bottom: 3px;">Output Folder</div>
               <div class="path" id="stat-output-path"></div>
             </div>
             <div class="action-row">
-              <button id="save-folder-btn" class="btn btn-secondary">Save to Folder</button>
               <button id="download-zip-btn" class="btn btn-secondary">Download ZIP</button>
               <button id="open-folder-btn" class="btn btn-secondary hidden">Open Folder</button>
             </div>
@@ -226,6 +229,7 @@
               <div class="dz-sub">or click to browse</div>
             </div>
             <input type="file" id="single-file-input" accept="image/*" class="hidden">
+            <input type="file" id="folder-fallback-input" class="hidden" multiple>
             <p class="upload-hint">
               PNG, JPEG, BMP, GIF, WebP — converts instantly. You can also paste with Ctrl+V.
             </p>

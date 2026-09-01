@@ -112,7 +112,6 @@ export class PythonBackend implements ConversionBackend {
     folderPick: 'server-browse',
     lossless: true,
     metadataControl: true,
-    saveToFolder: false,
     openOutputFolder: true,
     historyStore: 'server',
     serverValidate: true,
@@ -185,18 +184,58 @@ export class PythonBackend implements ConversionBackend {
     }
 
     const snapshot = await new Promise<PythonSnapshot>((resolve, reject) => {
+      let settled = false;
+
+      const finish = (snapshot: PythonSnapshot): void => {
+        if (settled) return;
+        settled = true;
+        resolve(snapshot);
+      };
+      const fail = (err: Error): void => {
+        if (settled) return;
+        settled = true;
+        reject(err);
+      };
+
+      // Fallback when the SSE stream drops (sleeping tab, flaky proxy, …):
+      // keep polling /api/status so a running server-side job is still
+      // tracked to its terminal state instead of being orphaned.
+      const POLL_INTERVAL_MS = 1_000;
+      const MAX_POLL_FAILURES = 5;
+      let pollFailures = 0;
+
+      const pollStatus = async (): Promise<void> => {
+        if (settled) return;
+        try {
+          const res = await fetch('/api/status');
+          if (!res.ok) throw new Error(String(res.status));
+          const data: PythonSnapshot = await res.json();
+          pollFailures = 0;
+          onProgress(mapProgress(data));
+          if (TERMINAL_STATUSES.has(data.status as ProgressSnapshot['status'])) finish(data);
+          else setTimeout(() => void pollStatus(), POLL_INTERVAL_MS);
+        } catch {
+          pollFailures++;
+          if (pollFailures >= MAX_POLL_FAILURES) {
+            fail(new Error('Lost connection to the conversion'));
+          } else {
+            setTimeout(() => void pollStatus(), POLL_INTERVAL_MS);
+          }
+        }
+      };
+
       const source = new EventSource('/progress');
       source.onmessage = (event) => {
         const data: PythonSnapshot = JSON.parse(event.data);
         onProgress(mapProgress(data));
         if (TERMINAL_STATUSES.has(data.status as ProgressSnapshot['status'])) {
           source.close();
-          resolve(data);
+          finish(data);
         }
       };
       source.onerror = () => {
         source.close();
-        reject(new Error('Lost connection to the conversion'));
+        void pollStatus();
       };
     });
 
@@ -204,11 +243,9 @@ export class PythonBackend implements ConversionBackend {
   }
 
   async cancel(): Promise<void> {
-    await fetch('/convert/cancel', { method: 'POST' });
-  }
-
-  async saveToFolder(): Promise<{ written: number; failed: string[] }> {
-    throw new Error('Not supported');
+    // A 400 means the conversion already finished — not a failure to cancel.
+    const res = await fetch('/convert/cancel', { method: 'POST' });
+    if (res.status !== 400 && !res.ok) throw new Error('Failed to cancel');
   }
 
   async downloadZip(): Promise<void> {

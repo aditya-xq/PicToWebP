@@ -146,7 +146,7 @@ Both suites run the **production build** in real Chromium.
 | --- | --- | --- |
 | `e2e/smoke.spec.ts` (3) | browser | page load + privacy messaging + quality slider, single-image conversion → WebP download, **runtime proof of zero external network requests** |
 | `e2e/batch.spec.ts` (3) | browser | multi-file drag-drop → batch conversion → ZIP download (contents inspected), corrupt-input failure surfaced in the UI and excluded from the ZIP, and a gated **realistic 40-photo** batch logging UI-reported throughput |
-| `e2e-python/smoke.spec.ts` (2) | python | server-edition options (lossless/metadata controls, hidden save-to-folder), single-image upload through the API, CSP `connect-src 'self'` |
+| `e2e-python/smoke.spec.ts` (2) | python | server-edition options (lossless/metadata controls), single-image upload through the API, CSP `connect-src 'self'` |
 | `e2e-python/batch.spec.ts` (2) | python | full folder conversion: browse modal → navigate → convert via SSE → ZIP download inspected, sad paths reported in the results UI, and a gated **realistic 40-photo** server batch |
 
 The python suite boots the real `uv run uvicorn pictowebp.web.app:app`; the

@@ -8,6 +8,7 @@ from threading import Lock
 import pytest
 from fastapi.testclient import TestClient
 
+import pictowebp.web.app as web_app_module
 from pictowebp.progress import TERMINAL_STATUSES
 from pictowebp.web.app import create_app
 
@@ -19,7 +20,9 @@ SPA_INDEX = Path(__file__).resolve().parents[1] / "web-ts" / "dist-python" / "in
 @pytest.fixture()
 def client() -> Iterator[TestClient]:
     app = create_app()
-    with TestClient(app) as test_client:
+    # The API only answers loopback Host headers (drive-by/rebinding guard),
+    # so the test client must present one too (default is "testserver").
+    with TestClient(app, base_url="http://127.0.0.1") as test_client:
         yield test_client
 
 
@@ -56,6 +59,46 @@ def test_index_returns_setup_help_without_build(client: TestClient):
 def test_convert_validates_payload(client: TestClient):
     response = client.post("/convert", json={})
     assert response.status_code == 422
+
+
+def test_rejects_foreign_host_header(client: TestClient):
+    """A non-loopback Host means a rebinding/drive-by attempt — refuse it."""
+    response = client.get("/api/status", headers={"Host": "evil.example.com"})
+    assert response.status_code == 403
+
+
+def test_rejects_foreign_origin(client: TestClient):
+    """A page on another origin must not be able to drive the local API."""
+    response = client.get("/api/status", headers={"Origin": "https://evil.example.com"})
+    assert response.status_code == 403
+
+
+def test_accepts_same_origin_request(client: TestClient):
+    """Loopback Host + matching same-origin Origin header passes the guard."""
+    response = client.get("/api/status", headers={"Origin": "http://127.0.0.1"})
+    assert response.status_code == 200
+
+
+def test_trusted_hosts_env_allows_lan_access(monkeypatch: pytest.MonkeyPatch):
+    """PICTOWEBP_TRUSTED_HOSTS opts a LAN hostname into the Host guard."""
+    monkeypatch.setenv("PICTOWEBP_TRUSTED_HOSTS", "my-nas.local")
+    app = create_app()
+    with TestClient(app, base_url="http://my-nas.local") as lan_client:
+        assert lan_client.get("/api/status").status_code == 200
+    with TestClient(app, base_url="http://127.0.0.1") as loopback_client:
+        assert loopback_client.get("/api/status").status_code == 200
+
+
+def test_convert_single_rejects_oversized_upload(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """The Content-Length pre-check must refuse huge uploads before spooling."""
+    monkeypatch.setattr(web_app_module, "MAX_UPLOAD_BYTES", 8)
+    response = client.post(
+        "/api/convert-single",
+        files={"file": ("big.png", b"1234567890", "image/png")},
+    )
+    assert response.status_code == 413
 
 
 def test_convert_rejects_unknown_folder(client: TestClient):

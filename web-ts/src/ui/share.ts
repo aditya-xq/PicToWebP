@@ -10,7 +10,12 @@ export interface ShareStats {
   quality: number;
   original: string;
   webp: string;
+  /** Which engine produced the stats — the card copy adapts. */
+  edition?: 'browser' | 'python';
 }
+
+const W = 1200;
+const H = 630;
 
 function drawRoundRect(
   ctx: CanvasRenderingContext2D,
@@ -29,83 +34,182 @@ function drawRoundRect(
   ctx.closePath();
 }
 
-/** Render the stats card as a PNG and download it. */
-export function shareStats(lastStats: ShareStats): void {
+function renderCanvas(stats: ShareStats): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = 600;
-  canvas.height = 320;
+  canvas.width = W;
+  canvas.height = H;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
 
+  // Card background + border + accent top strip.
   ctx.fillStyle = '#0a0d14';
-  drawRoundRect(ctx, 0, 0, 600, 320, 16);
+  drawRoundRect(ctx, 0, 0, W, H, 28);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(99,102,241,0.3)';
+  ctx.strokeStyle = 'rgba(99, 102, 241, 0.35)';
   ctx.lineWidth = 2;
-  drawRoundRect(ctx, 1, 1, 598, 318, 16);
+  drawRoundRect(ctx, 1, 1, W - 2, H - 2, 28);
   ctx.stroke();
+  const strip = ctx.createLinearGradient(0, 0, W, 0);
+  strip.addColorStop(0, '#6366f1');
+  strip.addColorStop(0.55, '#8b5cf6');
+  strip.addColorStop(1, '#d946ef');
+  ctx.fillStyle = strip;
+  drawRoundRect(ctx, 28, 0, W - 56, 6, 3);
+  ctx.fill();
 
-  const grad = ctx.createLinearGradient(0, 0, 600, 0);
-  grad.addColorStop(0, 'rgba(99,102,241,0.8)');
-  grad.addColorStop(1, 'rgba(139,92,246,0.6)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 600, 4);
+  // Brand mark.
+  const mark = ctx.createLinearGradient(56, 56, 120, 120);
+  mark.addColorStop(0, '#818cf8');
+  mark.addColorStop(1, '#d946ef');
+  ctx.fillStyle = mark;
+  drawRoundRect(ctx, 56, 52, 64, 64, 18);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 36px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('P', 88, 86);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 
-  ctx.fillStyle = '#f1f5f9';
-  ctx.font = 'bold 22px Inter, system-ui, sans-serif';
-  ctx.fillText('PicToWebP', 30, 50);
-  ctx.fillStyle = '#6b7280';
-  ctx.font = '12px Inter, system-ui, sans-serif';
-  ctx.fillText('Bulk image to WebP conversion (in your browser)', 30, 72);
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.beginPath();
-  ctx.moveTo(30, 90);
-  ctx.lineTo(570, 90);
-  ctx.stroke();
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = '800 40px system-ui, sans-serif';
+  ctx.fillText('PicToWebP', 140, 88);
+  ctx.fillStyle = '#8391a8';
+  ctx.font = '600 20px system-ui, sans-serif';
+  ctx.fillText(
+    stats.edition === 'python'
+      ? 'Converted locally on this machine — nothing uploaded'
+      : 'Converted 100% in the browser — nothing uploaded',
+    140,
+    118,
+  );
 
-  const stats = [
-    { label: 'SAVED', value: lastStats.saved, sub: `${lastStats.percent} smaller`, color: '#4ade80' },
-    { label: 'FILES', value: lastStats.files, sub: 'converted', color: '#818cf8' },
-    { label: 'TIME', value: lastStats.elapsed, sub: `@ Q${lastStats.quality}`, color: '#e2e8f0' },
+  // Hero stat: space saved.
+  ctx.fillStyle = '#8391a8';
+  ctx.font = '700 18px system-ui, sans-serif';
+  ctx.fillText('S P A C E   S A V E D', 56, 196);
+  ctx.fillStyle = '#4ade80';
+  ctx.font = '800 96px system-ui, sans-serif';
+  ctx.fillText(stats.saved, 56, 288);
+  ctx.fillStyle = '#a7f3d0';
+  ctx.font = '700 30px system-ui, sans-serif';
+  ctx.fillText(`${stats.percent} smaller`, 56, 332);
+
+  // Secondary stats, right-aligned column.
+  const secondary: { label: string; value: string }[] = [
+    { label: 'FILES CONVERTED', value: stats.files },
+    { label: 'TIME', value: `${stats.elapsed} @ Q${stats.quality}` },
   ];
-  stats.forEach((s, i) => {
-    const x = 30 + i * 190;
-    ctx.fillStyle = '#9ca3af';
-    ctx.font = '600 10px Inter, system-ui, sans-serif';
-    ctx.fillText(s.label, x, 125);
-    ctx.fillStyle = s.color;
-    ctx.font = 'bold 28px Inter, system-ui, sans-serif';
-    ctx.fillText(s.value, x, 162);
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '11px Inter, system-ui, sans-serif';
-    ctx.fillText(s.sub, x, 182);
+  secondary.forEach((s, i) => {
+    const y = 190 + i * 78;
+    ctx.fillStyle = '#8391a8';
+    ctx.font = '700 16px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(s.label, W - 56, y);
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = '800 38px system-ui, sans-serif';
+    ctx.fillText(s.value, W - 56, y + 44);
+  });
+  ctx.textAlign = 'left';
+
+  // Proportional size comparison bars.
+  const parseBytes = (text: string): number => {
+    const value = Number.parseFloat(text);
+    if (Number.isNaN(value)) return 0;
+    if (text.includes('GB')) return value * 1024 ** 3;
+    if (text.includes('MB')) return value * 1024 ** 2;
+    if (text.includes('KB')) return value * 1024;
+    return value;
+  };
+  const originalBytes = parseBytes(stats.original);
+  const webpBytes = parseBytes(stats.webp);
+  const barMax = Math.max(originalBytes, webpBytes, 1);
+  const barX = 56;
+  const barMaxWidth = W - 112;
+  const rows: { label: string; fraction: number; fill: string | CanvasGradient }[] = [
+    {
+      label: `Original · ${stats.original}`,
+      fraction: originalBytes / barMax,
+      fill: 'rgba(148, 163, 184, 0.35)',
+    },
+    {
+      label: `WebP · ${stats.webp}`,
+      fraction: webpBytes / barMax,
+      fill: strip,
+    },
+  ];
+  rows.forEach((row, i) => {
+    const y = 396 + i * 76;
+    ctx.fillStyle = '#8391a8';
+    ctx.font = '600 18px system-ui, sans-serif';
+    ctx.fillText(row.label, barX, y - 10);
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+    drawRoundRect(ctx, barX, y, barMaxWidth, 30, 10);
+    ctx.fill();
+    ctx.fillStyle = row.fill;
+    drawRoundRect(ctx, barX, y, Math.max(barMaxWidth * row.fraction, 30), 30, 10);
+    ctx.fill();
   });
 
+  // Footer.
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(30, 205);
-  ctx.lineTo(570, 205);
+  ctx.moveTo(56, H - 74);
+  ctx.lineTo(W - 56, H - 74);
   ctx.stroke();
-  ctx.fillStyle = '#1a2030';
-  drawRoundRect(ctx, 30, 225, 540, 16, 4);
-  ctx.fill();
-  ctx.fillStyle = '#9ca3af';
-  ctx.font = '10px Inter, system-ui, sans-serif';
-  ctx.fillText(`Original: ${lastStats.original}`, 30, 260);
+  ctx.fillStyle = '#64748b';
+  ctx.font = '600 18px system-ui, sans-serif';
+  ctx.fillText('Runs offline · No uploads · EXIF & GPS stripped', 56, H - 36);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#a5b4fc';
+  ctx.fillText('aditya-xq.github.io/PicToWebP', W - 56, H - 36);
+  ctx.textAlign = 'left';
 
-  const barGrad = ctx.createLinearGradient(30, 0, 570, 0);
-  barGrad.addColorStop(0, '#6366f1');
-  barGrad.addColorStop(1, '#818cf8');
-  ctx.fillStyle = barGrad;
-  drawRoundRect(ctx, 30, 275, 540, 16, 4);
-  ctx.fill();
-  ctx.fillText(`WebP: ${lastStats.webp}`, 30, 310);
+  return canvas;
+}
 
-  canvas.toBlob((blob) => {
-    if (!blob) {
-      showToast('Failed to generate image', 'error');
-      return;
+function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Failed to generate image'))),
+      'image/png',
+    );
+  });
+}
+
+/**
+ * Share the stats card: Web Share API where available (mobile share sheets),
+ * falling back to a PNG download. The image itself contains no user data —
+ * only aggregate sizes/counts.
+ */
+export async function shareStats(stats: ShareStats): Promise<void> {
+  const btn = document.getElementById('share-btn');
+  if (btn instanceof HTMLButtonElement) btn.disabled = true;
+  try {
+    const canvas = renderCanvas(stats);
+    const blob = await canvasToBlob(canvas);
+    const file = new File([blob], 'pictowebp-stats.png', { type: 'image/png' });
+    if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: 'PicToWebP',
+          text: `Saved ${stats.saved} (${stats.percent} smaller) converting to WebP — locally, nothing uploaded.`,
+        });
+        showToast('Stats shared', 'success');
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        // Fall through to download.
+      }
     }
     triggerDownload(blob, 'pictowebp-stats.png');
     showToast('Stats image downloaded', 'success');
-  }, 'image/png');
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : 'Failed to generate image', 'error');
+  } finally {
+    if (btn instanceof HTMLButtonElement) btn.disabled = false;
+  }
 }

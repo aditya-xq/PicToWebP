@@ -19,6 +19,11 @@ import {
 const POOL_SIZE = Math.min(6, Math.max(2, navigator.hardwareConcurrency || 4));
 /** Watchdog: a job that never answers means a wedged worker — fail over. */
 const JOB_TIMEOUT_MS = 120_000;
+/**
+ * Idle workers each pin a JS isolate (several MB), so the pool is torn down
+ * after a quiet period and transparently re-created on the next conversion.
+ */
+const WORKER_IDLE_SHUTDOWN_MS = 30_000;
 
 interface PendingRequest {
   resolve: (result: FileResult) => void;
@@ -30,6 +35,7 @@ let workerBroken = false;
 const pending = new Map<number, PendingRequest>();
 let nextJobId = 1;
 let nextWorker = 0;
+let idleShutdownTimer: ReturnType<typeof setTimeout> | null = null;
 
 function workerSupported(): boolean {
   return (
@@ -69,8 +75,22 @@ function initWorkers(): Worker[] {
 }
 
 function terminateWorkers(): void {
+  if (idleShutdownTimer) {
+    clearTimeout(idleShutdownTimer);
+    idleShutdownTimer = null;
+  }
   for (const worker of workers ?? []) worker.terminate();
   workers = null;
+}
+
+function scheduleIdleShutdown(): void {
+  if (idleShutdownTimer) clearTimeout(idleShutdownTimer);
+  idleShutdownTimer = setTimeout(() => {
+    idleShutdownTimer = null;
+    // A job dispatched since scheduling cleared the timer; this only fires
+    // when the pool has been truly idle for the whole window.
+    if (pending.size === 0) terminateWorkers();
+  }, WORKER_IDLE_SHUTDOWN_MS);
 }
 
 function convertInWorker(
@@ -78,6 +98,10 @@ function convertInWorker(
   options: ConversionOptions,
   relativePath: string,
 ): Promise<FileResult> {
+  if (idleShutdownTimer) {
+    clearTimeout(idleShutdownTimer);
+    idleShutdownTimer = null;
+  }
   const pool = initWorkers();
   const worker = pool[nextWorker++ % pool.length];
   const id = nextJobId++;
@@ -89,10 +113,12 @@ function convertInWorker(
     pending.set(id, {
       resolve: (result) => {
         clearTimeout(timeout);
+        scheduleIdleShutdown();
         resolve(result);
       },
       reject: (err) => {
         clearTimeout(timeout);
+        scheduleIdleShutdown();
         reject(err);
       },
     });

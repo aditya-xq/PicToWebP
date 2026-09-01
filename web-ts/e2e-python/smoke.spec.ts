@@ -14,8 +14,6 @@ test.describe('PicToWebP unified SPA over the Python backend', () => {
     await expect(page.locator('#edition-badge')).toHaveText('Local Server');
     await expect(page.locator('#toggle-lossless')).toBeVisible();
     await expect(page.locator('#toggle-metadata')).toBeVisible();
-    // Browser-only "Save to Folder" is hidden for the server edition.
-    await expect(page.locator('#save-folder-btn')).toBeHidden();
 
     // The server edition must load under its CSP with connect-src 'self'.
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');

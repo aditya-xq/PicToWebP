@@ -23,8 +23,6 @@ export interface BackendCapabilities {
   lossless: boolean;
   /** User control over metadata stripping (python only; browser always strips). */
   metadataControl: boolean;
-  /** Write converted blobs back to a picked folder (browser only). */
-  saveToFolder: boolean;
   /** Open the output folder in the OS explorer (python only). */
   openOutputFolder: boolean;
   /** Where conversion history is stored. */
@@ -144,9 +142,6 @@ export interface ConversionBackend {
   ): Promise<ConversionResult>;
 
   cancel(): Promise<void>;
-
-  /** Browser: write blobs back to a user-picked folder. */
-  saveToFolder(result: ConversionResult): Promise<{ written: number; failed: string[] }>;
 
   /** Download a ZIP of the conversion output. */
   downloadZip(result: ConversionResult): Promise<void>;

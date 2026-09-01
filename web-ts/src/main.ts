@@ -10,7 +10,7 @@ import type {
   ProgressSnapshot,
   SourceSelection,
 } from './backend';
-import { formatBytes, formatDuration, isSupportedImage } from './core';
+import { formatBytes, formatDuration, hasHiddenDirectorySegment, isSupportedImage } from './core';
 import { $ } from './ui/dom';
 import { clearHistory, closeHistory, openHistory } from './ui/history';
 import { entriesFromDrop, hasFiles } from './ui/drop';
@@ -61,7 +61,38 @@ function updateSliderFill(): void {
 }
 
 function updateConvertButton(): void {
-  ($('convert-btn') as HTMLButtonElement).disabled = !selection || !selectionValid || isConverting;
+  const btn = $('convert-btn') as HTMLButtonElement;
+  const count = selection?.entries?.length ?? 0;
+  const ready = Boolean(selection) && selectionValid;
+  btn.disabled = !ready || isConverting;
+  btn.textContent =
+    ready && count > 0 ? `Convert ${count} Image${count === 1 ? '' : 's'}` : 'Convert to WebP';
+}
+
+/**
+ * Freeze every control that could mutate the conversion settings or start a
+ * second job while one is running. Options are captured when a conversion
+ * starts, so changing them mid-run would silently do nothing — hiding the
+ * affordance is kinder than ignoring the input.
+ */
+function setBusy(busy: boolean): void {
+  ($('quality-slider') as HTMLInputElement).disabled = busy;
+  document.querySelectorAll<HTMLButtonElement>('.preset-btn, .mode-tab').forEach((btn) => {
+    btn.disabled = busy;
+  });
+  for (const id of ['toggle-lossless', 'toggle-metadata', 'toggle-resize']) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.toggle('disabled', busy);
+      el.setAttribute('aria-disabled', String(busy));
+    }
+  }
+  ($('resize-width') as HTMLInputElement).disabled = busy;
+  ($('resize-height') as HTMLInputElement).disabled = busy;
+  for (const id of ['drop-zone', 'single-drop-zone']) {
+    $(id).classList.toggle('disabled', busy);
+    $(id).setAttribute('aria-disabled', String(busy));
+  }
 }
 
 function getOptions(): ConversionOptions {
@@ -83,6 +114,7 @@ function getOptions(): ConversionOptions {
 
 function bindToggle(el: HTMLElement, onChange?: () => void): void {
   el.addEventListener('click', () => {
+    if (isConverting) return;
     el.classList.toggle('active');
     el.setAttribute('aria-checked', String(el.classList.contains('active')));
     onChange?.();
@@ -135,12 +167,37 @@ async function selectFolder(): Promise<void> {
     openBrowse();
     return;
   }
-  try {
-    const sel = await backend.pickFolder();
-    if (sel) await setSource(sel);
-  } catch (err) {
-    if ((err as Error).name !== 'AbortError') showToast('Could not open folder', 'error');
+  // File System Access API (Chromium); fall back to a plain multi-file
+  // input (with directory picking) on Firefox / iOS where it is missing.
+  if ('showDirectoryPicker' in window) {
+    try {
+      const sel = await backend.pickFolder();
+      if (sel) await setSource(sel);
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') showToast('Could not open folder', 'error');
+    }
+    return;
   }
+  const input = $('folder-fallback-input') as HTMLInputElement;
+  input.value = '';
+  input.click();
+}
+
+function pickViaFallbackInput(): void {
+  const input = $('folder-fallback-input') as HTMLInputElement;
+  // Skip hidden directories so directory picking matches the handle-based
+  // enumeration and the CLIs (dot-prefixed folders are never converted).
+  const files = Array.from(input.files ?? [])
+    .filter((f) => isSupportedImage(f.name))
+    .filter((f) => !hasHiddenDirectorySegment(f.webkitRelativePath || f.name))
+    .map((f) => ({ file: f, relativePath: f.webkitRelativePath || f.name }));
+  if (files.length === 0) {
+    showToast('No supported images found', 'warn');
+    return;
+  }
+  const first = files[0].relativePath;
+  const label = first.includes('/') ? first.slice(0, first.indexOf('/')) : 'Selected files';
+  void setSource({ label, entries: files });
 }
 
 /* ----------------------------- Conversion ----------------------------- */
@@ -156,7 +213,11 @@ function renderProgress(p: ProgressSnapshot): void {
 
 async function startConversion(): Promise<void> {
   if (isConverting || mode !== 'folder' || !selection || !selectionValid) return;
+  // Drop any in-memory blobs from a previous run before starting a new one.
+  releaseBlobs();
+  result = null;
   isConverting = true;
+  setBusy(true);
   updateConvertButton();
   showState('running');
   updateConvertButton();
@@ -167,6 +228,7 @@ async function startConversion(): Promise<void> {
   try {
     const done = await backend.convert(sel, options, renderProgress);
     isConverting = false;
+    setBusy(false);
     result = done;
     if (done.cancelled && !done.ok) {
       showState('idle');
@@ -185,10 +247,46 @@ async function startConversion(): Promise<void> {
     }
   } catch (err) {
     isConverting = false;
+    setBusy(false);
     showState('error');
     $('error-message').textContent = err instanceof Error ? err.message : String(err);
     showToast('Conversion failed', 'error');
   }
+}
+
+/** Render the skipped/failed file list in a collapsible section. */
+function renderFailures(failures: { name: string; reason: string }[]): void {
+  const details = $('failures-details');
+  const list = $('failures-list');
+  list.textContent = '';
+  if (failures.length === 0) {
+    details.classList.add('hidden');
+    return;
+  }
+  const MAX_SHOWN = 100;
+  for (const failure of failures.slice(0, MAX_SHOWN)) {
+    const row = document.createElement('div');
+    row.className = 'failure-row';
+    const name = document.createElement('span');
+    name.className = 'failure-name truncate';
+    name.textContent = failure.name;
+    name.title = failure.name;
+    const reason = document.createElement('span');
+    reason.className = 'failure-reason truncate';
+    reason.textContent = failure.reason;
+    reason.title = failure.reason;
+    row.append(name, reason);
+    list.appendChild(row);
+  }
+  if (failures.length > MAX_SHOWN) {
+    const more = document.createElement('p');
+    more.className = 'failure-more';
+    more.textContent = `…and ${failures.length - MAX_SHOWN} more`;
+    list.appendChild(more);
+  }
+  $('failures-summary').textContent =
+    `${failures.length} file${failures.length === 1 ? '' : 's'} skipped or failed`;
+  details.classList.remove('hidden');
 }
 
 function showComplete(done: ConversionResult): void {
@@ -200,7 +298,14 @@ function showComplete(done: ConversionResult): void {
   $('stat-saved').textContent = formatBytes(stats.bytesSaved);
   $('stat-saved-pct').textContent = `${percent}% reduction`;
   $('stat-converted').textContent = `${stats.convertedFiles} / ${stats.totalFiles}`;
-  $('stat-failed').textContent = stats.failedFiles > 0 ? `${stats.failedFiles} failed` : 'All successful';
+  const notProcessed = done.cancelled
+    ? Math.max(0, stats.totalFiles - stats.convertedFiles - stats.failedFiles)
+    : 0;
+  const failedParts: string[] = [];
+  if (stats.failedFiles > 0) failedParts.push(`${stats.failedFiles} failed`);
+  if (notProcessed > 0) failedParts.push(`${notProcessed} not processed`);
+  $('stat-failed').textContent =
+    failedParts.length > 0 ? failedParts.join(' · ') : 'All successful';
   $('stat-original').textContent = formatBytes(stats.originalBytes);
   $('stat-new').textContent = formatBytes(stats.convertedBytes);
 
@@ -212,12 +317,12 @@ function showComplete(done: ConversionResult): void {
   } else {
     note.classList.add('hidden');
   }
+  renderFailures(done.failures);
 
   const outputFolder = stats.outputFolder;
   $('stat-output-folder').classList.toggle('hidden', !outputFolder);
   if (outputFolder) $('stat-output-path').textContent = outputFolder;
   ($('open-folder-btn') as HTMLButtonElement).classList.toggle('hidden', !cap.openOutputFolder || !outputFolder);
-  ($('save-folder-btn') as HTMLButtonElement).classList.toggle('hidden', !cap.saveToFolder || done.blobs.length === 0);
 
   lastStats = {
     saved: formatBytes(stats.bytesSaved),
@@ -227,6 +332,7 @@ function showComplete(done: ConversionResult): void {
     quality: Number(($('quality-slider') as HTMLInputElement).value),
     original: formatBytes(stats.originalBytes),
     webp: formatBytes(stats.convertedBytes),
+    edition: cap.kind,
   };
 }
 
@@ -244,6 +350,7 @@ async function cancelConversion(): Promise<void> {
 }
 
 function resetUI(): void {
+  releaseBlobs();
   showState('idle');
   selection = null;
   selectionValid = false;
@@ -264,29 +371,14 @@ function resetUI(): void {
 
 /* ------------------------------ Results ------------------------------ */
 
-async function saveToFolder(): Promise<void> {
-  if (!result || result.blobs.length === 0) {
-    showToast('No converted files to save', 'error');
-    return;
-  }
-  try {
-    const { written, failed } = await backend.saveToFolder(result);
-    if (failed.length > 0) {
-      showToast(`Saved ${written} files; failed to write ${failed.length} (you can retry)`, 'warn');
-    } else {
-      showToast(`Saved ${written} files`, 'success');
-      releaseBlobs();
-    }
-  } catch (err) {
-    if ((err as Error).name !== 'AbortError') showToast('Could not write files', 'error');
-  }
-}
-
 async function downloadZip(): Promise<void> {
   if (!result) {
     showToast('Nothing to download yet', 'error');
     return;
   }
+  const btn = $('download-zip-btn') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = 'Preparing ZIP…';
   showToast('Preparing ZIP...', 'info');
   try {
     await backend.downloadZip(result);
@@ -294,6 +386,9 @@ async function downloadZip(): Promise<void> {
     if (cap.kind === 'browser') releaseBlobs();
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Failed to create ZIP', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Download ZIP';
   }
 }
 
@@ -310,19 +405,19 @@ async function openOutputFolder(): Promise<void> {
 function releaseBlobs(): void {
   if (!result) return;
   for (const entry of result.blobs) entry.blob = undefined;
-  if (result.blobs.every((r) => !r.blob)) {
-    showToast('In-memory copies released — use Convert More for a new batch', 'info');
-  }
 }
 
 /* --------------------------- Single image --------------------------- */
 
 function handleSingleFile(file: File): void {
+  if (isConverting) return;
   if (!file.type.startsWith('image/') && !isSupportedImage(file.name)) {
     showToast('Please select an image file', 'error');
     return;
   }
   if (mode !== 'single') setMode('single');
+  isConverting = true;
+  setBusy(true);
   $('single-upload').classList.add('hidden');
   $('single-converting').classList.remove('hidden');
 
@@ -347,6 +442,10 @@ function handleSingleFile(file: File): void {
       $('single-converting').classList.add('hidden');
       $('single-upload').classList.remove('hidden');
       showToast(err.message || 'Conversion failed', 'error');
+    })
+    .finally(() => {
+      isConverting = false;
+      setBusy(false);
     });
 }
 
@@ -358,6 +457,7 @@ function convertAnotherSingle(): void {
     previewUrl = null;
   }
   ($('single-preview-img') as HTMLImageElement).src = '';
+  ($('single-download-btn') as HTMLAnchorElement).href = '#';
   ($('single-file-input') as HTMLInputElement).value = '';
 }
 
@@ -515,7 +615,6 @@ function initUI(): void {
     $('server-options').classList.add('hidden');
     $('browser-note').classList.remove('hidden');
   }
-  if (!cap.saveToFolder) $('save-folder-btn').classList.add('hidden');
 
   // Quality
   const slider = $('quality-slider') as HTMLInputElement;
@@ -557,7 +656,10 @@ function initUI(): void {
 
   // Single mode
   const singleZone = $('single-drop-zone');
-  singleZone.addEventListener('click', () => ($('single-file-input') as HTMLInputElement).click());
+  singleZone.addEventListener('click', () => {
+    if (isConverting) return;
+    ($('single-file-input') as HTMLInputElement).click();
+  });
   singleZone.addEventListener('dragover', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -572,11 +674,19 @@ function initUI(): void {
     const file = e.dataTransfer?.files[0];
     if (file) handleSingleFile(file);
   });
-  wireZoneKeyboard(singleZone, () => ($('single-file-input') as HTMLInputElement).click());
+  wireZoneKeyboard(singleZone, () => {
+    if (isConverting) return;
+    ($('single-file-input') as HTMLInputElement).click();
+  });
   ($('single-file-input') as HTMLInputElement).addEventListener('change', (e) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (file) handleSingleFile(file);
   });
+
+  // Directory-picking fallback for browsers without the File System Access API.
+  const fallbackInput = $('folder-fallback-input') as HTMLInputElement;
+  fallbackInput.webkitdirectory = true;
+  fallbackInput.addEventListener('change', pickViaFallbackInput);
 
   // Full-window drag overlay
   window.addEventListener('dragenter', (e) => {
@@ -620,11 +730,10 @@ function initUI(): void {
   $('cancel-btn').addEventListener('click', () => void cancelConversion());
   $('convert-more-btn').addEventListener('click', resetUI);
   $('try-again-btn').addEventListener('click', resetUI);
-  $('save-folder-btn').addEventListener('click', () => void saveToFolder());
   $('download-zip-btn').addEventListener('click', () => void downloadZip());
   $('open-folder-btn').addEventListener('click', () => void openOutputFolder());
   $('share-btn').addEventListener('click', () => {
-    if (lastStats) shareStats(lastStats);
+    if (lastStats) void shareStats(lastStats);
   });
   $('convert-another-btn').addEventListener('click', convertAnotherSingle);
 
@@ -658,23 +767,31 @@ function initUI(): void {
   document.addEventListener('keydown', (e) => {
     const target = e.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+    const onActivatable = target instanceof Element && !!target.closest('button, a');
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      if (onActivatable) return;
       e.preventDefault();
       void startConversion();
     } else if (e.key === 'Enter') {
+      // Let focused buttons/links handle their own Enter — the global
+      // shortcut would double-fire the action.
+      if (onActivatable) return;
       e.preventDefault();
       void startConversion();
     } else if (e.key === 'Escape') {
       if (!$('browse-modal').classList.contains('hidden')) closeBrowse();
       else if (!$('shortcuts-modal').classList.contains('hidden')) showShortcuts(false);
       else if (!$('history-panel').classList.contains('hidden')) closeHistory();
-      else if (isConverting) void cancelConversion();
+      else if (isConverting && mode === 'folder') void cancelConversion();
     } else if (e.key === 'h' || e.key === 'H') void openHistory(backend);
     else if (e.key === 'b' || e.key === 'B') void selectFolder();
     else if (e.key === '?') showShortcuts(true);
   });
 
   document.addEventListener('paste', (e) => {
+    // A paste must not yank the UI to single mode while a batch is running —
+    // the running state lives in the folder pane and the tabs are busy-locked.
+    if (isConverting) return;
     const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
       i.type.startsWith('image/'),
     );

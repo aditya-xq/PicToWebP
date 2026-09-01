@@ -8,6 +8,7 @@ import {
   findCollisions,
   formatBytes,
   formatDuration,
+  hasHiddenDirectorySegment,
   isSupportedImage,
   replaceExtension,
   targetDimensions,
@@ -26,6 +27,22 @@ describe('isSupportedImage', () => {
     expect(isSupportedImage('notes.txt')).toBe(false);
     expect(isSupportedImage('noext')).toBe(false);
     expect(isSupportedImage('')).toBe(false);
+  });
+});
+
+describe('hasHiddenDirectorySegment', () => {
+  it('detects dot-prefixed directories anywhere in the path', () => {
+    expect(hasHiddenDirectorySegment('.git/config.png')).toBe(true);
+    expect(hasHiddenDirectorySegment('photos/.hidden/pic.jpg')).toBe(true);
+    expect(hasHiddenDirectorySegment('photos/.hidden/deep/pic.jpg')).toBe(true);
+    expect(hasHiddenDirectorySegment('a/.b/c.png')).toBe(true);
+  });
+
+  it('accepts plain paths and hidden file names (files are convertible)', () => {
+    expect(hasHiddenDirectorySegment('photo.png')).toBe(false);
+    expect(hasHiddenDirectorySegment('nested/photo.png')).toBe(false);
+    expect(hasHiddenDirectorySegment('.profile.png')).toBe(false);
+    expect(hasHiddenDirectorySegment('')).toBe(false);
   });
 });
 

@@ -10,7 +10,6 @@ import {
   enumerateFiles,
   resolveEntryFile,
   supportsWebpEncoding,
-  writeFileToDir,
 } from '../converter';
 import { triggerDownload } from '../ui/dom';
 import type {
@@ -28,10 +27,27 @@ const CONCURRENCY = 4;
 const HISTORY_KEY = 'pictowebp-history';
 const HISTORY_LIMIT = 50;
 
+function isHistoryEntry(value: unknown): value is HistoryEntry {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as HistoryEntry).id === 'string' &&
+    typeof (value as HistoryEntry).timestamp === 'number'
+  );
+}
+
+/**
+ * Read + validate the persisted history. localStorage content is user- or
+ * extension-mutable, so never trust its shape: a parse failure or a valid
+ * JSON value that is not an entry array yields [] instead of throwing —
+ * a throw here would surface as a failed conversion.
+ */
 function readHistory(): HistoryEntry[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
-    return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isHistoryEntry) : [];
   } catch {
     return [];
   }
@@ -44,7 +60,6 @@ export class BrowserBackend implements ConversionBackend {
     folderPick: 'fs-access',
     lossless: false,
     metadataControl: false,
-    saveToFolder: true,
     openOutputFolder: false,
     historyStore: 'local',
     serverValidate: false,
@@ -167,11 +182,12 @@ export class BrowserBackend implements ConversionBackend {
     emit();
 
     const successful = results.filter((r) => r.success);
+    const failedResults = results.filter((r) => !r.success);
     const originalBytes = successful.reduce((sum, r) => sum + r.originalSize, 0);
     const convertedBytes = successful.reduce((sum, r) => sum + r.convertedSize, 0);
     const bytesSaved = Math.max(0, originalBytes - convertedBytes);
     const failures = [
-      ...results.filter((r) => !r.success).map((r) => ({ name: r.name, reason: r.error ?? 'Conversion failed' })),
+      ...failedResults.map((r) => ({ name: r.name, reason: r.error ?? 'Conversion failed' })),
       ...[...collided].map((p) => ({ name: p, reason: 'Output name collision' })),
     ];
 
@@ -183,7 +199,9 @@ export class BrowserBackend implements ConversionBackend {
       stats: {
         totalFiles: total,
         convertedFiles: successful.length,
-        failedFiles: total - successful.length,
+        // Only attempted files (plus collision skips) count as failed —
+        // files left unprocessed by a cancellation are reported separately.
+        failedFiles: failedResults.length + collided.size,
         originalBytes,
         convertedBytes,
         bytesSaved,
@@ -201,32 +219,19 @@ export class BrowserBackend implements ConversionBackend {
     this.cancelRequested = true;
   }
 
-  async saveToFolder(result: ConversionResult): Promise<{ written: number; failed: string[] }> {
-    const blobs = result.blobs;
-    if (blobs.length === 0) return { written: 0, failed: [] };
-    const outputHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    let written = 0;
-    const failed: string[] = [];
-    for (const entry of blobs) {
-      if (!entry.blob) continue;
-      try {
-        // `entry.name` is the converted path (`.webp`, folder structure kept);
-        // `relativePath` is the original input path and must not be reused.
-        await writeFileToDir(outputHandle, entry.name, entry.blob);
-        written++;
-      } catch {
-        failed.push(entry.name);
-      }
-    }
-    return { written, failed };
-  }
-
   async downloadZip(result: ConversionResult): Promise<void> {
     const blobs = result.blobs.filter((r) => r.blob);
     if (blobs.length === 0) throw new Error('Nothing to download');
     const zip = new JSZip();
     for (const entry of blobs) zip.file(entry.name, entry.blob!);
-    const blob = await zip.generateAsync({ type: 'blob' });
+    // WebP is already compressed — STORE avoids wasting CPU and memory on a
+    // pointless DEFLATE pass, and streaming keeps peak memory low for large
+    // batches.
+    const blob = await zip.generateAsync({
+      type: 'blob',
+      compression: 'STORE',
+      streamFiles: true,
+    });
     triggerDownload(blob, 'converted-images.zip');
   }
 

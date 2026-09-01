@@ -37,6 +37,16 @@ export function isSupportedImage(name: string): boolean {
   return SUPPORTED_EXTENSIONS.has(name.slice(dot).toLowerCase());
 }
 
+/**
+ * True when any *directory* segment of the path is dot-prefixed (hidden),
+ * matching the CLIs and the handle-based enumeration: hidden directories are
+ * skipped, while a hidden file name itself is still convertible.
+ */
+export function hasHiddenDirectorySegment(relativePath: string): boolean {
+  const segments = relativePath.split(/[\\/]/);
+  return segments.slice(0, -1).some((segment) => segment.startsWith('.'));
+}
+
 /** Build the success result shared by every conversion backend. */
 export function successResult(
   file: File,

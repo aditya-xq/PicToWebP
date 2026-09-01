@@ -99,9 +99,8 @@ Features shared across editions — keep them consistent when changing one:
 - There is **one** web UI: `web-ts/`. `main.ts` only talks to the
   `ConversionBackend` interface in `web-ts/src/backend/` — never to HTTP or
   to the worker pool directly. Capabilities (`backend/capabilities`) decide
-  which controls render (lossless/metadata/open-folder are python-only;
-  save-to-folder is browser-only). Add features to the shared UI + both
-  backends, never fork a second UI.
+  which controls render (lossless/metadata/open-folder are python-only).
+  Add features to the shared UI + both backends, never fork a second UI.
 - The stylesheet lives at `web-ts/src/ui.css` (imported by `main.ts` and
   bundled into both build profiles). Restyle there only — never in a separate
   UI. No external assets (fonts/CDNs).
