@@ -13,6 +13,12 @@ dist/
 # Rust
 target/
 
+# Realistic photo set for large-scale E2E runs (downloaded on demand, never committed)
+tests/e2e/real_images/
+tests/e2e/perf-results.json
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/

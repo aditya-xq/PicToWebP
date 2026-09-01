@@ -1,0 +1,271 @@
+/**
+ * Python backend: a thin HTTP client over the local FastAPI server
+ * (pictowebp-web). Used by the `build:python` profile. The server owns the
+ * conversion (Pillow + ProcessPool), the SSE progress stream, ZIP output,
+ * folder browsing, history and "open folder".
+ */
+import { FileResult, formatBytes, formatDuration, replaceExtension } from '../core';
+import { triggerDownload } from '../ui/dom';
+import type {
+  BackendCapabilities,
+  BrowseResult,
+  ConversionBackend,
+  ConversionOptions,
+  ConversionResult,
+  HistoryEntry,
+  ProgressSnapshot,
+  SourceSelection,
+  SourceSummary,
+} from './types';
+import { TERMINAL_STATUSES } from './types';
+
+/** Raw snapshot shape emitted by the server's /progress and /api/status. */
+interface PythonSnapshot {
+  status: string;
+  error?: string | null;
+  total_files: number;
+  processed_files: number;
+  converted_files: number;
+  failed_files: number;
+  original_bytes: number;
+  converted_bytes: number;
+  bytes_saved: number;
+  reduction_percent: number;
+  fraction_complete: number;
+  elapsed_seconds: number;
+  output_folder?: string | null;
+}
+
+interface PythonHistoryEntry {
+  id: string;
+  source_folder: string;
+  total_files: number;
+  converted_files: number;
+  bytes_saved: number;
+  reduction_percent: number;
+  elapsed_seconds: number;
+  timestamp: string;
+}
+
+async function readJson(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function mapProgress(d: PythonSnapshot): ProgressSnapshot {
+  const fraction = d.fraction_complete;
+  return {
+    status: (d.status as ProgressSnapshot['status']) ?? 'running',
+    processed: d.processed_files,
+    total: d.total_files,
+    elapsedSeconds: d.elapsed_seconds,
+    fraction,
+    etaSeconds: fraction > 0 && fraction < 1 ? (d.elapsed_seconds * (1 - fraction)) / fraction : null,
+    error: d.error ?? undefined,
+  };
+}
+
+function fromSnapshot(d: PythonSnapshot): ConversionResult {
+  const converted = d.converted_files;
+  const originalBytes = d.original_bytes;
+  const convertedBytes = d.converted_bytes;
+  const bytesSaved = Math.max(0, originalBytes - convertedBytes);
+  return {
+    ok: converted > 0,
+    cancelled: d.status === 'cancelled',
+    blobs: [],
+    failures: [],
+    stats: {
+      totalFiles: d.total_files,
+      convertedFiles: converted,
+      failedFiles: d.failed_files,
+      originalBytes,
+      convertedBytes,
+      bytesSaved,
+      reductionPercent: originalBytes > 0 ? (bytesSaved / originalBytes) * 100 : 0,
+      elapsedSeconds: d.elapsed_seconds,
+      outputFolder: d.output_folder ?? null,
+    },
+  };
+}
+
+function mapHistoryEntry(h: PythonHistoryEntry): HistoryEntry {
+  const folder = h.source_folder.split(/[\\/]/).pop() || 'Conversion';
+  return {
+    id: h.id,
+    name: folder,
+    files: `${h.converted_files}/${h.total_files}`,
+    saved: formatBytes(h.bytes_saved),
+    percent: `${Number(h.reduction_percent).toFixed(1)}%`,
+    elapsed: formatDuration(h.elapsed_seconds),
+    timestamp: Date.parse(h.timestamp) || Date.now(),
+  };
+}
+
+export class PythonBackend implements ConversionBackend {
+  readonly kind = 'python' as const;
+  readonly capabilities: BackendCapabilities = {
+    kind: 'python',
+    folderPick: 'server-browse',
+    lossless: true,
+    metadataControl: true,
+    saveToFolder: false,
+    openOutputFolder: true,
+    historyStore: 'server',
+    serverValidate: true,
+  };
+
+  async probe(): Promise<boolean> {
+    try {
+      const res = await fetch('/api/status');
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async pickFolder(): Promise<SourceSelection | null> {
+    return null; // The UI opens the server-side browse modal instead.
+  }
+
+  async browse(path: string): Promise<BrowseResult> {
+    const res = await fetch('/api/browse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_folder: path }),
+    });
+    if (!res.ok) throw new Error('Failed to load folders');
+    return res.json();
+  }
+
+  async enumerate(selection: SourceSelection): Promise<SourceSummary> {
+    const res = await fetch('/api/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_folder: selection.folderPath ?? '' }),
+    });
+    const data = await readJson(res);
+    const valid = data?.valid ?? false;
+    return {
+      valid,
+      label: selection.label,
+      totalFiles: data?.total_files ?? 0,
+      totalBytes: data?.total_size_bytes ?? 0,
+      collided: 0,
+      detail: valid
+        ? `${data.total_files} images · ${data.total_size_display}`
+        : data?.error ?? 'No convertible images found',
+    };
+  }
+
+  async convert(
+    selection: SourceSelection,
+    options: ConversionOptions,
+    onProgress: (p: ProgressSnapshot) => void,
+  ): Promise<ConversionResult> {
+    const payload = {
+      source_folder: selection.folderPath,
+      quality: options.quality,
+      lossless: options.lossless,
+      strip_metadata: options.stripMetadata,
+      resize_width: options.resizeWidth,
+      resize_height: options.resizeHeight,
+    };
+    const res = await fetch('/convert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await readJson(res);
+      throw new Error(body?.detail ?? 'Conversion failed to start');
+    }
+
+    const snapshot = await new Promise<PythonSnapshot>((resolve, reject) => {
+      const source = new EventSource('/progress');
+      source.onmessage = (event) => {
+        const data: PythonSnapshot = JSON.parse(event.data);
+        onProgress(mapProgress(data));
+        if (TERMINAL_STATUSES.has(data.status as ProgressSnapshot['status'])) {
+          source.close();
+          resolve(data);
+        }
+      };
+      source.onerror = () => {
+        source.close();
+        reject(new Error('Lost connection to the conversion'));
+      };
+    });
+
+    return fromSnapshot(snapshot);
+  }
+
+  async cancel(): Promise<void> {
+    await fetch('/convert/cancel', { method: 'POST' });
+  }
+
+  async saveToFolder(): Promise<{ written: number; failed: string[] }> {
+    throw new Error('Not supported');
+  }
+
+  async downloadZip(): Promise<void> {
+    const res = await fetch('/api/download-zip');
+    if (!res.ok) {
+      const body = await readJson(res);
+      throw new Error(body?.detail ?? 'Failed to create ZIP');
+    }
+    triggerDownload(await res.blob(), 'converted-images.zip');
+  }
+
+  async openOutputFolder(result: ConversionResult): Promise<void> {
+    const path = result.stats.outputFolder;
+    if (!path) throw new Error('No output folder');
+    const res = await fetch('/api/open-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_folder: path }),
+    });
+    if (!res.ok) throw new Error('Could not open folder');
+  }
+
+  async convertSingle(file: File, options: ConversionOptions): Promise<FileResult> {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('quality', String(options.quality));
+    form.append('lossless', String(options.lossless));
+    form.append('strip_metadata', String(options.stripMetadata));
+    if (options.resizeWidth) form.append('resize_width', String(options.resizeWidth));
+    if (options.resizeHeight) form.append('resize_height', String(options.resizeHeight));
+
+    const res = await fetch('/api/convert-single', { method: 'POST', body: form });
+    if (!res.ok) {
+      const body = await readJson(res);
+      throw new Error(body?.detail ?? 'Conversion failed');
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const match = disposition.match(/filename="?(.+?)"?$/);
+    const name = match ? match[1] : replaceExtension(file.name, '.webp');
+    return {
+      name,
+      relativePath: name,
+      originalSize: file.size,
+      convertedSize: blob.size,
+      success: true,
+      blob,
+    };
+  }
+
+  async getHistory(): Promise<HistoryEntry[]> {
+    const res = await fetch('/api/history');
+    const data = await readJson(res);
+    return (data?.history ?? []).map(mapHistoryEntry);
+  }
+
+  async clearHistory(): Promise<void> {
+    await fetch('/api/history', { method: 'DELETE' });
+  }
+}

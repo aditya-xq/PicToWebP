@@ -32,20 +32,3 @@ class ValidateRequest(BaseModel):
     """Payload accepted by ``POST /api/validate``."""
 
     source_folder: str
-
-
-class ConversionHistoryItem(BaseModel):
-    """A single entry in the conversion history."""
-
-    id: str
-    source_folder: str
-    output_folder: str
-    output_format: str
-    quality: int
-    total_files: int
-    converted_files: int
-    failed_files: int
-    bytes_saved: int
-    reduction_percent: float
-    elapsed_seconds: float
-    timestamp: str

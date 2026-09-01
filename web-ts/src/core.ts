@@ -37,9 +37,36 @@ export function isSupportedImage(name: string): boolean {
   return SUPPORTED_EXTENSIONS.has(name.slice(dot).toLowerCase());
 }
 
-export function imageExtension(name: string): string {
-  const dot = name.lastIndexOf('.');
-  return dot < 0 ? '' : name.slice(dot).toLowerCase();
+/** Build the success result shared by every conversion backend. */
+export function successResult(
+  file: File,
+  relativePath: string,
+  blob: Blob,
+): FileResult {
+  return {
+    name: replaceExtension(relativePath, '.webp'),
+    relativePath,
+    originalSize: file.size,
+    convertedSize: blob.size,
+    success: true,
+    blob,
+  };
+}
+
+/** Build the failure result shared by every conversion backend. */
+export function failureResult(
+  file: File,
+  relativePath: string,
+  err: unknown,
+): FileResult {
+  return {
+    name: relativePath,
+    relativePath,
+    originalSize: file.size,
+    convertedSize: 0,
+    success: false,
+    error: err instanceof Error ? err.message : String(err),
+  };
 }
 
 /**
@@ -115,6 +142,21 @@ export function clampToCanvasLimits(width: number, height: number): { width: num
     newHeight = Math.max(Math.floor(newHeight * scale), 1);
   }
   return { width: newWidth, height: newHeight };
+}
+
+/** Apply user resize caps, then clamp to what the canvas can encode. */
+export function targetDimensions(
+  width: number,
+  height: number,
+  options: ConversionOptions,
+): { width: number; height: number } {
+  const fitted = computeResize(width, height, options.resizeWidth, options.resizeHeight);
+  return clampToCanvasLimits(fitted.width, fitted.height);
+}
+
+/** Normalise a 1-100 quality value to the 0-1 range the canvas API expects. */
+export function webpQuality(quality: number): number {
+  return Math.min(Math.max(quality, 1), 100) / 100;
 }
 
 export function formatBytes(bytes: number): string {

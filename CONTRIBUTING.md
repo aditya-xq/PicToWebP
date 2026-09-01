@@ -9,18 +9,21 @@ from a pull request.
 ```
 ├── src/pictowebp/            # Python package (CLI + FastAPI web UI)
 │   ├── __main__.py           # `python -m pictowebp` entry point
-│   ├── cli.py                # argparse-based CLI
-│   ├── converter.py          # ProcessPool-based conversion engine
+│   ├── cli.py                # argparse CLI: argument parsing, prompts, `main()`
+│   ├── ui.py                 # terminal output: banners, settings, summary (↔ Rust ui.rs)
+│   ├── converter.py          # conversion engine: batch pool + per-file encoding (↔ Rust convert.rs)
+│   ├── discovery.py          # recursive image discovery (↔ Rust discovery.rs)
+│   ├── enums.py              # input/output image format definitions
+│   ├── paths.py              # unique output-folder allocation (↔ Rust paths.rs)
 │   ├── progress.py           # thread-safe progress tracker
-│   ├── utils.py              # image discovery, output-folder resolution, per-file conversion
-│   ├── style.py              # ANSI styling helpers (shared)
+│   ├── utils.py              # error categorization, disk probes, formatting
+│   ├── style.py              # ANSI styling primitives (shared)
 │   ├── constants.py          # tunable constants
-│   ├── web/                  # FastAPI app + single-page web UI
-│   │   ├── app.py
-│   │   └── schemas.py
-│   └── templates/
-│       ├── index.html
-│       └── ui.css            # shared design system (used by web-ts too)
+│   ├── web/                  # FastAPI API server (the SPA itself lives in web-ts/)
+│   │   ├── app.py            # converts via the same engine as the CLI
+│   │   └── schemas.py        # Pydantic request models
+│   ├── console.py            # UTF-8 stdio helpers
+│   └── logging_setup.py      # logging configuration
 ├── src_rust/                 # Rust crate (CLI)
 │   └── src/
 │       ├── main.rs           # entry point, Ctrl+C handling, exit codes
@@ -30,13 +33,24 @@ from a pull request.
 │       ├── convert.rs        # rayon-based conversion engine
 │       ├── discovery.rs      # recursive file walker
 │       └── paths.rs          # unique output-folder allocation
-└── web-ts/                   # Browser-only edition (Vite + TypeScript)
-    └── src/
-        ├── main.ts           # UI state, interactions, history, share-stats
-        ├── converter.ts      # worker pool, Canvas→WebP fallback, folder enumeration
-        ├── worker.ts         # OffscreenCanvas conversion worker
-        └── core.ts           # pure logic: collisions, resize math, formatting
-    └── e2e/                  # Playwright smoke tests (chromium)
+└── web-ts/                   # The single web UI (Vite + TypeScript, two backends)
+    ├── index.html            # one merged markup for both editions
+    ├── src/
+    │   ├── main.ts           # UI state machine + interactions (backend-agnostic)
+    │   ├── ui/               # DOM helpers (dom.ts)
+    │   ├── backend/          # ConversionBackend contract
+    │   │   ├── types.ts      #   interface + capabilities + shared types
+    │   │   ├── browser.ts    #   in-browser engine (workers + FS access + JSZip)
+    │   │   ├── python.ts     #   thin client over the FastAPI API
+    │   │   └── index.ts      #   backend chosen at build time (VITE_BACKEND)
+    │   ├── ui.css            # shared design system (both editions bundle it)
+    │   ├── converter.ts      # worker pool, Canvas→WebP fallback, folder enumeration
+    │   ├── worker.ts         # OffscreenCanvas conversion worker
+    │   └── core.ts           # pure logic: collisions, resize math, formatting
+    ├── e2e/                  # Playwright tests (static/browser backend;
+                          #   batch.spec.ts = multi-file drop → batch → ZIP)
+    └── e2e-python/           # Playwright tests (python backend via FastAPI;
+                              #   batch.spec.ts = live folder conversion → ZIP)
 ```
 
 ## Development Setup
@@ -44,7 +58,7 @@ from a pull request.
 ### Python
 
 ```bash
-uv sync                                   # or: pip install .
+uv sync                                   # or: pip install .[web] (adds the FastAPI server)
 uv run pictowebp path/to/images           # run the CLI
 uv run pictowebp-web                      # run the web UI
 ```
@@ -56,17 +70,21 @@ cd src_rust
 cargo run --release
 ```
 
-### Browser edition
+### Web UI (one SPA, two backends)
 
 ```bash
 cd web-ts
 npm install
-npm run dev            # dev server
-npm run build          # production build into dist/
-npm test               # unit tests for the conversion logic
+npm run dev              # dev server (browser backend)
+npm run build            # static build → dist/  (browser backend, GitHub Pages)
+npm run build:python     # server build → dist-python/  (python backend, FastAPI)
+npm test                 # unit tests for the conversion logic
 ```
 
 ## Running Tests & Linters
+
+> For the full picture — what every suite covers, the shared fixture corpus,
+> and the live e2e guarantees — see [TESTING.md](TESTING.md).
 
 ```bash
 # Python: format, lint, test
@@ -80,22 +98,26 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 
-# Browser edition: typecheck + build + test
+# Web UI: typecheck + build + unit tests
 cd web-ts
 npm run build
+npm run build:python
 npm test
 
-# Browser edition E2E (builds must exist; chromium via `npx playwright install chromium`)
+# Web UI E2E (builds must exist; chromium via `npx playwright install chromium`)
 cd web-ts
-npm run test:e2e
+npm run test:e2e           # static build (browser backend)
+npm run test:e2e:python    # python build served by FastAPI
 ```
 
 All test suites are expected to be green before submitting changes:
 
-- `python -m pytest` — **84 tests** covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, static UI assets, and end-to-end flows.
-- `cargo test` — **33 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), resize behavior, EXIF embedding, atomic file writes, error report persistence, and CLI argument validation.
-- `npm test` (in `web-ts/`) — **20 tests** covering collision detection, canvas-limit clamping, resize math (never upscales), output-name handling, and formatting helpers.
-- `npm run test:e2e` (in `web-ts/`) — **2 Playwright smoke tests** driving the built site in real Chromium (UI load + single-image conversion with download).
+- `python -m pytest` — **97 tests** (96 passed, 1 gated skip on the built SPA) covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, SPA serving, and end-to-end flows — **including 13 live subprocess tests** that run the real `python -m pictowebp` against the shared fixture corpus (exit codes, output-folder contract, collision/hidden/corrupt handling, resize, EXIF keep/strip, lossless, interactive prompts, empty/no-op folders) plus a gated realistic-dataset run with performance capture.
+- `uv run pyright` — **0 errors, 0 warnings** under `[tool.pyright]` config (standard mode, Python 3.10).
+- `cargo test` — **44 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), resize behavior, EXIF embedding, atomic file writes, error report persistence, CLI argument validation — **including 11 live-binary tests** that spawn the compiled executable against the same shared fixture corpus (mirroring the Python subprocess suite plus real decoded-output dimension checks and a gated realistic-dataset run).
+- `npm test` (in `web-ts/`) — **23 tests** covering collision detection, canvas-limit clamping, resize math (never upscales), output-name handling, and formatting helpers.
+- `npm run test:e2e` (in `web-ts/`) — **6 Playwright tests** driving the static build in real Chromium (UI load, single-image conversion, a runtime proof that the conversion makes zero external network requests, a multi-file drop → batch conversion → ZIP download flow, its corrupt-input failure path, and a gated realistic 40-photo batch logging UI-reported throughput).
+- `npm run test:e2e:python` (in `web-ts/`) — **4 Playwright tests** driving the python build served by FastAPI (server edition, single-image upload, a full batch conversion: browse modal → folder convert via SSE → ZIP download inspected in the browser with sad-path results surfaced in the UI, and a gated realistic 40-photo server batch).
 
 Dependencies are declared in `pyproject.toml` (locked via `uv.lock`), `src_rust/Cargo.toml` (locked via `Cargo.lock`), and `web-ts/package.json` (locked via `package-lock.json`).
 
@@ -119,13 +141,14 @@ the privacy guarantee.
 
 ### Shared UI design system
 
-Both web UIs (Python template and browser edition) use one stylesheet:
-`src/pictowebp/templates/ui.css` — the "Obsidian Glass" design system (tokens,
-glassmorphism, components, responsive breakpoints). The Python app serves it at
-`/static/ui.css`; the browser edition bundles it via an import in
-`web-ts/src/main.ts`. Change the design in `ui.css` only — never restyle one UI
-independently. The Python UI loads no external assets (no Tailwind CDN, no web
-fonts), so the whole product stays fully offline.
+There is one web UI and one stylesheet: `web-ts/src/ui.css` — the "Obsidian
+Glass" design system (tokens, glassmorphism, components, responsive
+breakpoints). Both build profiles bundle it via an import in
+`web-ts/src/main.ts`. Change the design in `ui.css` only. The UI loads no
+external assets (no Tailwind CDN, no web fonts), so the whole product stays
+fully offline. The single UI is driven by the `ConversionBackend` interface in
+`web-ts/src/backend/`; the python profile and the static profile are the same
+codebase with a different backend chosen at build time.
 
 ## Pull Requests
 
@@ -175,7 +198,7 @@ API. Only one conversion runs at a time; concurrent requests get `429 Too Many R
 
 | Endpoint | Method | Description |
 | ------------------ | ------ | ---------------------------------------------------------------------- |
-| `/` | GET | The web UI |
+| `/` | GET | The unified SPA (served from `web-ts/dist-python`) |
 | `/convert` | POST | Start a conversion job (`202 Accepted`) |
 | `/convert/cancel` | POST | Request cancellation of the current job |
 | `/progress` | GET | Server-sent events with live progress snapshots |
@@ -187,9 +210,7 @@ API. Only one conversion runs at a time; concurrent requests get `429 Too Many R
 | `/api/open-folder` | POST | Open a folder in the OS file explorer |
 | `/api/convert-single` | POST | Convert one uploaded image and stream the result back |
 | `/api/download-zip` | GET | Stream the last conversion's output folder as a ZIP |
-| `/static/ui.css` | GET | Shared design system (bundled by the browser edition too) |
-| `/static/app.js` | GET | Web UI application logic |
-| `/static/ui-core.js` | GET | Shared UI helpers (formatting, toasts) |
+| `/assets/*` | GET | Bundled SPA assets (from `web-ts/dist-python`) |
 
 Example:
 

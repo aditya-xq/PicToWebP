@@ -28,6 +28,11 @@ classifiers = [
 dependencies = [
     "pillow>=12.3",
     "tqdm>=4.70",
+]
+
+[project.optional-dependencies]
+# The local web UI (FastAPI server). CLI-only installs skip these.
+web = [
     "fastapi>=0.141",
     "uvicorn>=0.52",
     "python-multipart>=0.0.20",
@@ -42,6 +47,10 @@ dev = [
     "pytest>=9.1",
     "httpx2>=2.12",
     "ruff>=0.16",
+    "pyright>=1.1.400",
+    "fastapi>=0.141",
+    "uvicorn>=0.52",
+    "python-multipart>=0.0.20",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -50,6 +59,11 @@ packages = ["src/pictowebp"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["src", "tests"]
+typeCheckingMode = "standard"
 
 [tool.ruff]
 line-length = 100

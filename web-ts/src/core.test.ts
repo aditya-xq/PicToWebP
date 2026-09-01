@@ -10,6 +10,8 @@ import {
   formatDuration,
   isSupportedImage,
   replaceExtension,
+  targetDimensions,
+  webpQuality,
 } from './core';
 
 describe('isSupportedImage', () => {
@@ -131,9 +133,33 @@ describe('clampToCanvasLimits', () => {
     expect(r.width * r.height).toBeLessThanOrEqual(MAX_CANVAS_AREA);
   });
 
-  it('never returns zero or negative dimensions', () => {
+it('never returns zero or negative dimensions', () => {
     const r = clampToCanvasLimits(MAX_CANVAS_SIDE + 1, 1);
     expect(r.width).toBeGreaterThanOrEqual(1);
     expect(r.height).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('targetDimensions', () => {
+  it('applies user resize caps before canvas clamping', () => {
+    const options = { quality: 80, resizeWidth: 320, resizeHeight: null };
+    expect(targetDimensions(640, 480, options)).toEqual({ width: 320, height: 240 });
+  });
+
+  it('clamps oversized inputs to the canvas limits', () => {
+    const options = { quality: 80, resizeWidth: null, resizeHeight: null };
+    const r = targetDimensions(40000, 20000, options);
+    expect(r.width).toBeLessThanOrEqual(MAX_CANVAS_SIDE);
+    expect(r.height).toBeLessThanOrEqual(MAX_CANVAS_SIDE);
+    expect(r.width * r.height).toBeLessThanOrEqual(MAX_CANVAS_AREA);
+  });
+});
+
+describe('webpQuality', () => {
+  it('normalises the 1-100 slider value to the 0-1 range', () => {
+    expect(webpQuality(80)).toBe(0.8);
+    expect(webpQuality(100)).toBe(1);
+    expect(webpQuality(0)).toBe(0.01);
+    expect(webpQuality(150)).toBe(1);
   });
 });

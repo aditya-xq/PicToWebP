@@ -1,517 +1,38 @@
-// Shared design system — single source of truth used by the Python web UI too
-// (served from src/pictowebp/templates/, packaged with the Python app).
-import '../../src/pictowebp/templates/ui.css';
-import JSZip from 'jszip';
-import {
-  FileResult,
-  estimateEtaSeconds,
-  findCollisions,
-  formatBytes,
-  formatDuration,
-  isSupportedImage,
-} from './core';
-import {
-  DirEntry,
-  convertFile,
-  enumerateFiles,
-  resolveEntryFile,
-  supportsWebpEncoding,
-  writeFileToDir,
-} from './converter';
+// Single UI for PicToWebP. The conversion engine behind it is chosen at build
+// time by the Vite profile: static build → in-browser workers, python build →
+// the local FastAPI server. All UI code talks to the ConversionBackend contract.
+import './ui.css';
+import { createBackend } from './backend';
+import type {
+  ConversionBackend,
+  ConversionOptions,
+  ConversionResult,
+  ProgressSnapshot,
+  SourceSelection,
+} from './backend';
+import { formatBytes, formatDuration, isSupportedImage } from './core';
+import { $ } from './ui/dom';
+import { clearHistory, closeHistory, openHistory } from './ui/history';
+import { entriesFromDrop, hasFiles } from './ui/drop';
+import { shareStats, type ShareStats } from './ui/share';
+import { showToast } from './ui/toasts';
 
 type Mode = 'folder' | 'single';
 type AppState = 'idle' | 'running' | 'complete' | 'error';
 
-interface HistoryEntry {
-  id: string;
-  name: string;
-  files: string;
-  saved: string;
-  percent: string;
-  elapsed: string;
-  timestamp: number;
-}
-
-const HISTORY_KEY = 'pictowebp-history';
-const HISTORY_LIMIT = 50;
-const CONCURRENCY = 4;
+const backend: ConversionBackend = createBackend();
+const cap = backend.capabilities;
 
 let mode: Mode = 'folder';
 let isConverting = false;
-let cancelRequested = false;
-let folderHandle: FileSystemDirectoryHandle | null = null;
-let files: DirEntry[] = [];
-let results: FileResult[] = [];
-let collidedPaths: Set<string> = new Set();
-let elapsedTimer: ReturnType<typeof setInterval> | null = null;
-let startedAt = 0;
-let elapsedSeconds = 0;
-let lastStats: {
-  saved: string;
-  percent: string;
-  files: string;
-  elapsed: string;
-  quality: number;
-  original: string;
-  webp: string;
-} | null = null;
+let selection: SourceSelection | null = null;
+let selectionValid = false;
+let result: ConversionResult | null = null;
+let lastStats: ShareStats | null = null;
 let previewUrl: string | null = null;
-
-const $ = (id: string): HTMLElement => {
-  const el = document.getElementById(id);
-  if (!el) throw new Error(`Missing element #${id}`);
-  return el;
-};
-
-document.addEventListener('DOMContentLoaded', () => {
-  if (!supportsWebpEncoding()) {
-    showToast('Your browser cannot encode WebP. Try a recent Chrome or Edge.', 'error');
-    return;
-  }
-  initUI();
-  // Don't lose an in-flight batch to an accidental tab close.
-  window.addEventListener('beforeunload', (e) => {
-    if (isConverting) {
-      e.preventDefault();
-      e.returnValue = '';
-    }
-  });
-});
-
-function initUI(): void {
-  // Quality
-  const slider = $('quality-slider') as HTMLInputElement;
-  slider.addEventListener('input', () => {
-    $('quality-value').textContent = slider.value;
-    slider.setAttribute('aria-valuetext', `${slider.value} out of 100`);
-    updateSliderFill();
-  });
-  updateSliderFill();
-  document.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      slider.value = btn.dataset.preset!;
-      $('quality-value').textContent = slider.value;
-      updateSliderFill();
-    });
-  });
-
-  // Resize toggle
-  const resizeToggle = $('toggle-resize');
-  const flipResize = () => {
-    resizeToggle.classList.toggle('active');
-    resizeToggle.setAttribute(
-      'aria-checked',
-      String(resizeToggle.classList.contains('active')),
-    );
-    $('resize-inputs').classList.toggle('hidden');
-  };
-  resizeToggle.addEventListener('click', flipResize);
-  resizeToggle.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      flipResize();
-    }
-  });
-
-  // Mode tabs
-  document.querySelectorAll<HTMLButtonElement>('.mode-tab').forEach((tab) => {
-    tab.addEventListener('click', () => setMode(tab.dataset.mode as Mode));
-  });
-
-  // Folder mode
-  $('drop-zone').addEventListener('click', pickFolder);
-  $('drop-zone').addEventListener('dragover', (e) => onDragOver(e, $('drop-zone')));
-  $('drop-zone').addEventListener('dragleave', () => $('drop-zone').classList.remove('drag-over'));
-  $('drop-zone').addEventListener('drop', (e) => onDrop(e));
-  wireZoneKeyboard($('drop-zone'), () => void pickFolder());
-
-  // Single mode
-  $('single-drop-zone').addEventListener('click', () => ($('single-file-input') as HTMLInputElement).click());
-  $('single-drop-zone').addEventListener('dragover', (e) => onDragOver(e, $('single-drop-zone')));
-  $('single-drop-zone').addEventListener('dragleave', () => $('single-drop-zone').classList.remove('drag-over'));
-  $('single-drop-zone').addEventListener('drop', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    $('single-drop-zone').classList.remove('drag-over');
-    hideDragOverlay();
-    const file = e.dataTransfer?.files[0];
-    if (file) handleSingleFile(file);
-  });
-  wireZoneKeyboard(
-    $('single-drop-zone'),
-    () => ($('single-file-input') as HTMLInputElement).click(),
-  );
-  $('single-file-input').addEventListener('change', (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) handleSingleFile(file);
-  });
-
-  // Full-window drag overlay — drop anywhere to convert.
-  wireDragOverlay();
-
-  // Actions
-  $('convert-btn').addEventListener('click', () => void startConversion());
-  $('cancel-btn').addEventListener('click', cancelConversion);
-  $('convert-more-btn').addEventListener('click', resetUI);
-  $('try-again-btn').addEventListener('click', resetUI);
-  $('save-folder-btn').addEventListener('click', () => void saveToFolder());
-  $('download-zip-btn').addEventListener('click', () => void downloadZip());
-  $('share-btn').addEventListener('click', shareStats);
-  $('convert-another-btn').addEventListener('click', convertAnotherSingle);
-
-  // History
-  $('history-btn').addEventListener('click', openHistory);
-  $('history-close-btn').addEventListener('click', closeHistory);
-  $('history-overlay').addEventListener('click', closeHistory);
-  $('history-clear-btn').addEventListener('click', clearHistory);
-
-  // Shortcuts modal
-  $('shortcuts-btn').addEventListener('click', () => showShortcuts(true));
-  $('shortcuts-close-btn').addEventListener('click', () => showShortcuts(false));
-  $('shortcuts-overlay').addEventListener('click', () => showShortcuts(false));
-
-  document.addEventListener('keydown', (e) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      void startConversion();
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      void startConversion();
-    } else if (e.key === 'Escape') {
-      if (!$('history-panel').classList.contains('hidden')) closeHistory();
-      else if (!$('shortcuts-modal').classList.contains('hidden')) showShortcuts(false);
-      else if (isConverting) cancelConversion();
-    } else if (e.key === 'h' || e.key === 'H') openHistory();
-    else if (e.key === 'b' || e.key === 'B') void pickFolder();
-    else if (e.key === '?') showShortcuts(true);
-  });
-
-  document.addEventListener('paste', (e) => {
-    const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
-      i.type.startsWith('image/'),
-    );
-    const file = item?.getAsFile();
-    if (!file) return;
-    setMode('single');
-    handleSingleFile(file);
-  });
-}
-
-/** Make a drop zone keyboard-operable (Enter/Space activate it). */
-function wireZoneKeyboard(zone: HTMLElement, activate: () => void): void {
-  zone.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      e.stopPropagation();
-      activate();
-    }
-  });
-}
-
-/* --------------------- Full-window drag overlay ---------------------- */
-
 let dragDepth = 0;
 
-function showDragOverlay(): void {
-  $('drag-overlay').classList.remove('hidden');
-}
-
-function hideDragOverlay(): void {
-  dragDepth = 0;
-  $('drag-overlay').classList.add('hidden');
-}
-
-function wireDragOverlay(): void {
-  const hasFiles = (e: DragEvent): boolean =>
-    Array.from(e.dataTransfer?.types ?? []).includes('Files');
-
-  window.addEventListener('dragenter', (e) => {
-    if (!hasFiles(e)) return;
-    e.preventDefault();
-    dragDepth++;
-    showDragOverlay();
-  });
-  window.addEventListener('dragover', (e) => {
-    if (hasFiles(e)) e.preventDefault();
-  });
-  window.addEventListener('dragleave', (e) => {
-    if (!hasFiles(e)) return;
-    if (--dragDepth <= 0) hideDragOverlay();
-  });
-  window.addEventListener('drop', (e) => {
-    if (!hasFiles(e)) return;
-    e.preventDefault();
-    hideDragOverlay();
-    if (isConverting) return;
-
-    // Drop anywhere: route by mode. Zone-level handlers stopPropagation, so
-    // this only fires for drops outside the drop zones.
-    const files = e.dataTransfer?.files;
-    if (!files?.length) return;
-    if (mode === 'single') {
-      setMode('single');
-      handleSingleFile(files[0]);
-      return;
-    }
-    void (async () => {
-      const entries = await entriesFromDrop(e.dataTransfer!.items, files);
-      const images = entries.filter((entry) => entry.file);
-      if (images.length > 0) setSelection(images, 'Dropped files');
-    })();
-  });
-}
-
-function updateSliderFill(): void {
-  const slider = $('quality-slider') as HTMLInputElement;
-  const pct = ((Number(slider.value) - 1) / 99) * 100;
-  slider.style.background = `linear-gradient(90deg, var(--brand-500) 0%, var(--brand-500) ${pct}%, var(--track-tail) ${pct}%, var(--track-tail) 100%)`;
-}
-
-function setMode(next: Mode): void {
-  mode = next;
-  for (const tab of document.querySelectorAll('.mode-tab')) {
-    tab.classList.toggle('active', (tab as HTMLElement).dataset.mode === next);
-  }
-  $('mode-folder').classList.toggle('hidden', next !== 'folder');
-  $('mode-single').classList.toggle('hidden', next !== 'single');
-}
-
-function onDragOver(e: DragEvent, zone: HTMLElement): void {
-  e.preventDefault();
-  zone.classList.add('drag-over');
-}
-
-/**
- * Walk dropped items via their filesystem entries so dropped *folders* work
- * too, matching the CLIs' recursive behavior. `webkitGetAsEntry()` must be
- * read synchronously — item lists are invalidated once the handler yields.
- */
-async function entriesFromDrop(items: DataTransferItemList, files: FileList): Promise<DirEntry[]> {
-  const dropEntries = Array.from(items)
-    .map((item) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null))
-    .filter((entry): entry is FileSystemEntry => entry !== null);
-
-  if (dropEntries.length === 0) {
-    return Array.from(files)
-      .filter((f) => isSupportedImage(f.name))
-      .map((file) => ({ file, relativePath: file.name }));
-  }
-
-  const collected: DirEntry[] = [];
-  for (const entry of dropEntries) {
-    collected.push(...(await walkEntry(entry, '')));
-  }
-  return collected;
-}
-
-async function walkEntry(entry: FileSystemEntry, base: string, depth: number = 32): Promise<DirEntry[]> {
-  const path = base ? `${base}/${entry.name}` : entry.name;
-  if (entry.isFile) {
-    if (!isSupportedImage(entry.name)) return [];
-    const file = await new Promise<File>((resolve, reject) =>
-      (entry as FileSystemFileEntry).file(resolve, reject),
-    );
-    return [{ file, relativePath: path }];
-  }
-  if (entry.isDirectory && !entry.name.startsWith('.') && depth > 0) {
-    const reader = (entry as FileSystemDirectoryEntry).createReader();
-    const out: DirEntry[] = [];
-    // readEntries returns at most ~100 entries per call — loop until empty.
-    for (;;) {
-      const batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
-        reader.readEntries(resolve, reject),
-      );
-      if (batch.length === 0) break;
-      for (const child of batch) {
-        out.push(...(await walkEntry(child, path, depth - 1)));
-      }
-    }
-    return out;
-  }
-  return [];
-}
-
-async function onDrop(e: DragEvent): Promise<void> {
-  e.preventDefault();
-  e.stopPropagation();
-  $('drop-zone').classList.remove('drag-over');
-  hideDragOverlay();
-  if (!e.dataTransfer || isConverting) return;
-
-  const entries = await entriesFromDrop(e.dataTransfer.items, e.dataTransfer.files);
-  const images = entries.filter((entry) => entry.file && isSupportedImage(entry.relativePath.split('/').pop() ?? ''));
-  if (images.length > 0) {
-    setSelection(images, 'Dropped files');
-  }
-}
-
-async function pickFolder(): Promise<void> {
-  if (isConverting) return;
-  try {
-    const handle = await window.showDirectoryPicker({ mode: 'read' });
-    await setFolderHandle(handle);
-  } catch (err) {
-    if ((err as Error).name !== 'AbortError') showToast('Could not open folder', 'error');
-  }
-}
-
-async function setFolderHandle(handle: FileSystemDirectoryHandle): Promise<void> {
-  folderHandle = handle;
-  showToast('Scanning folder...', 'info');
-  files = await enumerateFiles(handle);
-  renderSelection(handle.name);
-}
-
-function setSelection(entries: DirEntry[], label: string): void {
-  folderHandle = null;
-  files = entries;
-  renderSelection(label);
-}
-
-function renderSelection(label: string): void {
-  const badge = $('source-badge');
-  const info = $('source-info');
-  $('source-path').textContent = label;
-  badge.classList.remove('hidden');
-
-  collidedPaths = findCollisions(files.map((f) => f.relativePath));
-  // Entries from picked folders keep lazy handles, so byte totals are only
-  // shown when every entry is an in-memory file (drops/pastes).
-  const knownBytes = files.every((f) => f.file);
-  const totalBytes = files.reduce((sum, f) => sum + (f.file?.size ?? 0), 0);
-  const skipped = collidedPaths.size;
-
-  if (files.length === 0) {
-    info.textContent = 'No supported images found';
-    info.classList.add('invalid');
-  } else {
-    info.textContent =
-      `${files.length} image${files.length === 1 ? '' : 's'}` +
-      (knownBytes ? ` · ${formatBytes(totalBytes)}` : '') +
-      (skipped > 0 ? ` · ${skipped} skipped (name conflicts)` : '');
-    info.classList.remove('invalid');
-  }
-  ($('convert-btn') as HTMLButtonElement).disabled = files.length === 0 || isConverting;
-}
-
-function getOptions() {
-  const resizeActive = $('toggle-resize').classList.contains('active');
-  const width = ($('resize-width') as HTMLInputElement).valueAsNumber;
-  const height = ($('resize-height') as HTMLInputElement).valueAsNumber;
-  return {
-    quality: Number(($('quality-slider') as HTMLInputElement).value),
-    resizeWidth: resizeActive && Number.isFinite(width) ? width : null,
-    resizeHeight: resizeActive && Number.isFinite(height) ? height : null,
-  };
-}
-
-async function startConversion(): Promise<void> {
-  if (isConverting || mode !== 'folder' || files.length === 0) return;
-
-  isConverting = true;
-  cancelRequested = false;
-  results = [];
-  elapsedSeconds = 0;
-  startedAt = performance.now();
-
-  const options = getOptions();
-  const queue = files.filter((f) => !collidedPaths.has(f.relativePath));
-  if (queue.length === 0) {
-    isConverting = false;
-    showToast('All files were skipped due to name conflicts', 'error');
-    return;
-  }
-  showState('running');
-  updateProgress(0, files.length);
-  showToast(`Converting ${files.length} image${files.length === 1 ? '' : 's'} to WebP...`, 'info');
-
-  elapsedTimer = setInterval(() => {
-    elapsedSeconds = (performance.now() - startedAt) / 1000;
-    const frac = results.length / files.length;
-    const eta = estimateEtaSeconds(elapsedSeconds, frac);
-    $('running-elapsed').textContent = `${formatDuration(elapsedSeconds)} elapsed`;
-    $('running-eta').textContent = eta === null ? '--' : formatDuration(eta);
-  }, 100);
-
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < queue.length && !cancelRequested) {
-      const entry = queue[next++];
-      try {
-        const file = await resolveEntryFile(entry);
-        const result = await convertFile(file, options, entry.relativePath);
-        results.push(result);
-      } catch (err) {
-        // File vanished or became unreadable between scan and convert.
-        results.push({
-          name: entry.relativePath,
-          relativePath: entry.relativePath,
-          originalSize: entry.file?.size ?? 0,
-          convertedSize: 0,
-          success: false,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      updateProgress(results.length, files.length);
-    }
-  };
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-
-  stopTimer();
-  const elapsed = (performance.now() - startedAt) / 1000;
-  isConverting = false;
-
-  if (cancelRequested) {
-    const kept = results.filter((r) => r.success).length;
-    if (kept > 0) {
-      // Graceful cancellation: keep and offer everything already converted.
-      showComplete(elapsed);
-      showToast(`Cancelled — ${kept} converted file${kept === 1 ? '' : 's'} kept`, 'warn');
-    } else {
-      showState('idle');
-      showToast('Conversion cancelled', 'warn');
-    }
-    return;
-  }
-
-  const failures = results.filter((r) => !r.success).length;
-  if (results.length > 0 && failures === results.length) {
-    showState('error');
-    $('error-message').textContent = 'No images could be converted.';
-    return;
-  }
-  showComplete(elapsed);
-}
-
-function countFailures(): number {
-  return results.filter((r) => !r.success).length + collidedPaths.size;
-}
-
-function stopTimer(): void {
-  if (elapsedTimer) {
-    clearInterval(elapsedTimer);
-    elapsedTimer = null;
-  }
-}
-
-function updateProgress(processed: number, total: number): void {
-  const fraction = total > 0 ? processed / total : 0;
-  $('progress-bar').style.width = `${Math.round(fraction * 100)}%`;
-  $('progress-percent').textContent = `${Math.round(fraction * 100)}%`;
-  $('running-processed').textContent = String(processed);
-  $('running-total').textContent = String(total);
-}
-
-function cancelConversion(): void {
-  if (!isConverting) return;
-  cancelRequested = true;
-  const btn = $('cancel-btn') as HTMLButtonElement;
-  btn.disabled = true;
-  btn.textContent = 'Cancelling...';
-  showToast('Finishing in-flight conversions...', 'warn');
-}
+/* ------------------------------ Helpers ------------------------------ */
 
 function showState(next: AppState): void {
   for (const s of ['idle', 'running', 'complete', 'error']) {
@@ -524,94 +45,301 @@ function showState(next: AppState): void {
   }
 }
 
-function showComplete(elapsed: number): void {
+function setMode(next: Mode): void {
+  mode = next;
+  for (const tab of document.querySelectorAll('.mode-tab')) {
+    tab.classList.toggle('active', (tab as HTMLElement).dataset.mode === next);
+  }
+  $('mode-folder').classList.toggle('hidden', next !== 'folder');
+  $('mode-single').classList.toggle('hidden', next !== 'single');
+}
+
+function updateSliderFill(): void {
+  const slider = $('quality-slider') as HTMLInputElement;
+  const pct = ((Number(slider.value) - 1) / 99) * 100;
+  slider.style.background = `linear-gradient(90deg, var(--brand-500) 0%, var(--brand-500) ${pct}%, var(--track-tail) ${pct}%, var(--track-tail) 100%)`;
+}
+
+function updateConvertButton(): void {
+  ($('convert-btn') as HTMLButtonElement).disabled = !selection || !selectionValid || isConverting;
+}
+
+function getOptions(): ConversionOptions {
+  const resizeActive = $('toggle-resize').classList.contains('active');
+  const width = ($('resize-width') as HTMLInputElement).valueAsNumber;
+  const height = ($('resize-height') as HTMLInputElement).valueAsNumber;
+  const losslessEl = document.getElementById('toggle-lossless');
+  const metadataEl = document.getElementById('toggle-metadata');
+  return {
+    quality: Number(($('quality-slider') as HTMLInputElement).value),
+    lossless: cap.lossless && (losslessEl?.classList.contains('active') ?? false),
+    stripMetadata: cap.metadataControl ? (metadataEl?.classList.contains('active') ?? true) : true,
+    resizeWidth: resizeActive && Number.isFinite(width) ? width : null,
+    resizeHeight: resizeActive && Number.isFinite(height) ? height : null,
+  };
+}
+
+/* ------------------------------ Toggles ------------------------------ */
+
+function bindToggle(el: HTMLElement, onChange?: () => void): void {
+  el.addEventListener('click', () => {
+    el.classList.toggle('active');
+    el.setAttribute('aria-checked', String(el.classList.contains('active')));
+    onChange?.();
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      el.click();
+    }
+  });
+}
+
+/* --------------------------- Source selection --------------------------- */
+
+async function setSource(sel: SourceSelection): Promise<void> {
+  selection = sel;
+  const badge = $('source-badge');
+  badge.classList.remove('hidden');
+  $('source-path').textContent = sel.label;
+  $('source-path').title = sel.label;
+
+  const info = $('source-info');
+  info.classList.remove('invalid');
+  info.textContent = 'Scanning…';
+  selectionValid = false;
+  updateConvertButton();
+
+  try {
+    const summary = await backend.enumerate(sel);
+    selection = sel;
+    selectionValid = summary.valid;
+    info.textContent = summary.valid
+      ? summary.detail
+      : sel.entries?.length === 0 && cap.kind === 'browser'
+        ? 'No supported images found'
+        : summary.detail;
+    if (!summary.valid) info.classList.add('invalid');
+  } catch {
+    info.textContent = 'Could not read the folder';
+    info.classList.add('invalid');
+    selectionValid = false;
+  }
+  updateConvertButton();
+}
+
+async function selectFolder(): Promise<void> {
+  if (isConverting) return;
+  if (cap.folderPick === 'server-browse') {
+    openBrowse();
+    return;
+  }
+  try {
+    const sel = await backend.pickFolder();
+    if (sel) await setSource(sel);
+  } catch (err) {
+    if ((err as Error).name !== 'AbortError') showToast('Could not open folder', 'error');
+  }
+}
+
+/* ----------------------------- Conversion ----------------------------- */
+
+function renderProgress(p: ProgressSnapshot): void {
+  $('progress-bar').style.width = `${Math.round(p.fraction * 100)}%`;
+  $('progress-percent').textContent = `${Math.round(p.fraction * 100)}%`;
+  $('running-processed').textContent = String(p.processed);
+  $('running-total').textContent = String(p.total);
+  $('running-elapsed').textContent = `${formatDuration(p.elapsedSeconds)} elapsed`;
+  $('running-eta').textContent = p.etaSeconds === null ? '--' : formatDuration(p.etaSeconds);
+}
+
+async function startConversion(): Promise<void> {
+  if (isConverting || mode !== 'folder' || !selection || !selectionValid) return;
+  isConverting = true;
+  updateConvertButton();
+  showState('running');
+  updateConvertButton();
+  showToast('Converting to WebP...', 'info');
+
+  const options = getOptions();
+  const sel = selection;
+  try {
+    const done = await backend.convert(sel, options, renderProgress);
+    isConverting = false;
+    result = done;
+    if (done.cancelled && !done.ok) {
+      showState('idle');
+      showToast('Conversion cancelled', 'warn');
+    } else if (done.stats.convertedFiles === 0 && done.stats.failedFiles > 0) {
+      showState('error');
+      $('error-message').textContent = 'No images could be converted.';
+    } else {
+      showComplete(done);
+      showToast(
+        done.cancelled
+          ? `Cancelled — ${done.stats.convertedFiles} converted file${done.stats.convertedFiles === 1 ? '' : 's'} kept`
+          : 'WebP conversion complete!',
+        done.cancelled ? 'warn' : 'success',
+      );
+    }
+  } catch (err) {
+    isConverting = false;
+    showState('error');
+    $('error-message').textContent = err instanceof Error ? err.message : String(err);
+    showToast('Conversion failed', 'error');
+  }
+}
+
+function showComplete(done: ConversionResult): void {
   showState('complete');
+  const stats = done.stats;
+  const percent = stats.reductionPercent.toFixed(1);
 
-  const successful = results.filter((r) => r.success);
-  const originalBytes = successful.reduce((sum, r) => sum + r.originalSize, 0);
-  const convertedBytes = successful.reduce((sum, r) => sum + r.convertedSize, 0);
-  const saved = Math.max(0, originalBytes - convertedBytes);
-  const percent = originalBytes > 0 ? ((saved / originalBytes) * 100).toFixed(1) : '0.0';
-  const failedCount = countFailures();
-
-  $('complete-time').textContent = `Finished in ${formatDuration(elapsed)}`;
-  $('stat-saved').textContent = formatBytes(saved);
+  $('complete-time').textContent = `Finished in ${formatDuration(stats.elapsedSeconds)}`;
+  $('stat-saved').textContent = formatBytes(stats.bytesSaved);
   $('stat-saved-pct').textContent = `${percent}% reduction`;
-  $('stat-converted').textContent = `${successful.length} / ${files.length}`;
-  $('stat-failed').textContent = failedCount > 0 ? `${failedCount} failed` : 'All successful';
-  $('stat-original').textContent = formatBytes(originalBytes);
-  $('stat-new').textContent = formatBytes(convertedBytes);
+  $('stat-converted').textContent = `${stats.convertedFiles} / ${stats.totalFiles}`;
+  $('stat-failed').textContent = stats.failedFiles > 0 ? `${stats.failedFiles} failed` : 'All successful';
+  $('stat-original').textContent = formatBytes(stats.originalBytes);
+  $('stat-new').textContent = formatBytes(stats.convertedBytes);
 
-  const collisionsNote = $('collisions-note');
-  if (collidedPaths.size > 0) {
-    collisionsNote.textContent =
-      `${collidedPaths.size} file(s) skipped: multiple inputs map to the same .webp output name.`;
-    collisionsNote.classList.remove('hidden');
+  const collisions = done.failures.filter((f) => f.reason.includes('collision')).length;
+  const note = $('collisions-note');
+  if (collisions > 0) {
+    note.textContent = `${collisions} file(s) skipped: multiple inputs map to the same .webp output name.`;
+    note.classList.remove('hidden');
   } else {
-    collisionsNote.classList.add('hidden');
+    note.classList.add('hidden');
   }
 
-  lastStats = {
-    saved: formatBytes(saved),
-    percent,
-    files: `${successful.length} / ${files.length}`,
-    elapsed: formatDuration(elapsed),
-    quality: Number(($('quality-slider') as HTMLInputElement).value),
-    original: formatBytes(originalBytes),
-    webp: formatBytes(convertedBytes),
-  };
-  pushHistory({
-    id: Math.random().toString(36).slice(2, 10),
-    name: folderHandle?.name ?? 'Dropped files',
-    files: `${successful.length}/${files.length}`,
-    saved: formatBytes(saved),
-    percent: `${percent}%`,
-    elapsed: formatDuration(elapsed),
-    timestamp: Date.now(),
-  });
+  const outputFolder = stats.outputFolder;
+  $('stat-output-folder').classList.toggle('hidden', !outputFolder);
+  if (outputFolder) $('stat-output-path').textContent = outputFolder;
+  ($('open-folder-btn') as HTMLButtonElement).classList.toggle('hidden', !cap.openOutputFolder || !outputFolder);
+  ($('save-folder-btn') as HTMLButtonElement).classList.toggle('hidden', !cap.saveToFolder || done.blobs.length === 0);
 
-  showToast('WebP conversion complete!', 'success');
+  lastStats = {
+    saved: formatBytes(stats.bytesSaved),
+    percent,
+    files: `${stats.convertedFiles} / ${stats.totalFiles}`,
+    elapsed: formatDuration(stats.elapsedSeconds),
+    quality: Number(($('quality-slider') as HTMLInputElement).value),
+    original: formatBytes(stats.originalBytes),
+    webp: formatBytes(stats.convertedBytes),
+  };
+}
+
+async function cancelConversion(): Promise<void> {
+  if (!isConverting) return;
+  const btn = $('cancel-btn') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = 'Cancelling...';
+  showToast('Finishing in-flight conversions...', 'warn');
+  try {
+    await backend.cancel();
+  } catch {
+    showToast('Failed to cancel', 'error');
+  }
 }
 
 function resetUI(): void {
   showState('idle');
-  files = [];
-  results = [];
-  collidedPaths = new Set();
-  folderHandle = null;
+  selection = null;
+  selectionValid = false;
+  result = null;
   $('progress-bar').style.width = '0%';
   $('source-badge').classList.add('hidden');
-  ($('convert-btn') as HTMLButtonElement).disabled = true;
+  updateConvertButton();
+  setMode('folder');
+  $('single-upload').classList.remove('hidden');
+  $('single-converting').classList.add('hidden');
+  $('single-result').classList.add('hidden');
+  ($('single-file-input') as HTMLInputElement).value = '';
+  if (previewUrl) {
+    URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
+  }
 }
 
-/* ------------------------------ Single mode ------------------------------ */
+/* ------------------------------ Results ------------------------------ */
+
+async function saveToFolder(): Promise<void> {
+  if (!result || result.blobs.length === 0) {
+    showToast('No converted files to save', 'error');
+    return;
+  }
+  try {
+    const { written, failed } = await backend.saveToFolder(result);
+    if (failed.length > 0) {
+      showToast(`Saved ${written} files; failed to write ${failed.length} (you can retry)`, 'warn');
+    } else {
+      showToast(`Saved ${written} files`, 'success');
+      releaseBlobs();
+    }
+  } catch (err) {
+    if ((err as Error).name !== 'AbortError') showToast('Could not write files', 'error');
+  }
+}
+
+async function downloadZip(): Promise<void> {
+  if (!result) {
+    showToast('Nothing to download yet', 'error');
+    return;
+  }
+  showToast('Preparing ZIP...', 'info');
+  try {
+    await backend.downloadZip(result);
+    showToast('ZIP downloaded', 'success');
+    if (cap.kind === 'browser') releaseBlobs();
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : 'Failed to create ZIP', 'error');
+  }
+}
+
+async function openOutputFolder(): Promise<void> {
+  if (!result) return;
+  try {
+    await backend.openOutputFolder(result);
+    showToast('Folder opened', 'success');
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : 'Could not open folder', 'error');
+  }
+}
+
+function releaseBlobs(): void {
+  if (!result) return;
+  for (const entry of result.blobs) entry.blob = undefined;
+  if (result.blobs.every((r) => !r.blob)) {
+    showToast('In-memory copies released — use Convert More for a new batch', 'info');
+  }
+}
+
+/* --------------------------- Single image --------------------------- */
 
 function handleSingleFile(file: File): void {
-  // Dropping/pasting/programmatically selecting a file always lands in
-  // single-image mode so the result is actually visible.
-  if (mode !== 'single') setMode('single');
   if (!file.type.startsWith('image/') && !isSupportedImage(file.name)) {
     showToast('Please select an image file', 'error');
     return;
   }
+  if (mode !== 'single') setMode('single');
   $('single-upload').classList.add('hidden');
   $('single-converting').classList.remove('hidden');
-  const options = getOptions();
 
-  convertFile(file, options)
-    .then((result) => {
-      if (!result.success || !result.blob) {
-        throw new Error(result.error ?? 'Conversion failed');
-      }
+  const options = getOptions();
+  backend
+    .convertSingle(file, options)
+    .then((r) => {
+      if (!r.success || !r.blob) throw new Error(r.error ?? 'Conversion failed');
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      previewUrl = URL.createObjectURL(result.blob);
+      previewUrl = URL.createObjectURL(r.blob);
       ($('single-preview-img') as HTMLImageElement).src = previewUrl;
       const download = $('single-download-btn') as HTMLAnchorElement;
       download.href = previewUrl;
-      download.download = result.name;
-      const savedPct = Math.max(0, (1 - result.convertedSize / result.originalSize) * 100).toFixed(0);
+      download.download = r.name;
+      const savedPct = Math.max(0, (1 - r.convertedSize / r.originalSize) * 100).toFixed(0);
       $('single-result-info').textContent =
-        `${formatBytes(result.originalSize)} → ${formatBytes(result.convertedSize)} (${savedPct}% smaller)`;
+        `${formatBytes(r.originalSize)} → ${formatBytes(r.convertedSize)} (${savedPct}% smaller)`;
       $('single-converting').classList.add('hidden');
       $('single-result').classList.remove('hidden');
     })
@@ -633,278 +361,352 @@ function convertAnotherSingle(): void {
   ($('single-file-input') as HTMLInputElement).value = '';
 }
 
-/* ------------------------------- Downloads ------------------------------- */
+/* --------------------------- Browse modal (python) --------------------------- */
 
-async function saveToFolder(): Promise<void> {
-  const successful = results.filter((r) => r.success && r.blob);
-  if (successful.length === 0) {
-    showToast('No converted files to save', 'error');
-    return;
-  }
+let browseCurrentPath = '';
+let browseSelected = '';
+
+function openBrowse(): void {
+  if (isConverting) return;
+  $('browse-modal').classList.remove('hidden');
+  browseSelected = '';
+  $('browse-selected').textContent = 'Navigate to a folder';
+  ($('browse-select-btn') as HTMLButtonElement).disabled = true;
+  void browseTo(selection?.folderPath ?? '');
+}
+
+function closeBrowse(): void {
+  $('browse-modal').classList.add('hidden');
+}
+
+async function browseTo(path: string): Promise<void> {
   try {
-    const outputHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    showToast('Writing files...', 'info');
-    let written = 0;
-    const failures: string[] = [];
-    for (const result of successful) {
-      if (!result.blob) continue;
-      // Preserve the folder structure of dropped folders; flat selections
-      // have single-segment paths.
-      const relative = resolveRelativePath(result);
-      try {
-        await writeFileToDir(outputHandle, relative, result.blob);
-        written++;
-      } catch {
-        failures.push(relative);
-      }
+    const d = await backend.browse(path);
+    $('browse-current').textContent = d.current;
+    browseCurrentPath = d.current;
+
+    const list = $('browse-list');
+    list.textContent = '';
+
+    // `drives` is only present on the initial "This PC" listing — normalize
+    // so ordinary directory listings (no drives key) don't crash the modal.
+    const drives = d.drives ?? [];
+
+    for (const drive of drives) {
+      const btn = document.createElement('button');
+      btn.className = 'browse-item';
+      btn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg><span></span>';
+      btn.querySelector('span')!.textContent = drive;
+      btn.addEventListener('click', () => void browseTo(drive));
+      list.appendChild(btn);
     }
-    if (failures.length > 0) {
-      // Keep every blob in memory so the failed writes can be retried.
-      showToast(`Saved ${written} files; failed to write ${failures.length} (you can retry)`, 'warn');
+
+    if (d.parent) {
+      const btn = document.createElement('button');
+      btn.className = 'browse-item';
+      btn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg><span>..</span>';
+      btn.addEventListener('click', () => void browseTo(d.parent!));
+      list.appendChild(btn);
+    }
+
+    for (const entry of d.entries) {
+      const btn = document.createElement('button');
+      btn.className = 'browse-item';
+      btn.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg><span></span>';
+      btn.querySelector('span')!.textContent = entry.name;
+      btn.addEventListener('click', () => void browseTo(entry.path));
+      list.appendChild(btn);
+    }
+
+    if (!drives.length && !d.parent && d.entries.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'empty-note';
+      p.textContent = 'No subdirectories';
+      list.appendChild(p);
+    }
+
+    if (d.current !== 'This PC') {
+      browseSelected = d.current;
+      $('browse-selected').textContent = d.current;
+      ($('browse-select-btn') as HTMLButtonElement).disabled = false;
     } else {
-      showToast(`Saved ${written} files to ${outputHandle.name}`, 'success');
-      releaseBlobs(successful);
+      browseSelected = '';
+      $('browse-selected').textContent = 'Navigate to a folder';
+      ($('browse-select-btn') as HTMLButtonElement).disabled = true;
     }
-  } catch (err) {
-    if ((err as Error).name !== 'AbortError') showToast('Could not write files', 'error');
+  } catch {
+    const list = $('browse-list');
+    list.textContent = '';
+    const p = document.createElement('p');
+    p.className = 'empty-note';
+    p.textContent = 'Failed to load';
+    list.appendChild(p);
   }
 }
 
-/**
- * Drop encoded blobs from results once they are safely exported — for large
- * batches this can free hundreds of MB while the completion screen is open.
- */
-function releaseBlobs(exported: FileResult[]): void {
-  for (const result of exported) result.blob = undefined;
-  if (results.every((r) => !r.blob)) {
-    showToast('In-memory copies released — use Convert More for a new batch', 'info');
-  }
+/* --------------------------- Drag & drop --------------------------- */
+
+function showDragOverlay(): void {
+  $('drag-overlay').classList.remove('hidden');
 }
 
-function resolveRelativePath(result: FileResult): string {
-  return result.relativePath;
+function hideDragOverlay(): void {
+  dragDepth = 0;
+  $('drag-overlay').classList.add('hidden');
 }
 
-async function downloadZip(): Promise<void> {
-  const successful = results.filter((r) => r.success && r.blob);
-  if (successful.length === 0) {
-    showToast('No converted files to download', 'error');
+/** Route dropped files/folders to the active backend's capabilities. */
+async function handleDrop(e: DragEvent): Promise<void> {
+  e.preventDefault();
+  e.stopPropagation();
+  $('drop-zone').classList.remove('drag-over');
+  hideDragOverlay();
+  if (!e.dataTransfer || isConverting) return;
+
+  if (cap.kind === 'python') {
+    // The server can only accept one uploaded image at a time.
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      setMode('single');
+      handleSingleFile(file);
+    }
     return;
   }
-  showToast('Creating ZIP...', 'info');
-  const zip = new JSZip();
-  for (const result of successful) {
-    if (!result.blob) continue;
-    zip.file(resolveRelativePath(result), result.blob);
-  }
-  let url: string | null = null;
-  try {
-    const blob = await zip.generateAsync({ type: 'blob' });
-    url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'converted-images.zip';
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    showToast(`Downloaded ${successful.length} files as ZIP`, 'success');
-    releaseBlobs(successful);
-  } catch {
-    showToast('Failed to create the ZIP archive (out of memory?)', 'error');
-  } finally {
-    if (url) {
-      // Revoke on a delay — revoking synchronously can abort the download.
-      const deadUrl = url;
-      setTimeout(() => URL.revokeObjectURL(deadUrl), 10_000);
-    }
+
+  const entries = await entriesFromDrop(e.dataTransfer.items, e.dataTransfer.files);
+  const images = entries.filter((entry) => entry.file);
+  if (images.length > 0) {
+    await setSource({ label: 'Dropped files', entries: images });
   }
 }
 
-/* -------------------------------- History -------------------------------- */
-
-function pushHistory(entry: HistoryEntry): void {
-  const all = readHistory();
-  all.unshift(entry);
-  try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(all.slice(0, HISTORY_LIMIT)));
-  } catch {
-    // Storage may be unavailable (private mode / quota) — history is optional.
-  }
-}
-
-function readHistory(): HistoryEntry[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    return raw ? (JSON.parse(raw) as HistoryEntry[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function openHistory(): void {
-  renderHistory();
-  $('history-panel').classList.remove('hidden');
-  $('history-overlay').classList.remove('hidden');
-}
-
-function closeHistory(): void {
-  $('history-panel').classList.add('hidden');
-  $('history-overlay').classList.add('hidden');
-}
-
-function renderHistory(): void {
-  const list = $('history-list');
-  const items = readHistory();
-  list.textContent = '';
-  $('history-actions').classList.toggle('hidden', items.length === 0);
-  if (items.length === 0) {
-    const note = document.createElement('p');
-    note.className = 'empty-note';
-    note.textContent = 'No conversions yet';
-    list.appendChild(note);
-    return;
-  }
-  for (const item of items) {
-    const card = document.createElement('div');
-    card.className = 'history-card';
-    card.innerHTML =
-      '<div class="meta"><span class="meta-id"></span><span class="meta-date"></span></div>' +
-      '<div class="name"></div>' +
-      '<div class="stats">' +
-      '<div><div class="v"></div><div class="l">Files</div></div>' +
-      '<div><div class="v green"></div><div class="l">Saved</div></div>' +
-      '<div><div class="v"></div><div class="l">Time</div></div>' +
-      '</div>';
-    const spans = card.querySelectorAll('span, div.v');
-    (spans[0] as HTMLElement).textContent = item.id;
-    (spans[1] as HTMLElement).textContent = new Date(item.timestamp).toLocaleDateString();
-    const nameEl = card.querySelector('.name') as HTMLElement;
-    nameEl.textContent = item.name;
-    nameEl.title = item.name;
-    (spans[2] as HTMLElement).textContent = item.files;
-    (spans[3] as HTMLElement).textContent = item.percent;
-    (spans[4] as HTMLElement).textContent = item.elapsed;
-    list.appendChild(card);
-  }
-}
-
-function clearHistory(): void {
-  localStorage.removeItem(HISTORY_KEY);
-  renderHistory();
-  showToast('History cleared', 'info');
-}
+/* ------------------------------ Shortcuts ------------------------------ */
 
 function showShortcuts(visible: boolean): void {
   $('shortcuts-modal').classList.toggle('hidden', !visible);
   $('shortcuts-overlay').classList.toggle('hidden', !visible);
 }
 
-/* ------------------------------- Share stats ------------------------------ */
+/* -------------------------------- Init -------------------------------- */
 
-function shareStats(): void {
-  if (!lastStats) return;
-  const canvas = document.createElement('canvas');
-  canvas.width = 600;
-  canvas.height = 320;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+function wireZoneKeyboard(zone: HTMLElement, activate: () => void): void {
+  zone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      activate();
+    }
+  });
+}
 
-  const roundRect = (x: number, y: number, w: number, h: number, r: number) => {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + r, r);
-    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-    ctx.arcTo(x, y + h, x, y + h - r, r);
-    ctx.arcTo(x, y, x + r, y, r);
-    ctx.closePath();
-  };
+function initUI(): void {
+  const kind = cap.kind;
+  ($('edition-badge') as HTMLElement).textContent = kind === 'python' ? 'Local Server' : 'Browser Edition';
+  if (kind === 'python') {
+    $('hero-sub').textContent = 'Pick a folder on this machine. Convert to WebP locally.';
+    $('drop-zone-sub').textContent = 'click to browse folders on this machine';
+    $('drag-overlay-sub').textContent = 'Drop an image to convert — one at a time on the server';
+    $('browser-note').classList.add('hidden');
+    $('python-note').classList.remove('hidden');
+  } else {
+    $('python-note').classList.add('hidden');
+  }
+  if (!cap.metadataControl) {
+    $('server-options').classList.add('hidden');
+    $('browser-note').classList.remove('hidden');
+  }
+  if (!cap.saveToFolder) $('save-folder-btn').classList.add('hidden');
 
-  ctx.fillStyle = '#0a0d14';
-  roundRect(0, 0, 600, 320, 16);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(99,102,241,0.3)';
-  ctx.lineWidth = 2;
-  roundRect(1, 1, 598, 318, 16);
-  ctx.stroke();
-
-  const grad = ctx.createLinearGradient(0, 0, 600, 0);
-  grad.addColorStop(0, 'rgba(99,102,241,0.8)');
-  grad.addColorStop(1, 'rgba(139,92,246,0.6)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 600, 4);
-
-  ctx.fillStyle = '#f1f5f9';
-  ctx.font = 'bold 22px Inter, system-ui, sans-serif';
-  ctx.fillText('PicToWebP', 30, 50);
-  ctx.fillStyle = '#6b7280';
-  ctx.font = '12px Inter, system-ui, sans-serif';
-  ctx.fillText('Bulk image to WebP conversion (in your browser)', 30, 72);
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.beginPath();
-  ctx.moveTo(30, 90);
-  ctx.lineTo(570, 90);
-  ctx.stroke();
-
-  const stats = [
-    { label: 'SAVED', value: lastStats.saved, sub: `${lastStats.percent} smaller`, color: '#4ade80' },
-    { label: 'FILES', value: lastStats.files, sub: 'converted', color: '#818cf8' },
-    { label: 'TIME', value: lastStats.elapsed, sub: `@ Q${lastStats.quality}`, color: '#e2e8f0' },
-  ];
-  stats.forEach((s, i) => {
-    const x = 30 + i * 190;
-    ctx.fillStyle = '#9ca3af';
-    ctx.font = '600 10px Inter, system-ui, sans-serif';
-    ctx.fillText(s.label, x, 125);
-    ctx.fillStyle = s.color;
-    ctx.font = 'bold 28px Inter, system-ui, sans-serif';
-    ctx.fillText(s.value, x, 162);
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '11px Inter, system-ui, sans-serif';
-    ctx.fillText(s.sub, x, 182);
+  // Quality
+  const slider = $('quality-slider') as HTMLInputElement;
+  slider.addEventListener('input', () => {
+    $('quality-value').textContent = slider.value;
+    slider.setAttribute('aria-valuetext', `${slider.value} out of 100`);
+    updateSliderFill();
+  });
+  updateSliderFill();
+  document.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      slider.value = btn.dataset.preset!;
+      $('quality-value').textContent = slider.value;
+      updateSliderFill();
+    });
   });
 
-  ctx.beginPath();
-  ctx.moveTo(30, 205);
-  ctx.lineTo(570, 205);
-  ctx.stroke();
-  ctx.fillStyle = '#1a2030';
-  roundRect(30, 225, 540, 16, 4);
-  ctx.fill();
-  ctx.fillStyle = '#9ca3af';
-  ctx.font = '10px Inter, system-ui, sans-serif';
-  ctx.fillText(`Original: ${lastStats.original}`, 30, 260);
+  // Toggles
+  if (cap.lossless) bindToggle($('toggle-lossless'));
+  if (cap.metadataControl) bindToggle($('toggle-metadata'));
+  const resizeToggle = $('toggle-resize');
+  bindToggle(resizeToggle, () => $('resize-inputs').classList.toggle('hidden'));
 
-  const barGrad = ctx.createLinearGradient(30, 0, 570, 0);
-  barGrad.addColorStop(0, '#6366f1');
-  barGrad.addColorStop(1, '#818cf8');
-  ctx.fillStyle = barGrad;
-  roundRect(30, 275, 540, 16, 4);
-  ctx.fill();
-  ctx.fillText(`WebP: ${lastStats.webp}`, 30, 310);
+  // Mode tabs
+  document.querySelectorAll<HTMLButtonElement>('.mode-tab').forEach((tab) => {
+    tab.addEventListener('click', () => setMode(tab.dataset.mode as Mode));
+  });
 
-  canvas.toBlob((blob) => {
-    if (!blob) {
-      showToast('Failed to generate image', 'error');
+  // Folder mode
+  const dropZone = $('drop-zone');
+  dropZone.addEventListener('click', () => void selectFolder());
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', (e) => void handleDrop(e));
+  wireZoneKeyboard(dropZone, () => void selectFolder());
+
+  // Single mode
+  const singleZone = $('single-drop-zone');
+  singleZone.addEventListener('click', () => ($('single-file-input') as HTMLInputElement).click());
+  singleZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    singleZone.classList.add('drag-over');
+  });
+  singleZone.addEventListener('dragleave', () => singleZone.classList.remove('drag-over'));
+  singleZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    singleZone.classList.remove('drag-over');
+    hideDragOverlay();
+    const file = e.dataTransfer?.files[0];
+    if (file) handleSingleFile(file);
+  });
+  wireZoneKeyboard(singleZone, () => ($('single-file-input') as HTMLInputElement).click());
+  ($('single-file-input') as HTMLInputElement).addEventListener('change', (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (file) handleSingleFile(file);
+  });
+
+  // Full-window drag overlay
+  window.addEventListener('dragenter', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    showDragOverlay();
+  });
+  window.addEventListener('dragover', (e) => {
+    if (hasFiles(e)) e.preventDefault();
+  });
+  window.addEventListener('dragleave', (e) => {
+    if (!hasFiles(e)) return;
+    if (--dragDepth <= 0) hideDragOverlay();
+  });
+  window.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    hideDragOverlay();
+    if (isConverting) return;
+    const files = e.dataTransfer?.files;
+    if (!files?.length) return;
+    if (mode === 'single') {
+      handleSingleFile(files[0]);
       return;
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'pictowebp-stats.png';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    showToast('Stats image downloaded', 'success');
-  }, 'image/png');
+    if (cap.kind === 'python') {
+      setMode('single');
+      handleSingleFile(files[0]);
+      return;
+    }
+    void (async () => {
+      const entries = await entriesFromDrop(e.dataTransfer!.items, files);
+      const images = entries.filter((entry) => entry.file);
+      if (images.length > 0) await setSource({ label: 'Dropped files', entries: images });
+    })();
+  });
+
+  // Actions
+  $('convert-btn').addEventListener('click', () => void startConversion());
+  $('cancel-btn').addEventListener('click', () => void cancelConversion());
+  $('convert-more-btn').addEventListener('click', resetUI);
+  $('try-again-btn').addEventListener('click', resetUI);
+  $('save-folder-btn').addEventListener('click', () => void saveToFolder());
+  $('download-zip-btn').addEventListener('click', () => void downloadZip());
+  $('open-folder-btn').addEventListener('click', () => void openOutputFolder());
+  $('share-btn').addEventListener('click', () => {
+    if (lastStats) shareStats(lastStats);
+  });
+  $('convert-another-btn').addEventListener('click', convertAnotherSingle);
+
+  // History
+  $('history-btn').addEventListener('click', () => void openHistory(backend));
+  $('history-close-btn').addEventListener('click', closeHistory);
+  $('history-overlay').addEventListener('click', closeHistory);
+  $('history-clear-btn').addEventListener('click', () => void clearHistory(backend));
+
+  // Browse modal (python)
+  if (cap.folderPick === 'server-browse') {
+    $('browse-up-btn').addEventListener('click', () => {
+      if (browseCurrentPath === 'This PC') return;
+      const parent = browseCurrentPath.replace(/[/\\][^/\\]+$/, '');
+      void browseTo(parent !== browseCurrentPath ? parent : '');
+    });
+    $('browse-select-btn').addEventListener('click', () => {
+      if (browseSelected) void setSource({ label: browseSelected, folderPath: browseSelected });
+      closeBrowse();
+    });
+    $('browse-close-btn').addEventListener('click', closeBrowse);
+    $('browse-cancel-btn').addEventListener('click', closeBrowse);
+    document.querySelector('#browse-modal .absolute-inset')?.addEventListener('click', closeBrowse);
+  }
+
+  // Shortcuts modal
+  $('shortcuts-btn').addEventListener('click', () => showShortcuts(true));
+  $('shortcuts-close-btn').addEventListener('click', () => showShortcuts(false));
+  $('shortcuts-overlay').addEventListener('click', () => showShortcuts(false));
+
+  document.addEventListener('keydown', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      void startConversion();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      void startConversion();
+    } else if (e.key === 'Escape') {
+      if (!$('browse-modal').classList.contains('hidden')) closeBrowse();
+      else if (!$('shortcuts-modal').classList.contains('hidden')) showShortcuts(false);
+      else if (!$('history-panel').classList.contains('hidden')) closeHistory();
+      else if (isConverting) void cancelConversion();
+    } else if (e.key === 'h' || e.key === 'H') void openHistory(backend);
+    else if (e.key === 'b' || e.key === 'B') void selectFolder();
+    else if (e.key === '?') showShortcuts(true);
+  });
+
+  document.addEventListener('paste', (e) => {
+    const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
+      i.type.startsWith('image/'),
+    );
+    const file = item?.getAsFile();
+    if (!file) return;
+    setMode('single');
+    handleSingleFile(file);
+  });
+
+  // Don't lose an in-flight batch to an accidental tab close.
+  window.addEventListener('beforeunload', (e) => {
+    if (isConverting) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 }
 
-/* --------------------------------- Toasts -------------------------------- */
-
-function showToast(message: string, type: 'info' | 'success' | 'error' | 'warn'): void {
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.textContent = message;
-  $('toast-container').appendChild(toast);
-  setTimeout(() => toast.remove(), 4000);
-}
+document.addEventListener('DOMContentLoaded', () => {
+  void backend
+    .probe()
+    .then((ok) => {
+      if (!ok) {
+        showToast(
+          cap.kind === 'python'
+            ? 'Cannot reach the local server. Start it with `pictowebp-web`.'
+            : 'Your browser cannot encode WebP. Try a recent Chrome or Edge.',
+          'error',
+        );
+        return;
+      }
+      initUI();
+    })
+    .catch(() => showToast('The conversion backend is unavailable', 'error'));
+});

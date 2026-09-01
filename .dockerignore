@@ -1,0 +1,28 @@
+# VCS / tooling
+.git
+.github
+.vscode
+.idea
+
+# Python
+.venv
+__pycache__/
+*.py[cod]
+.pytest_cache
+.ruff_cache
+*.egg-info
+
+# Rust
+target/
+
+# Node / web build outputs (rebuilt inside the image)
+node_modules
+web-ts/dist
+web-ts/dist-python
+web-ts/test-results
+web-ts/playwright-report
+
+# Logs / OS cruft
+*.log
+.DS_Store
+Thumbs.db

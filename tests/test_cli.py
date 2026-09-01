@@ -324,9 +324,9 @@ def test_main_expanduser_on_cli_path(tmp_path: Path, monkeypatch):
 
 
 def test_format_duration_helper():
-    from pictowebp.cli import _format_duration
+    from pictowebp.ui import format_duration
 
-    assert _format_duration(7.24) == "7.2s"
-    assert _format_duration(46.11) == "46.1s"
-    assert _format_duration(65.0) == "1m 05s"
-    assert _format_duration(186.0) == "3m 06s"
+    assert format_duration(7.24) == "7.2s"
+    assert format_duration(46.11) == "46.1s"
+    assert format_duration(65.0) == "1m 05s"
+    assert format_duration(186.0) == "3m 06s"

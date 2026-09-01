@@ -3,12 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
-import logging
-import os
-import subprocess
 import sys
-from collections import OrderedDict
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -17,7 +12,6 @@ from pictowebp.console import force_utf8_stdio
 from pictowebp.constants import (
     DEFAULT_QUALITY,
     DEFAULT_THREADS,
-    ERROR_REPORT_NAME,
     MAX_QUALITY,
     MAX_RESIZE_HEIGHT,
     MAX_RESIZE_WIDTH,
@@ -29,68 +23,10 @@ from pictowebp.constants import (
 )
 from pictowebp.converter import convert_folder
 from pictowebp.logging_setup import DEFAULT_LOG_FILE, setup_logging
-from pictowebp.style import (
-    BOLD_CYAN,
-    DIM,
-    GREEN,
-    LINE,
-    RED,
-    YELLOW,
-    field,
-    paint,
-    section,
-    truncate_reason,
-)
-from pictowebp.utils import categorize_conversion_error
-
-logger = logging.getLogger(__name__)
+from pictowebp.style import RED, YELLOW, paint
+from pictowebp.ui import print_banner, print_settings, render_final_summary
 
 _STRIP_METADATA_DEFAULT = True
-
-
-def print_banner() -> None:
-    """Print the welcome banner."""
-    print()
-    print(f"  {paint('PicToWebP', BOLD_CYAN)}")
-    print(f"  {paint('Bulk Image to WebP Converter', DIM)}")
-    print()
-
-
-def print_no_files_found(source: Path) -> None:
-    """Print the 'no files found' message."""
-    print()
-    section("No convertible images found", YELLOW)
-    print()
-    field("Source:", source)
-
-
-def print_settings(
-    source: Path,
-    output: Path,
-    quality: int,
-    threads: int,
-    *,
-    lossless: bool,
-    strip_metadata: bool,
-    resize_width: int | None,
-    resize_height: int | None,
-) -> None:
-    """Print the settings banner before conversion starts."""
-    print()
-    section("Configuration", BOLD_CYAN)
-    print()
-    field("Source:", source)
-    field("Output:", output)
-    field("Quality:", f"{quality}{' (lossless)' if lossless else ''}")
-    field("Threads:", threads)
-    field("Mode:", "lossless" if lossless else f"lossy q={quality}")
-    field("Metadata:", "strip" if strip_metadata else "keep")
-    if resize_width or resize_height:
-        size = f"{resize_width or 'auto'}x{resize_height or 'auto'}"
-        field("Resize:", f"max {size}")
-    else:
-        field("Resize:", "original")
-    print()
 
 
 def prompt_for_directory(prompt: str = "Enter the path to the source folder: ") -> Path:
@@ -230,64 +166,31 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _summarize_failures(details: list[tuple[str, str]]) -> None:
-    """Render the grouped failure list, with the count of distinct reasons."""
-    if not details:
-        return
-
-    print()
-    section(f"Files Not Converted ({len(details)})", RED)
-    print()
-
-    groups: OrderedDict[str, list[str]] = OrderedDict()
-    for file_path, reason in details:
-        groups.setdefault(reason, []).append(file_path)
-
-    sorted_groups = sorted(groups.items(), key=lambda item: len(item[1]), reverse=True)
-
-    for reason, paths in sorted_groups:
-        category = categorize_conversion_error(reason)
-        display_reason = truncate_reason(reason)
-        if len(paths) == 1:
-            print(f"  {paint(category + ':', YELLOW)} {display_reason}")
-            print(f"    {paint(paths[0], DIM)}")
-        else:
-            print(f"  {paint(category + ':', YELLOW)} {display_reason} ({len(paths)})")
-            for path in paths:
-                print(f"    {paint(path, DIM)}")
-        print()
+def _resolve_quality(args: argparse.Namespace) -> int:
+    """Return the quality to use, prompting only when the CLI omitted it."""
+    if args.quality is not None:
+        return args.quality
+    if args.lossless:
+        # In lossless mode quality is ignored, so never prompt for it.
+        return DEFAULT_QUALITY
+    return prompt_for_int(
+        "Enter the quality",
+        default=DEFAULT_QUALITY,
+        low=MIN_QUALITY,
+        high=MAX_QUALITY,
+    )
 
 
-def _format_duration(seconds: float) -> str:
-    """Format an elapsed duration for humans (e.g. ``46.1s``, ``3m 05s``)."""
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    minutes, secs = divmod(int(seconds), 60)
-    return f"{minutes}m {secs:02d}s"
-
-
-def _open_folder(path: Path) -> None:
-    """Open a folder in the OS file explorer (best-effort)."""
-    with contextlib.suppress(OSError):
-        if sys.platform == "win32":
-            os.startfile(path)  # type: ignore[attr-defined]
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(path)])
-        else:
-            subprocess.Popen(["xdg-open", str(path)])
-
-
-def _maybe_open_output_folder(output_path: Path, converted: int) -> None:
-    """Ask whether to open the output folder; interactive terminals only."""
-    if converted == 0 or not (sys.stdin.isatty() and sys.stdout.isatty()):
-        return
-    try:
-        answer = input("  Open the output folder? [Y/n] ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        return
-    if answer in ("", "y", "yes"):
-        _open_folder(output_path)
+def _resolve_threads(args: argparse.Namespace) -> int:
+    """Return the worker count to use, prompting only when the CLI omitted it."""
+    if args.threads is not None:
+        return args.threads
+    return prompt_for_int(
+        "Enter the number of threads",
+        default=DEFAULT_THREADS,
+        low=1,
+        high=MAX_THREADS,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -315,30 +218,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
 
-    # In lossless mode quality is ignored, so never prompt for it.
-    if args.lossless:
-        quality = args.quality if args.quality is not None else DEFAULT_QUALITY
-    else:
-        quality = (
-            args.quality
-            if args.quality is not None
-            else prompt_for_int(
-                "Enter the quality",
-                default=DEFAULT_QUALITY,
-                low=MIN_QUALITY,
-                high=MAX_QUALITY,
-            )
-        )
-    threads = (
-        args.threads
-        if args.threads is not None
-        else prompt_for_int(
-            "Enter the number of threads",
-            default=DEFAULT_THREADS,
-            low=1,
-            high=MAX_THREADS,
-        )
-    )
+    quality = _resolve_quality(args)
+    threads = _resolve_threads(args)
 
     if not args.no_progress and not sys.stdout.isatty():
         # Piped output shouldn't carry a progress bar.
@@ -371,52 +252,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # terminates immediately, keeping whatever already finished.
         print(f"\n  {paint('Cancelled', YELLOW)} — keeping everything already converted.")
         return 130
-    snap = progress.snapshot()
-    if snap["total_files"] == 0:
-        print_no_files_found(source_folder)
-        return 0
-
-    output_folder = snap["output_folder"]
-    output_path = Path(output_folder) if output_folder else None
-    failed = snap["failed_files"]
-    total = snap["total_files"]
-    converted = snap["converted_files"]
-
-    if failed == 0:
-        section("✓ Conversion Complete", GREEN)
-    else:
-        section("Conversion Complete (with errors)", YELLOW)
-    print()
-    if output_path:
-        field("Output folder:", output_path)
-    field("Images converted:", f"{converted:,}/{total:,}")
-    saved_mib = snap["bytes_saved"] / (1024 * 1024)
-    field(
-        "Memory reduced:",
-        f"{saved_mib:.2f} MB ({snap['reduction_percent']:.2f}%)",
-    )
-    field("Time taken:", _format_duration(snap["elapsed_seconds"]))
-
-    details = progress.failure_details()
-    _summarize_failures(details)
-
-    if details:
-        report = args.report or (output_path / ERROR_REPORT_NAME if output_path else None)
-        if report and report.exists():
-            field("Error report:", report)
-        elif report:
-            print(f"  {paint('Warning:', YELLOW)} Could not write {report}")
-
-    print(f"  {paint(LINE, DIM)}")
-    print()
-    if output_path:
-        _maybe_open_output_folder(output_path, converted)
-    # Exit non-zero only when nothing converted (a hard failure). Partial
-    # failures are reported in the summary and the error report, but do
-    # not warrant a non-zero exit code.
-    if failed and converted == 0:
-        return 3
-    return 0
+    return render_final_summary(progress, args, source_folder)
 
 
 if __name__ == "__main__":

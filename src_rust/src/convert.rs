@@ -292,20 +292,9 @@ pub fn process_file(
         encoded.as_ref().to_vec()
     };
 
-    let (mut temporary_file, temporary_destination) = create_temporary_file(&destination)?;
-    if let Err(error) = temporary_file.write_all(&payload) {
-        let _ = fs::remove_file(&temporary_destination);
-        return Err(error.into());
-    }
-    if let Err(error) = temporary_file.sync_all() {
-        let _ = fs::remove_file(&temporary_destination);
-        return Err(error.into());
-    }
-    drop(temporary_file);
-    if let Err(error) = fs::rename(&temporary_destination, &destination) {
-        let _ = fs::remove_file(&temporary_destination);
-        return Err(error.into());
-    }
+    // Write the payload through a temp file in the same directory then rename
+    // so a partial output is never visible as a finished WebP.
+    write_atomically(&destination, &payload)?;
 
     let converted_bytes = fs::metadata(&destination)?.len();
 

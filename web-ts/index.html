@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Bulk image to WebP converter that runs entirely in your browser — no uploads, no tracking.">
+  <meta name="description" content="Bulk image to WebP converter — runs on your machine, nothing leaves your device.">
   <link rel="icon" href="data:,">
   <title>PicToWebP - Bulk Image to WebP Converter</title>
 </head>
@@ -14,7 +14,7 @@
     <div class="drag-overlay-box">
       <div class="dz-icon">🖼️</div>
       <div class="drag-overlay-title">Drop to convert</div>
-      <div class="dz-sub">Images and folders — nothing leaves your device</div>
+      <div class="dz-sub" id="drag-overlay-sub">Images and folders — nothing leaves your device</div>
     </div>
   </div>
 
@@ -23,7 +23,7 @@
       <div class="brand">
         <div class="brand-logo">P</div>
         <span class="brand-name">PicToWebP</span>
-        <span class="badge">Browser Edition</span>
+        <span class="badge" id="edition-badge">Browser Edition</span>
       </div>
       <div class="nav-actions">
         <button id="shortcuts-btn" class="btn btn-ghost" title="Keyboard shortcuts">?</button>
@@ -35,15 +35,15 @@
   <div class="main">
     <div class="hero fade-in">
       <h1 class="hero-title"><span class="grad-text">Pic</span>To<span class="grad-text">WebP</span></h1>
-      <p class="hero-sub">Drop your images in. Get smaller files out. Nothing ever leaves your browser.</p>
+      <p class="hero-sub" id="hero-sub">Drop your images in. Get smaller files out. Nothing ever leaves your device.</p>
     </div>
 
     <div class="privacy-strip fade-in" style="animation-delay: 0.04s;">
-      <span class="pill" title="Conversion runs entirely in this tab using your browser's built-in encoder">
+      <span class="pill" title="Conversion runs entirely on your own machine — no remote service involved">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-        Runs 100% in your browser
+        Runs 100% on your machine
       </span>
-      <span class="pill" title="Images are never uploaded — there is no server to upload to">
+      <span class="pill" title="Images are never uploaded anywhere">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M8.5 16.5a5.5 5.5 0 01-.31-10.98 7 7 0 0113.24 2.09A4.5 4.5 0 0119.5 16.5H8.5z"/></svg>
         No uploads, ever
       </span>
@@ -51,9 +51,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
         No tracking, no analytics
       </span>
-      <span class="pill" title="Canvas decoding removes EXIF/GPS metadata from every converted file">
+      <span class="pill" title="EXIF/GPS metadata is stripped from every converted file">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path stroke-linecap="round" d="M8 11V7a4 4 0 018 0M12 15v2"/></svg>
-        EXIF &amp; GPS data stripped
+        EXIF &amp; GPS stripped by default
       </span>
     </div>
 
@@ -77,13 +77,30 @@
 
         <div class="divider"></div>
 
+        <div class="stack" id="server-options">
+          <div class="row">
+            <div>
+              <div class="option-title">Lossless</div>
+              <div class="option-desc">Keep every pixel — no quality loss, larger files</div>
+            </div>
+            <div id="toggle-lossless" class="toggle" role="switch" aria-checked="false" tabindex="0"></div>
+          </div>
+          <div class="row">
+            <div>
+              <div class="option-title">Strip metadata</div>
+              <div class="option-desc">Remove camera info and GPS tags for smaller files</div>
+            </div>
+            <div id="toggle-metadata" class="toggle active" role="switch" aria-checked="true" tabindex="0"></div>
+          </div>
+        </div>
+
         <div class="stack">
           <div class="row">
             <div>
               <div class="option-title">Resize</div>
               <div class="option-desc">Shrink images before converting — set a max width or height</div>
             </div>
-            <div class="toggle" id="toggle-resize" role="switch" aria-checked="false" tabindex="0"></div>
+            <div id="toggle-resize" class="toggle" role="switch" aria-checked="false" tabindex="0"></div>
           </div>
           <div id="resize-inputs" class="field-grid hidden">
             <div>
@@ -97,11 +114,14 @@
           </div>
         </div>
 
-        <p class="note">
-          Note: browser conversion always strips EXIF/GPS metadata, and encoding
-          uses the browser's built-in WebP encoder — there is no separate
-          lossless mode, but quality 100 gives the best it can do. Python and
-          Rust CLIs offer true lossless encoding.
+        <p class="note" id="browser-note">
+          Browser conversion always strips EXIF/GPS metadata, and encoding uses
+          the browser's built-in WebP encoder — there is no separate lossless
+          mode, but quality 100 gives the best it can do.
+        </p>
+        <p class="note hidden" id="python-note">
+          Local server conversion uses the same engine as the CLI: full lossless
+          support and optional metadata preservation.
         </p>
 
         <div class="divider"></div>
@@ -122,7 +142,7 @@
             <div id="drop-zone" class="dropzone" role="button" tabindex="0" aria-label="Select a folder to convert">
               <div class="dz-icon">📁</div>
               <div class="dz-title">Click to select a folder</div>
-              <div class="dz-sub">or drag a folder / images here — everything stays local</div>
+              <div class="dz-sub" id="drop-zone-sub">or drag a folder / images here — everything stays local</div>
             </div>
             <div id="source-badge" class="source-badge hidden">
               <span id="source-path" class="path"></span>
@@ -174,9 +194,14 @@
               </div>
             </div>
             <div id="collisions-note" class="collisions hidden"></div>
+            <div id="stat-output-folder" class="output-folder hidden">
+              <div class="label" style="margin-bottom: 3px;">Output Folder</div>
+              <div class="path" id="stat-output-path"></div>
+            </div>
             <div class="action-row">
               <button id="save-folder-btn" class="btn btn-secondary">Save to Folder</button>
               <button id="download-zip-btn" class="btn btn-secondary">Download ZIP</button>
+              <button id="open-folder-btn" class="btn btn-secondary hidden">Open Folder</button>
             </div>
             <div class="action-row" style="margin-top: 10px;">
               <button id="share-btn" class="btn btn-accent">Share Stats</button>
@@ -225,6 +250,31 @@
               <button id="convert-another-btn" class="btn btn-secondary">Convert Another</button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Browse modal (python backend) -->
+  <div id="browse-modal" class="modal-overlay hidden">
+    <div class="absolute-inset"></div>
+    <div class="modal browse-modal-body" style="top: 50%; left: 50%; transform: translate(-50%, -50%); width: calc(100% - 32px); max-width: 520px;">
+      <div class="history-head">
+        <h3 class="modal-title">Select Folder</h3>
+        <button id="browse-close-btn" class="modal-close">✕</button>
+      </div>
+      <div class="browse-path">
+        <button id="browse-up-btn" class="btn btn-ghost" title="Go up">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+        </button>
+        <div id="browse-current" class="browse-current"></div>
+      </div>
+      <div id="browse-list" class="browse-list"></div>
+      <div class="browse-foot">
+        <span id="browse-selected" class="browse-selected"></span>
+        <div class="row-gap">
+          <button id="browse-cancel-btn" class="btn btn-ghost">Cancel</button>
+          <button id="browse-select-btn" class="btn btn-primary" disabled>Select</button>
         </div>
       </div>
     </div>

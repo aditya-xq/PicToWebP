@@ -131,45 +131,42 @@ fn section(title: &str, style: &str) {
     println!("  {}", paint(LINE, DIM));
 }
 
+/// Print an aligned `Label: value` pair (mirrors the Python CLI's `field`).
+fn field(label: &str, value: impl std::fmt::Display) {
+    println!("  {} {value}", paint(label, CYAN));
+}
+
 /// Print the settings banner before conversion starts.
 pub fn print_settings(source: &Path, output: &Path, threads: usize, settings: &Settings) {
     println!();
     section("Configuration", BOLD_CYAN);
     println!();
-    println!(
-        "  {} {}",
-        paint("Source: ", CYAN),
-        style::display_path(source)
+    field("Source:", style::display_path(source));
+    field("Output:", style::display_path(output));
+    field(
+        "Quality:",
+        format!(
+            "{}{}",
+            settings.quality,
+            if settings.lossless { " (lossless)" } else { "" }
+        ),
     );
-    println!(
-        "  {} {}",
-        paint("Output: ", CYAN),
-        style::display_path(output)
-    );
-    println!(
-        "  {} {}{}",
-        paint("Quality:", CYAN),
-        settings.quality,
-        if settings.lossless { " (lossless)" } else { "" }
-    );
-    println!("  {} {threads}", paint("Threads:", CYAN));
-    println!(
-        "  {} {}",
-        paint("Mode:", CYAN),
+    field("Threads:", threads);
+    field(
+        "Mode:",
         if settings.lossless {
             "lossless"
         } else {
             "lossy"
-        }
+        },
     );
-    println!(
-        "  {} {}",
-        paint("Metadata:", CYAN),
+    field(
+        "Metadata:",
         if settings.strip_metadata {
             "strip"
         } else {
             "keep"
-        }
+        },
     );
     if settings.resize_width.is_some() || settings.resize_height.is_some() {
         let size = format!(
@@ -183,9 +180,9 @@ pub fn print_settings(source: &Path, output: &Path, threads: usize, settings: &S
                 .map(|h| h.to_string())
                 .unwrap_or_else(|| "auto".to_string())
         );
-        println!("  {} max {size}", paint("Resize:", CYAN));
+        field("Resize:", format!("max {size}"));
     } else {
-        println!("  {} original", paint("Resize:", CYAN));
+        field("Resize:", "original");
     }
     println!();
 }
@@ -207,28 +204,24 @@ pub fn print_summary(
     }
 
     println!();
-    println!(
-        "  {} {}",
-        paint("Output folder:", CYAN),
-        style::display_path(output_folder)
+    field("Output folder:", style::display_path(output_folder));
+    field(
+        "Images converted:",
+        format!(
+            "{}/{}",
+            format_count(summary.converted_files as usize),
+            format_count((summary.converted_files + summary.failed_files as u64) as usize)
+        ),
     );
-    println!(
-        "  {} {}/{}",
-        paint("Images converted:", CYAN),
-        format_count(summary.converted_files as usize),
-        format_count((summary.converted_files + summary.failed_files as u64) as usize),
+    field(
+        "Memory reduced:",
+        format!(
+            "{} ({:.2}%)",
+            format_bytes(summary.bytes_saved()),
+            summary.reduction_percent()
+        ),
     );
-    println!(
-        "  {} {} ({:.2}%)",
-        paint("Memory reduced:", CYAN),
-        format_bytes(summary.bytes_saved()),
-        summary.reduction_percent()
-    );
-    println!(
-        "  {} {}",
-        paint("Time taken:", CYAN),
-        format_duration(elapsed.as_secs_f64())
-    );
+    field("Time taken:", format_duration(elapsed.as_secs_f64()));
 
     print_failure_groups(file_errors, error_report);
 
@@ -241,23 +234,20 @@ pub fn print_cancelled(result: &ConvertResult, output_folder: &Path, elapsed: Du
     println!();
     section("Cancelled by user", YELLOW);
     println!();
-    println!(
-        "  {} {}",
-        paint("Output folder:", CYAN),
-        style::display_path(output_folder)
-    );
-    println!(
-        "  {} {}/{}",
-        paint("Files completed:", CYAN),
-        format_count(result.summary.converted_files as usize),
-        format_count(
-            (result.summary.converted_files + result.summary.failed_files as u64) as usize
+    field("Output folder:", style::display_path(output_folder));
+    field(
+        "Files completed:",
+        format!(
+            "{}/{}",
+            format_count(result.summary.converted_files as usize),
+            format_count(
+                (result.summary.converted_files + result.summary.failed_files as u64) as usize
+            )
         ),
     );
-    println!(
-        "  {} {}",
-        paint("Time before cancel:", CYAN),
-        format_duration(elapsed.as_secs_f64())
+    field(
+        "Time before cancel:",
+        format_duration(elapsed.as_secs_f64()),
     );
 
     if !result.file_errors.is_empty() {
@@ -284,12 +274,11 @@ fn print_failure_groups(file_errors: &[FileError], error_report: Option<&Path>) 
 
     for error in file_errors {
         let key = (error.category, error.message.as_str());
-        match index.get(&key) {
-            Some(&idx) => groups[idx].1.push(&error.path),
-            None => {
-                index.insert(key, groups.len());
-                groups.push((key, vec![&error.path]));
-            }
+        if let Some(&idx) = index.get(&key) {
+            groups[idx].1.push(&error.path);
+        } else {
+            index.insert(key, groups.len());
+            groups.push((key, vec![&error.path]));
         }
     }
 
@@ -318,11 +307,7 @@ fn print_failure_groups(file_errors: &[FileError], error_report: Option<&Path>) 
     }
 
     if let Some(report) = error_report {
-        println!(
-            "  {} {}",
-            paint("Error report:", CYAN),
-            style::display_path(report)
-        );
+        field("Error report:", style::display_path(report));
     }
 }
 
@@ -331,11 +316,7 @@ pub fn print_no_files_found(source: &Path) {
     println!();
     section("No convertible images found", YELLOW);
     println!();
-    println!(
-        "  {} {}",
-        paint("Source:", CYAN),
-        style::display_path(source)
-    );
+    field("Source:", style::display_path(source));
     println!();
 }
 

@@ -56,7 +56,20 @@ The fastest way in: open **https://aditya-xq.github.io/PicToWebP/** and you're c
 
 - **Bulk:** click to select a folder (or drag one in) — the whole tree is converted with structure preserved. Save results back to any folder or download a ZIP.
 - **Single:** drop an image, paste one with `Ctrl+V`, or click to browse — instant preview and a before/after size comparison.
-- Nothing to install, nothing to sign up for. Prefer to run it yourself? `cd web-ts && npm install && npm run dev`.
+- Nothing to install, nothing to sign up for.
+
+Prefer to run it yourself? 🏠
+
+```bash
+cd web-ts
+npm install
+npm run build     # the exact GitHub Pages artifact (browser backend → dist/)
+npm run preview   # serve it at http://localhost:4173/PicToWebP/
+```
+
+(The `/PicToWebP/` subpath is intentional — the static build is rooted there to
+match the Pages URL.) For live reload while hacking, use `npm run dev` and open
+`http://localhost:3000/PicToWebP/`.
 
 Honest limitations of doing everything in the browser:
 
@@ -73,7 +86,7 @@ uv sync
 uv run pictowebp path/to/images -q 85
 ```
 
-Or with pip:
+Or with pip (CLI only; install `.[web]` if you also want the local web UI):
 
 ```bash
 pip install .
@@ -85,9 +98,10 @@ quality and thread count — just press `Enter` to accept the defaults). Every r
 creates a fresh `images_webp_<timestamp>` folder next to the source, mirroring
 its structure. Quality defaults to `80`; add `--lossless` to keep every pixel.
 
-Prefer converting in your browser but with Python's format support? Serve the local web UI:
+Prefer converting in your browser but with Python's format support? Serve the local web UI (requires the `web` extra):
 
 ```bash
+pip install .[web]
 pictowebp-web            # serves http://127.0.0.1:8000
 ```
 
@@ -111,36 +125,6 @@ The Rust CLI exposes the same flags and behaviour as the Python one (`-q`, `-t`,
 `--lossless`, `--keep-metadata`, `--resize-width/height`, ...). Run
 `pictowebp --help` for the full list.
 
-## Sample Output
-
-```
-  PicToWebP
-  Bulk Image to WebP Converter
-
-  Found 2,598 images (1.70 GB)
-
-   Configuration
-
-  Source:  C:\photos\vacation
-  Output:  C:\photos\vacation_webp_20260828_224012
-  Quality: 80
-  Threads: 16
-
-   Conversion Complete (with errors)
-
-  Output folder: C:\photos\vacation_webp_20260828_224012
-  Images converted: 2,590/2,598
-  Memory reduced: 1463.17 MB (85.79%)
-  Time taken: 46.1s
-
-   Files Not Converted (8)
-
-  (grouped by reason — corrupt files, permission issues, ...)
-
-  Error report: C:\photos\vacation_webp_20260828_224012\conversion-errors.txt
-  Open the output folder? [Y/n]
-```
-
 That's an **85.79% reduction** across 2,598 images in 46 seconds. The eight
 failures are grouped by reason, listed on screen, and saved to
 `conversion-errors.txt` so nothing fails silently.
@@ -151,7 +135,10 @@ If you're tired of images taking up more space than they should, put them on the
 PicToWebP diet: they lose the weight but keep the charm. Feedback and PRs are
 always welcome — drop by the Issues section! 💌
 
-Want to hack on PicToWebP? See [CONTRIBUTING.md](CONTRIBUTING.md).
+Want to hack on PicToWebP? See [CONTRIBUTING.md](CONTRIBUTING.md). Curious
+about what the test suite covers and how to run it? See
+[TESTING.md](TESTING.md). Wonder how the Python and Rust engines stack up?
+Read the [benchmark](BENCHMARK.md).
 
 ---
 

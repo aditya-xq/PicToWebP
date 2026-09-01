@@ -1,6 +1,7 @@
 """Tests for the FastAPI application."""
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from threading import Lock
 
@@ -10,9 +11,13 @@ from fastapi.testclient import TestClient
 from pictowebp.progress import TERMINAL_STATUSES
 from pictowebp.web.app import create_app
 
+# Built by `npm run build:python` in web-ts/. The API tests below never need
+# it; only the SPA-serving tests do.
+SPA_INDEX = Path(__file__).resolve().parents[1] / "web-ts" / "dist-python" / "index.html"
+
 
 @pytest.fixture()
-def client() -> TestClient:
+def client() -> Iterator[TestClient]:
     app = create_app()
     with TestClient(app) as test_client:
         yield test_client
@@ -24,46 +29,28 @@ def populated_source(image_factory, source_dir: Path) -> Path:
     return source_dir
 
 
-def test_index_serves_ui(client: TestClient):
+@pytest.mark.skipif(
+    not SPA_INDEX.is_file(), reason="web UI not built; run `npm run build:python` in web-ts"
+)
+def test_index_serves_built_spa(client: TestClient):
+    """The unified SPA is served at / when the python build exists."""
     response = client.get("/")
     assert response.status_code == 200
     assert "PicToWebP" in response.text
-    assert response.headers["content-type"].startswith("text/html")
-
-
-def test_favicon_is_served(client: TestClient):
-    response = client.get("/favicon.ico")
-    assert response.status_code == 200
-
-
-def test_shared_stylesheet_is_served(client: TestClient):
-    response = client.get("/static/ui.css")
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/css")
-    assert ".card" in response.text
-
-
-def test_static_assets_served(client: TestClient):
-    app_js = client.get("/static/app.js")
-    assert app_js.status_code == 200
-    assert app_js.headers["content-type"].startswith("text/javascript")
-    assert "startConversion" in app_js.text
-
-    ui_core = client.get("/static/ui-core.js")
-    assert ui_core.status_code == 200
-    assert ui_core.headers["content-type"].startswith("text/javascript")
-    assert "formatBytes" in ui_core.text
-
-
-def test_index_links_static_assets_and_sets_csp(client: TestClient):
-    response = client.get("/")
-    assert "/static/ui.css" in response.text
-    assert "/static/app.js" in response.text
     assert "Content-Security-Policy" in response.text
     # No external assets — the UI must work fully offline.
     body = response.text.replace("http://127.0.0.1", "").replace("http://localhost", "")
     assert "http://" not in body
     assert "https://" not in body
+
+
+def test_index_returns_setup_help_without_build(client: TestClient):
+    """Without a built SPA the root still answers (503 with a helpful note)."""
+    if SPA_INDEX.is_file():
+        pytest.skip("web UI is built; this fallback path is not exercised")
+    response = client.get("/")
+    assert response.status_code == 503
+    assert "not built" in response.text
 
 
 def test_convert_validates_payload(client: TestClient):
@@ -143,8 +130,9 @@ def test_progress_stream_emits_terminal_snapshot(client: TestClient, populated_s
         final_event: dict | None = None
         for chunk in response.iter_text():
             assert chunk.startswith("data: ")
-            final_event = json.loads(chunk.removeprefix("data: "))
-            if final_event["status"] in TERMINAL_STATUSES:
+            event = json.loads(chunk.removeprefix("data: "))
+            if event["status"] in TERMINAL_STATUSES:
+                final_event = event
                 break
 
     assert final_event is not None

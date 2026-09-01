@@ -1,10 +1,11 @@
 import {
   ConversionOptions,
   FileResult,
-  clampToCanvasLimits,
-  computeResize,
+  failureResult,
   isSupportedImage,
-  replaceExtension,
+  successResult,
+  targetDimensions,
+  webpQuality,
 } from './core';
 
 /**
@@ -131,7 +132,7 @@ function canvasToWebp(canvas: HTMLCanvasElement, options: ConversionOptions): Pr
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('Browser failed to encode WebP'))),
       'image/webp',
-      Math.min(Math.max(options.quality, 1), 100) / 100,
+      webpQuality(options.quality),
     );
   });
 }
@@ -146,13 +147,7 @@ async function convertOnMainThread(
     if (img.naturalWidth === 0 || img.naturalHeight === 0) {
       throw new Error(`${file.name} has no pixel data (corrupt or unsupported format)`);
     }
-    const fitted = computeResize(
-      img.naturalWidth,
-      img.naturalHeight,
-      options.resizeWidth,
-      options.resizeHeight,
-    );
-    const target = clampToCanvasLimits(fitted.width, fitted.height);
+    const target = targetDimensions(img.naturalWidth, img.naturalHeight, options);
     const canvas = document.createElement('canvas');
     canvas.width = target.width;
     canvas.height = target.height;
@@ -164,28 +159,14 @@ async function convertOnMainThread(
       ctx.drawImage(img, 0, 0, target.width, target.height);
 
       const blob = await canvasToWebp(canvas, options);
-      return {
-        name: replaceExtension(relativePath, '.webp'),
-        relativePath,
-        originalSize: file.size,
-        convertedSize: blob.size,
-        success: true,
-        blob,
-      };
+      return successResult(file, relativePath, blob);
     } finally {
       // Release the backing store promptly — large images hold many MB.
       canvas.width = 0;
       canvas.height = 0;
     }
   } catch (err) {
-    return {
-      name: relativePath,
-      relativePath,
-      originalSize: file.size,
-      convertedSize: 0,
-      success: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    return failureResult(file, relativePath, err);
   }
 }
 

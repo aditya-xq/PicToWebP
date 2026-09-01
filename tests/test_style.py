@@ -8,12 +8,11 @@ from pictowebp.style import (
     LINE,
     RED,
     YELLOW,
-    field,
     paint,
-    section,
     supports_color,
     truncate_reason,
 )
+from pictowebp.ui import field, section
 
 
 def test_paint_returns_plain_text_when_no_color(monkeypatch, capsys):

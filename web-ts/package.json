@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:python": "tsc && vite build --mode python",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:python": "npm run build:python && playwright test --config playwright.python.config.ts",
     "watch": "vitest"
   },
   "devDependencies": {

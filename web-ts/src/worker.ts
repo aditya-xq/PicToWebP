@@ -9,9 +9,10 @@
 import {
   ConversionOptions,
   FileResult,
-  clampToCanvasLimits,
-  computeResize,
-  replaceExtension,
+  failureResult,
+  successResult,
+  targetDimensions,
+  webpQuality,
 } from './core';
 
 interface ConvertRequest {
@@ -31,13 +32,7 @@ async function convert(request: ConvertRequest): Promise<FileResult> {
       if (bitmap.width === 0 || bitmap.height === 0) {
         throw new Error(`${file.name} has no pixel data (corrupt or unsupported format)`);
       }
-      const fitted = computeResize(
-        bitmap.width,
-        bitmap.height,
-        options.resizeWidth,
-        options.resizeHeight,
-      );
-      const target = clampToCanvasLimits(fitted.width, fitted.height);
+      const target = targetDimensions(bitmap.width, bitmap.height, options);
       const canvas = new OffscreenCanvas(target.width, target.height);
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('OffscreenCanvas 2D context unavailable');
@@ -47,28 +42,14 @@ async function convert(request: ConvertRequest): Promise<FileResult> {
 
       const blob = await canvas.convertToBlob({
         type: 'image/webp',
-        quality: Math.min(Math.max(options.quality, 1), 100) / 100,
+        quality: webpQuality(options.quality),
       });
-      return {
-        name: replaceExtension(relativePath, '.webp'),
-        relativePath,
-        originalSize: file.size,
-        convertedSize: blob.size,
-        success: true,
-        blob,
-      };
+      return successResult(file, relativePath, blob);
     } finally {
       bitmap.close();
     }
   } catch (err) {
-    return {
-      name: relativePath,
-      relativePath,
-      originalSize: file.size,
-      convertedSize: 0,
-      success: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    return failureResult(file, relativePath, err);
   }
 }
 
@@ -79,14 +60,7 @@ self.addEventListener('message', (event: MessageEvent<ConvertRequest>) => {
     .catch((err) =>
       (self as unknown as Worker).postMessage({
         id: request.id,
-        result: {
-          name: request.relativePath,
-          relativePath: request.relativePath,
-          originalSize: request.file.size,
-          convertedSize: 0,
-          success: false,
-          error: err instanceof Error ? err.message : String(err),
-        } satisfies FileResult,
+        result: failureResult(request.file, request.relativePath, err),
       }),
     );
 });

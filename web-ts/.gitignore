@@ -1,6 +1,9 @@
 node_modules/
 dist/
+dist-python/
 .vite/
 test-results/
 playwright-report/
 blob-report/
+# Local-only env overrides (never secrets in .env.python — that is committed on purpose)
+.env*.local

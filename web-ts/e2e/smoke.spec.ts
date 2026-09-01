@@ -34,4 +34,24 @@ test.describe('PicToWebP browser edition', () => {
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/\.webp$/);
   });
+
+  test('converts with zero external network requests', async ({ page }) => {
+    // Runtime proof of the "100% local" guarantee: the page, its assets, the
+    // conversion worker and the image all come from the same origin (or
+    // blob:/data:). No request may leave for any external origin.
+    const requests: string[] = [];
+    page.on('request', (req) => requests.push(req.url()));
+
+    await page.goto('/');
+    await page.setInputFiles('#single-file-input', fixture);
+    await expect(page.locator('#single-result')).toBeVisible({ timeout: 15_000 });
+
+    const foreign = requests.filter((url) => {
+      const parsed = new URL(url);
+      const isSameOrigin = parsed.origin === 'http://localhost:4173';
+      const isInMemory = parsed.protocol === 'blob:' || parsed.protocol === 'data:';
+      return !isSameOrigin && !isInMemory;
+    });
+    expect(foreign).toEqual([]);
+  });
 });

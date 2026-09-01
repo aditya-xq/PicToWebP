@@ -17,31 +17,48 @@ import asyncio
 import io
 import json
 import logging
+import os
+import string
+import sys
+import tempfile
 import uuid
-from collections.abc import AsyncIterator
+import zipfile
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from importlib import resources
 from pathlib import Path
 from threading import Lock
 
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from pictowebp import __version__
 from pictowebp.console import force_utf8_stdio
-from pictowebp.converter import convert_folder, request_cancellation
+from pictowebp.converter import (
+    build_save_kwargs,
+    convert_folder,
+    prepare_image,
+    request_cancellation,
+)
+from pictowebp.enums import OutputImageFormat
 from pictowebp.logging_setup import setup_logging
 from pictowebp.progress import TERMINAL_STATUSES, ConversionProgress
-from pictowebp.utils import get_folder_info
+from pictowebp.utils import get_folder_info, open_folder
 from pictowebp.web.schemas import ConvertRequest, ValidateRequest
 
 logger = logging.getLogger(__name__)
 
-TEMPLATES_DIR = resources.files("pictowebp") / "templates"
+# Built SPA produced by `npm run build:python` in web-ts (repo root / web-ts /
+# dist-python). The single UI layer is shared with the static GitHub Pages build.
+# The path can be overridden for non-repo installs via PICTOWEBP_SPA_DIST.
+_env_spa = os.environ.get("PICTOWEBP_SPA_DIST")
+SPA_DIST = (
+    Path(_env_spa) if _env_spa else Path(__file__).resolve().parents[3] / "web-ts" / "dist-python"
+)
 PROGRESS_POLL_SECONDS = 0.2
 
 # The tool is designed for local use; browsers only need read-only cross-origin access.
@@ -50,8 +67,85 @@ CORS_ALLOW_ORIGINS = ["*"]
 MAX_HISTORY = 50
 
 
+def _is_windows() -> bool:
+    """True on Windows.
+
+    Kept as a helper rather than an inline ``sys.platform == "win32"``
+    comparison so platform-aware type checkers don't treat either branch of
+    the callers as unreachable on the host OS — the code is cross-platform.
+    """
+    return sys.platform == "win32"
+
+
+def _list_drives() -> list[str]:
+    """List existing drive roots on Windows (``C:\\``, ``D:\\``, ...)."""
+    return [f"{letter}:\\" for letter in string.ascii_uppercase if Path(f"{letter}:\\").exists()]
+
+
+def _resolve_browse_path(raw: str) -> Path:
+    """Resolve a browse target, falling back to the platform root."""
+    path = Path(raw)
+    if not path.exists():
+        path = path.parent
+    if not path.is_dir():
+        if _is_windows():
+            return Path(path.anchor) if path.anchor else Path("C:\\")
+        return Path("/")
+    return path
+
+
+def _directory_entries(path: Path) -> list[dict]:
+    """List non-hidden subdirectories of ``path``, sorted case-insensitively."""
+    try:
+        return sorted(
+            [
+                {"name": p.name, "path": str(p), "is_dir": p.is_dir()}
+                for p in path.iterdir()
+                if p.is_dir() and not p.name.startswith(".")
+            ],
+            key=lambda entry: entry["name"].lower(),
+        )
+    except PermissionError:
+        return []
+
+
+def _invalid_folder_response(error: str) -> dict:
+    """Response payload describing a folder that cannot be validated."""
+    return {
+        "valid": False,
+        "error": error,
+        "total_files": 0,
+        "format_counts": {},
+        "total_size_bytes": 0,
+        "total_size_display": "0 B",
+    }
+
+
+def _make_history_entry(
+    job_id: str,
+    source_folder: Path,
+    snap: dict,
+    payload: ConvertRequest,
+) -> dict:
+    """Build one conversion-history record from a finished job snapshot."""
+    return {
+        "id": job_id,
+        "source_folder": str(source_folder),
+        "output_folder": snap.get("output_folder", ""),
+        "output_format": "WEBP",
+        "quality": payload.quality,
+        "total_files": snap["total_files"],
+        "converted_files": snap["converted_files"],
+        "failed_files": snap["failed_files"],
+        "bytes_saved": snap["bytes_saved"],
+        "reduction_percent": snap["reduction_percent"],
+        "elapsed_seconds": snap["elapsed_seconds"],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     setup_logging()
     logger.info("PicToWebP %s ready", __version__)
     yield
@@ -78,27 +172,24 @@ def create_app() -> FastAPI:
     app.state.conversion_lock = conversion_lock
 
     @app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        return FileResponse(TEMPLATES_DIR / "index.html", media_type="text/html")
+    def index() -> Response:
+        """Serve the built single-page UI (shared with the static edition)."""
+        spa_index = SPA_DIST / "index.html"
+        if spa_index.is_file():
+            return FileResponse(spa_index, media_type="text/html")
+        return HTMLResponse(
+            "<h1>PicToWebP web UI is not built</h1>"
+            "<p>Run <code>npm run build:python</code> inside <code>web-ts/</code>, "
+            "then restart <code>pictowebp-web</code>.</p>",
+            status_code=503,
+        )
 
-    @app.get("/static/ui.css", include_in_schema=False)
-    def ui_css() -> FileResponse:
-        """Shared design system — the same stylesheet the browser edition bundles."""
-        return FileResponse(TEMPLATES_DIR / "ui.css", media_type="text/css")
-
-    @app.get("/static/ui-core.js", include_in_schema=False)
-    def ui_core_js() -> FileResponse:
-        """Shared UI helpers for the local web UI."""
-        return FileResponse(TEMPLATES_DIR / "ui-core.js", media_type="text/javascript")
-
-    @app.get("/static/app.js", include_in_schema=False)
-    def app_js() -> FileResponse:
-        """Web UI application logic (kept out of the template for a strict CSP)."""
-        return FileResponse(TEMPLATES_DIR / "app.js", media_type="text/javascript")
-
-    @app.get("/favicon.ico", include_in_schema=False)
-    def favicon() -> FileResponse:
-        return FileResponse(TEMPLATES_DIR / "favicon.ico")
+    if (SPA_DIST / "assets").is_dir():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=SPA_DIST / "assets"),
+            name="spa-assets",
+        )
 
     @app.post("/convert", status_code=status.HTTP_202_ACCEPTED)
     def start_conversion(payload: ConvertRequest, background_tasks: BackgroundTasks) -> dict:
@@ -132,21 +223,7 @@ def create_app() -> FastAPI:
                 )
                 # Record in history
                 snap = result.snapshot()
-                history_entry = {
-                    "id": job_id,
-                    "source_folder": str(source_folder),
-                    "output_folder": snap.get("output_folder", ""),
-                    "output_format": "WEBP",
-                    "quality": payload.quality,
-                    "total_files": snap["total_files"],
-                    "converted_files": snap["converted_files"],
-                    "failed_files": snap["failed_files"],
-                    "bytes_saved": snap["bytes_saved"],
-                    "reduction_percent": snap["reduction_percent"],
-                    "elapsed_seconds": snap["elapsed_seconds"],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-                conversion_history.append(history_entry)
+                conversion_history.append(_make_history_entry(job_id, source_folder, snap, payload))
                 if len(conversion_history) > MAX_HISTORY:
                     conversion_history.pop(0)
                 last_output["folder"] = snap.get("output_folder", "")
@@ -178,9 +255,6 @@ def create_app() -> FastAPI:
     @app.get("/api/download-zip", include_in_schema=False)
     def download_zip() -> StreamingResponse:
         """Stream the most recent conversion output folder as a ZIP archive."""
-        import tempfile
-        import zipfile
-
         folder = Path(last_output["folder"]) if last_output["folder"] else None
         if not folder or not folder.is_dir():
             raise HTTPException(
@@ -263,24 +337,10 @@ def create_app() -> FastAPI:
         """Validate a source folder and return info about convertible images."""
         folder = Path(payload.source_folder)
         if not folder.is_dir():
-            return {
-                "valid": False,
-                "error": "Folder does not exist or is not a directory",
-                "total_files": 0,
-                "format_counts": {},
-                "total_size_bytes": 0,
-                "total_size_display": "0 B",
-            }
+            return _invalid_folder_response("Folder does not exist or is not a directory")
         info = get_folder_info(folder)
         if not info["valid"]:
-            return {
-                "valid": False,
-                "error": "No convertible images found in this folder",
-                "total_files": 0,
-                "format_counts": {},
-                "total_size_bytes": 0,
-                "total_size_display": "0 B",
-            }
+            return _invalid_folder_response("No convertible images found in this folder")
         return info
 
     @app.post("/api/browse")
@@ -289,43 +349,20 @@ def create_app() -> FastAPI:
         raw = payload.source_folder.strip() if payload.source_folder else ""
         if not raw:
             # On Windows list drive roots, elsewhere use /
-            import sys
-
-            if sys.platform == "win32":
-                import string
-
-                drives = [f"{d}:\\" for d in string.ascii_uppercase if Path(f"{d}:\\").exists()]
-                return {"current": "This PC", "parent": None, "drives": drives, "entries": []}
+            if _is_windows():
+                return {
+                    "current": "This PC",
+                    "parent": None,
+                    "drives": _list_drives(),
+                    "entries": [],
+                }
             raw = "/"
 
-        path = Path(raw)
-        if not path.exists():
-            path = path.parent
-        if not path.is_dir():
-            import sys
-
-            if sys.platform == "win32":
-                path = Path(path.anchor) if path.anchor else Path("C:\\")
-            else:
-                path = Path("/")
-
-        try:
-            entries = sorted(
-                [
-                    {"name": p.name, "path": str(p), "is_dir": p.is_dir()}
-                    for p in path.iterdir()
-                    if p.is_dir() and not p.name.startswith(".")
-                ],
-                key=lambda e: e["name"].lower(),
-            )
-        except PermissionError:
-            entries = []
-
-        parent = str(path.parent) if path.parent != path else None
+        path = _resolve_browse_path(raw)
         return {
             "current": str(path),
-            "parent": parent,
-            "entries": entries,
+            "parent": str(path.parent) if path.parent != path else None,
+            "entries": _directory_entries(path),
         }
 
     @app.get("/api/history")
@@ -340,11 +377,8 @@ def create_app() -> FastAPI:
         return {"message": "History cleared"}
 
     @app.post("/api/open-folder")
-    def open_folder(payload: ValidateRequest) -> dict:
+    def open_folder_endpoint(payload: ValidateRequest) -> dict:
         """Open a folder in the OS file explorer."""
-        import platform
-        import subprocess
-
         folder = Path(payload.source_folder)
         if not folder.is_dir():
             raise HTTPException(
@@ -352,15 +386,7 @@ def create_app() -> FastAPI:
                 detail="Folder does not exist",
             )
         try:
-            system = platform.system()
-            if system == "Windows":
-                import os
-
-                os.startfile(str(folder))  # type: ignore[attr-defined]
-            elif system == "Darwin":
-                subprocess.Popen(["open", str(folder)])
-            else:
-                subprocess.Popen(["xdg-open", str(folder)])
+            open_folder(folder)
         except Exception:
             logger.exception("Failed to open folder %s", folder)
             raise HTTPException(
@@ -396,24 +422,19 @@ def create_app() -> FastAPI:
         def encode() -> bytes:
             """CPU-bound Pillow work — runs in a worker thread so the event
             loop (and any SSE progress stream) stays responsive."""
-            from pictowebp.utils import _prepare_image
-
-            prepared = _prepare_image(
+            prepared = prepare_image(
                 img,
                 resize_width=resize_width,
                 resize_height=resize_height,
             )
             buf = io.BytesIO()
-            save_kwargs: dict = {
-                "format": "WEBP",
-                "quality": quality,
-                "lossless": lossless,
-            }
-            if not strip_metadata:
-                if exif := img.info.get("exif"):
-                    save_kwargs["exif"] = exif
-                if icc := img.info.get("icc_profile"):
-                    save_kwargs["icc_profile"] = icc
+            save_kwargs = build_save_kwargs(
+                img,
+                OutputImageFormat.WEBP,
+                quality=quality,
+                lossless=lossless,
+                strip_metadata=strip_metadata,
+            )
             prepared.save(buf, **save_kwargs)
             return buf.getvalue()
 

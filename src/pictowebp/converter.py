@@ -1,4 +1,4 @@
-"""Core multi-process conversion engine."""
+"""Core multi-process conversion engine (batch + per-file)."""
 
 from __future__ import annotations
 
@@ -6,13 +6,16 @@ import contextlib
 import logging
 import os
 import signal
+import tempfile
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
+from PIL import Image
 from tqdm import tqdm
 
 from pictowebp.constants import (
@@ -21,20 +24,38 @@ from pictowebp.constants import (
     DEFAULT_THREADS,
     ERROR_REPORT_NAME,
 )
+from pictowebp.discovery import discover_images, sum_file_bytes
 from pictowebp.enums import OutputImageFormat
+from pictowebp.paths import resolve_output_folder
 from pictowebp.progress import ConversionProgress
 from pictowebp.style import DIM, GREEN, YELLOW, paint
 from pictowebp.utils import (
-    ConversionError,
     categorize_conversion_error,
     check_disk_space,
-    discover_images,
     format_bytes,
-    process_file,
-    resolve_output_folder,
 )
 
 logger = logging.getLogger(__name__)
+
+# Modes that may carry transparency are normalised to RGBA; everything else to RGB.
+_ALPHA_MODES = frozenset({"RGBA", "LA", "PA", "P"})
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessedFile:
+    """Size bookkeeping for one converted image."""
+
+    original_bytes: int
+    converted_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class ConversionError:
+    """Details about a file that failed to convert."""
+
+    file_path: Path
+    reason: str
+
 
 # Work is parallelised across worker processes, so each process must keep
 # its native codec threads at 1 to avoid oversubscribing the CPU.
@@ -47,7 +68,7 @@ _CURRENT_CANCELLATION: threading.Event | None = None
 
 
 @contextmanager
-def cancellation_scope() -> Callable[[], bool]:
+def cancellation_scope() -> Generator[Callable[[], bool], None, None]:
     """Provide a callable that returns True if cancellation was requested.
 
     Used by :func:`convert_folder` to install a SIGINT handler that records
@@ -138,10 +159,7 @@ def convert_folder(
 
     print(f"  {paint('Discovering images', DIM)}", flush=True)
     files = discover_images(source_folder)
-    total_bytes = 0
-    for path in files:
-        with contextlib.suppress(OSError):
-            total_bytes += path.stat().st_size
+    total_bytes = sum_file_bytes(files)
     print(
         f"  {paint(f'Found {len(files):,} images ({format_bytes(total_bytes)})', DIM)}",
         flush=True,
@@ -248,21 +266,7 @@ def convert_folder(
                 if is_cancelled():
                     future.cancel()
                     continue
-                outcome = future.result()
-                if isinstance(outcome, ConversionError):
-                    tracker.record_failure(
-                        file_path=str(outcome.file_path.resolve()),
-                        reason=outcome.reason,
-                    )
-                else:
-                    tracker.record(outcome.original_bytes, outcome.converted_bytes)
-                # Live feedback: how much has been saved so far, plus the
-                # number of skipped files, right on the progress bar.
-                postfix = f"{format_bytes(tracker.bytes_saved)} saved"
-                if tracker.failed_files:
-                    postfix += f" · {tracker.failed_files} skipped"
-                progress_bar.set_postfix_str(postfix)
-                progress_bar.update(1)
+                _record_result(future.result(), tracker, progress_bar)
 
     elapsed = perf_counter() - started
     if is_cancelled():
@@ -271,6 +275,28 @@ def convert_folder(
         tracker.finish("completed", elapsed_seconds=elapsed)
     _write_failure_report(output_folder, tracker.failure_details(), report_path)
     return tracker
+
+
+def _record_result(
+    outcome: ProcessedFile | ConversionError,
+    tracker: ConversionProgress,
+    progress_bar: tqdm,
+) -> None:
+    """Record one worker outcome and refresh the live progress postfix."""
+    if isinstance(outcome, ConversionError):
+        tracker.record_failure(
+            file_path=str(outcome.file_path.resolve()),
+            reason=outcome.reason,
+        )
+    else:
+        tracker.record(outcome.original_bytes, outcome.converted_bytes)
+    # Live feedback: how much has been saved so far, plus the number of
+    # skipped files, right on the progress bar.
+    postfix = f"{format_bytes(tracker.bytes_saved)} saved"
+    if tracker.failed_files:
+        postfix += f" · {tracker.failed_files} skipped"
+    progress_bar.set_postfix_str(postfix)
+    progress_bar.update(1)
 
 
 def _output_collisions(
@@ -319,3 +345,141 @@ def _write_failure_report(
         logger.warning("Could not write conversion error report %s: %s", report, exc)
     else:
         logger.info("Conversion error report written to %s", report)
+
+
+def process_file(
+    file_path: Path,
+    source_folder: Path,
+    output_folder: Path,
+    quality: int,
+    output_format: OutputImageFormat,
+    *,
+    lossless: bool = False,
+    strip_metadata: bool = True,
+    resize_width: int | None = None,
+    resize_height: int | None = None,
+) -> ProcessedFile | ConversionError:
+    """Convert a single image into ``output_format``.
+
+    The relative directory structure below ``source_folder`` is mirrored under
+    ``output_folder``. Files that cannot be decoded are logged and skipped.
+
+    :return: Size information on success, or a ``ConversionError`` when skipped.
+    """
+    relative_path = file_path.relative_to(source_folder)
+    destination = (output_folder / relative_path).with_suffix(output_format.file_extension)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_destination: Path | None = None
+
+    try:
+        original_bytes = file_path.stat().st_size
+        # The temp file lives next to the destination so the rename is a
+        # single-filesystem call. We embed the destination stem plus a
+        # PID/process-id suffix to make collisions effectively impossible when
+        # multiple workers process same-stem images in parallel.
+        temp_prefix = f".{destination.stem}.{os.getpid()}.{os.urandom(4).hex()}-"
+        fd, temp_path_str = tempfile.mkstemp(
+            prefix=temp_prefix, suffix=".tmp", dir=destination.parent
+        )
+        temporary_destination = Path(temp_path_str)
+        # Close the descriptor immediately; Pillow reopens the file by path.
+        os.close(fd)
+
+        with Image.open(file_path) as img:
+            prepared = prepare_image(img, resize_width=resize_width, resize_height=resize_height)
+            save_kwargs = build_save_kwargs(
+                img,
+                output_format,
+                quality=quality,
+                lossless=lossless,
+                strip_metadata=strip_metadata,
+            )
+            prepared.save(temporary_destination, **save_kwargs)
+            os.replace(temporary_destination, destination)
+    except Exception as exc:
+        # Worker boundary: any per-file failure (corrupt data, unsupported
+        # mode, Pillow's DecompressionBombError, ...) is reported as a skip
+        # instead of aborting the whole batch. BaseException subclasses such
+        # as KeyboardInterrupt still propagate.
+        reason = str(exc) or type(exc).__name__
+        # Log at INFO so the per-file skip is captured in the log file without
+        # polluting the terminal. The CLI summary already shows every failed
+        # file with its reason.
+        logger.info("Skipping %s: %s", file_path, reason)
+        if temporary_destination is not None:
+            temporary_destination.unlink(missing_ok=True)
+        return ConversionError(file_path=file_path, reason=reason)
+
+    return ProcessedFile(original_bytes=original_bytes, converted_bytes=destination.stat().st_size)
+
+
+def prepare_image(
+    img: Image.Image,
+    *,
+    resize_width: int | None = None,
+    resize_height: int | None = None,
+) -> Image.Image:
+    """Normalise the image mode and optionally resize."""
+    # Convert mode for format compatibility
+    if img.mode == "RGB":
+        result = img
+    elif img.mode in _ALPHA_MODES:
+        result = img.convert("RGBA")
+    else:
+        result = img.convert("RGB")
+
+    # Resize if requested (preserve aspect ratio)
+    if resize_width or resize_height:
+        result = _resize_image(result, resize_width, resize_height)
+
+    return result
+
+
+def build_save_kwargs(
+    img: Image.Image,
+    output_format: OutputImageFormat,
+    *,
+    quality: int,
+    lossless: bool,
+    strip_metadata: bool,
+) -> dict:
+    """Build Pillow ``save`` keyword arguments for a converted image.
+
+    Pillow never copies metadata unless explicitly told to, so keeping it is
+    an opt-in; stripping is the default for free.
+    """
+    save_kwargs: dict = {
+        "format": output_format.pil_format,
+        "quality": quality,
+        "lossless": lossless,
+    }
+    if not strip_metadata:
+        if exif := img.info.get("exif"):
+            save_kwargs["exif"] = exif
+        if icc := img.info.get("icc_profile"):
+            save_kwargs["icc_profile"] = icc
+    return save_kwargs
+
+
+def _resize_image(
+    img: Image.Image,
+    max_width: int | None,
+    max_height: int | None,
+) -> Image.Image:
+    """Resize image to fit within max dimensions while preserving aspect ratio."""
+    orig_w, orig_h = img.size
+    new_w, new_h = orig_w, orig_h
+
+    if max_width and orig_w > max_width:
+        ratio = max_width / orig_w
+        new_w = max_width
+        new_h = max(1, int(orig_h * ratio))
+
+    if max_height and new_h > max_height:
+        ratio = max_height / new_h
+        new_h = max_height
+        new_w = max(1, int(new_w * ratio))
+
+    if (new_w, new_h) != (orig_w, orig_h):
+        return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    return img

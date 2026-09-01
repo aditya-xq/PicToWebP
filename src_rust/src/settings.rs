@@ -143,28 +143,21 @@ fn parse_threads(raw: &str) -> Result<NonZeroUsize, String> {
 }
 
 fn parse_resize_width(raw: &str) -> Result<u32, String> {
-    let value = raw
-        .parse::<u32>()
-        .map_err(|_| "must be a number".to_string())?;
-    if (MIN_RESIZE_WIDTH..=MAX_RESIZE_WIDTH).contains(&value) {
-        Ok(value)
-    } else {
-        Err(format!(
-            "must be between {MIN_RESIZE_WIDTH} and {MAX_RESIZE_WIDTH}"
-        ))
-    }
+    parse_resize(raw, MIN_RESIZE_WIDTH, MAX_RESIZE_WIDTH)
 }
 
 fn parse_resize_height(raw: &str) -> Result<u32, String> {
+    parse_resize(raw, MIN_RESIZE_HEIGHT, MAX_RESIZE_HEIGHT)
+}
+
+fn parse_resize(raw: &str, min: u32, max: u32) -> Result<u32, String> {
     let value = raw
         .parse::<u32>()
         .map_err(|_| "must be a number".to_string())?;
-    if (MIN_RESIZE_HEIGHT..=MAX_RESIZE_HEIGHT).contains(&value) {
+    if (min..=max).contains(&value) {
         Ok(value)
     } else {
-        Err(format!(
-            "must be between {MIN_RESIZE_HEIGHT} and {MAX_RESIZE_HEIGHT}"
-        ))
+        Err(format!("must be between {min} and {max}"))
     }
 }
 

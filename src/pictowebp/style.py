@@ -38,18 +38,6 @@ def paint(value: object, style: str) -> str:
     return text
 
 
-def section(title: object, style: str = BOLD_CYAN) -> None:
-    """Print a section header framed by separator lines."""
-    print(f"  {paint(LINE, DIM)}")
-    print(f"   {paint(title, style)}")
-    print(f"  {paint(LINE, DIM)}")
-
-
-def field(label: str, value: object, *, style: str = CYAN) -> None:
-    """Print an aligned ``Label: value`` pair."""
-    print(f"  {paint(label, style)} {value}")
-
-
 def truncate_reason(reason: str) -> str:
     """Trim a long error message to a readable terminal length."""
     if len(reason) <= MAX_REASON_DISPLAY_LENGTH:
