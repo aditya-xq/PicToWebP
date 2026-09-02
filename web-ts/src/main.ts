@@ -10,10 +10,16 @@ import type {
   ProgressSnapshot,
   SourceSelection,
 } from './backend';
-import { formatBytes, formatDuration, hasHiddenDirectorySegment, isSupportedImage } from './core';
+import {
+  estimateWebpBytes,
+  formatBytes,
+  formatDuration,
+  hasHiddenDirectorySegment,
+  isSupportedImage,
+} from './core';
 import { $ } from './ui/dom';
-import { clearHistory, closeHistory, openHistory } from './ui/history';
 import { entriesFromDrop, hasFiles } from './ui/drop';
+import { setFocusTrap } from './ui/focus';
 import { shareStats, type ShareStats } from './ui/share';
 import { showToast } from './ui/toasts';
 
@@ -29,7 +35,14 @@ let selection: SourceSelection | null = null;
 let selectionValid = false;
 let result: ConversionResult | null = null;
 let lastStats: ShareStats | null = null;
+let lastSummary: {
+  detail: string;
+  valid: boolean;
+  totalBytes: number;
+  totalFiles: number;
+} | null = null;
 let previewUrl: string | null = null;
+let origUrl: string | null = null;
 let dragDepth = 0;
 
 /* ------------------------------ Helpers ------------------------------ */
@@ -38,6 +51,7 @@ function showState(next: AppState): void {
   for (const s of ['idle', 'running', 'complete', 'error']) {
     $(`state-${s}`).classList.toggle('hidden', s !== next);
   }
+  $('state-running').setAttribute('aria-busy', String(next === 'running'));
   if (next === 'running') {
     const btn = $('cancel-btn') as HTMLButtonElement;
     btn.disabled = false;
@@ -62,11 +76,78 @@ function updateSliderFill(): void {
 
 function updateConvertButton(): void {
   const btn = $('convert-btn') as HTMLButtonElement;
-  const count = selection?.entries?.length ?? 0;
+  // Browser selections carry their entries up front; the python edition only
+  // learns the count after the server-side scan (lastSummary.totalFiles).
+  const count = selection?.entries?.length ?? lastSummary?.totalFiles ?? 0;
   const ready = Boolean(selection) && selectionValid;
   btn.disabled = !ready || isConverting;
   btn.textContent =
     ready && count > 0 ? `Convert ${count} Image${count === 1 ? '' : 's'}` : 'Convert to WebP';
+}
+
+/** Rebuild the source badge line, appending a live output-size estimate. */
+function renderSourceInfo(): void {
+  if (!lastSummary) return;
+  const info = $('source-info');
+  const parts = [lastSummary.detail];
+  if (lastSummary.valid && lastSummary.totalBytes > 0) {
+    const losslessOn =
+      cap.lossless && document.getElementById('toggle-lossless')?.classList.contains('active');
+    if (!losslessOn) {
+      const quality = Number(($('quality-slider') as HTMLInputElement).value);
+      const est = estimateWebpBytes(lastSummary.totalBytes, quality);
+      if (est > 0) parts.push(`≈ ${formatBytes(est)} output`);
+    }
+  }
+  info.textContent = parts.join(' · ');
+  info.classList.toggle('invalid', !lastSummary.valid);
+}
+
+/** Move the single-image compare divider to `value` (0-100). */
+function setComparePos(value: number): void {
+  $('compare-stage').style.setProperty('--compare-pos', String(value / 100));
+}
+
+/** Animate a stat number from 0 up to `target` with cubic ease-out. */
+function animateCount(el: HTMLElement, target: number, duration = 900, suffix = ''): void {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.textContent = `${target.toFixed(1)}${suffix}`;
+    return;
+  }
+  const start = performance.now();
+  const frame = (now: number): void => {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = `${(target * eased).toFixed(1)}${suffix}`;
+    if (t < 1) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
+/** Copy a string to the clipboard (Web API with a legacy fallback). */
+async function copyText(text: string): Promise<void> {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Path copied', 'success');
+    return;
+  } catch {
+    // Legacy path for contexts where the async Clipboard API is unavailable.
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  }
+  document.body.removeChild(ta);
+  showToast(copied ? 'Path copied' : 'Could not copy path', copied ? 'success' : 'error');
 }
 
 /**
@@ -127,6 +208,7 @@ async function setSource(sel: SourceSelection): Promise<void> {
   selection = sel;
   const badge = $('source-badge');
   badge.classList.remove('hidden');
+  $('idle-hint').classList.add('hidden');
   $('source-path').textContent = sel.label;
   $('source-path').title = sel.label;
 
@@ -140,13 +222,19 @@ async function setSource(sel: SourceSelection): Promise<void> {
     const summary = await backend.enumerate(sel);
     selection = sel;
     selectionValid = summary.valid;
-    info.textContent = summary.valid
-      ? summary.detail
-      : sel.entries?.length === 0 && cap.kind === 'browser'
-        ? 'No supported images found'
-        : summary.detail;
-    if (!summary.valid) info.classList.add('invalid');
+    lastSummary = {
+      detail: summary.valid
+        ? summary.detail
+        : sel.entries?.length === 0 && cap.kind === 'browser'
+          ? 'No supported images found'
+          : summary.detail,
+      valid: summary.valid,
+      totalBytes: summary.totalBytes,
+      totalFiles: summary.totalFiles,
+    };
+    renderSourceInfo();
   } catch {
+    lastSummary = null;
     info.textContent = 'Could not read the folder';
     info.classList.add('invalid');
     selectionValid = false;
@@ -202,6 +290,22 @@ function renderProgress(p: ProgressSnapshot): void {
   $('running-total').textContent = String(p.total);
   $('running-elapsed').textContent = `${formatDuration(p.elapsedSeconds)} elapsed`;
   $('running-eta').textContent = p.etaSeconds === null ? '--' : formatDuration(p.etaSeconds);
+
+  const nameEl = $('running-file-name');
+  if (p.currentFile) {
+    const short = p.currentFile.split(/[/\\]/).pop() ?? p.currentFile;
+    nameEl.textContent = short;
+    nameEl.title = p.currentFile;
+  } else {
+    // No in-flight file (start of run / between chunks) — drop any stale name.
+    nameEl.textContent = '';
+    nameEl.title = '';
+  }
+
+  // Announce progress in bursts so screen readers aren't spammed every tick.
+  if (p.processed === 1 || p.processed % 5 === 0 || p.processed === p.total) {
+    $('progress-live').textContent = `${p.processed} of ${p.total} images converted`;
+  }
 }
 
 async function startConversion(): Promise<void> {
@@ -234,7 +338,9 @@ async function startConversion(): Promise<void> {
       showToast(
         done.cancelled
           ? `Cancelled — ${done.stats.convertedFiles} converted file${done.stats.convertedFiles === 1 ? '' : 's'} kept`
-          : 'WebP conversion complete!',
+          : done.stats.bytesSaved > 0
+            ? `Saved ${formatBytes(done.stats.bytesSaved)} (${done.stats.reductionPercent.toFixed(1)}% smaller)`
+            : 'WebP conversion complete!',
         done.cancelled ? 'warn' : 'success',
       );
     }
@@ -289,7 +395,7 @@ function showComplete(done: ConversionResult): void {
 
   $('complete-time').textContent = `Finished in ${formatDuration(stats.elapsedSeconds)}`;
   $('stat-saved').textContent = formatBytes(stats.bytesSaved);
-  $('stat-saved-pct').textContent = `${percent}% reduction`;
+  animateCount($('stat-saved-pct'), stats.reductionPercent, 900, '% reduction');
   $('stat-converted').textContent = `${stats.convertedFiles} / ${stats.totalFiles}`;
   const notProcessed = done.cancelled
     ? Math.max(0, stats.totalFiles - stats.convertedFiles - stats.failedFiles)
@@ -301,6 +407,22 @@ function showComplete(done: ConversionResult): void {
     failedParts.length > 0 ? failedParts.join(' · ') : 'All successful';
   $('stat-original').textContent = formatBytes(stats.originalBytes);
   $('stat-new').textContent = formatBytes(stats.convertedBytes);
+
+  // Size comparison bars + staggered card reveal (animated after the state
+  // pane is visible again).
+  const maxBytes = Math.max(stats.originalBytes, stats.convertedBytes, 1);
+  requestAnimationFrame(() => {
+    $('cmp-bar-orig').style.width = `${(stats.originalBytes / maxBytes) * 100}%`;
+    $('cmp-bar-webp').style.width = `${(stats.convertedBytes / maxBytes) * 100}%`;
+    $('cmp-val-orig').textContent = formatBytes(stats.originalBytes);
+    $('cmp-val-webp').textContent = formatBytes(stats.convertedBytes);
+  });
+  document.querySelectorAll<HTMLElement>('.stat-card').forEach((card, i) => {
+    card.classList.remove('pop');
+    void card.offsetWidth;
+    card.style.animationDelay = `${i * 70}ms`;
+    card.classList.add('pop');
+  });
 
   const collisions = done.failures.filter((f) => f.reason.includes('collision')).length;
   const note = $('collisions-note');
@@ -348,18 +470,17 @@ function resetUI(): void {
   selection = null;
   selectionValid = false;
   result = null;
+  lastSummary = null;
   $('progress-bar').style.width = '0%';
   $('source-badge').classList.add('hidden');
+  $('idle-hint').classList.remove('hidden');
   updateConvertButton();
   setMode('folder');
   $('single-upload').classList.remove('hidden');
   $('single-converting').classList.add('hidden');
   $('single-result').classList.add('hidden');
   ($('single-file-input') as HTMLInputElement).value = '';
-  if (previewUrl) {
-    URL.revokeObjectURL(previewUrl);
-    previewUrl = null;
-  }
+  revokePreviewUrls();
 }
 
 /* ------------------------------ Results ------------------------------ */
@@ -400,6 +521,18 @@ function releaseBlobs(): void {
   for (const entry of result.blobs) entry.blob = undefined;
 }
 
+/** Free both single-mode preview object URLs (converted + original). */
+function revokePreviewUrls(): void {
+  if (previewUrl) {
+    URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
+  }
+  if (origUrl) {
+    URL.revokeObjectURL(origUrl);
+    origUrl = null;
+  }
+}
+
 /* --------------------------- Single image --------------------------- */
 
 function handleSingleFile(file: File): void {
@@ -419,9 +552,13 @@ function handleSingleFile(file: File): void {
     .convertSingle(file, options)
     .then((r) => {
       if (!r.success || !r.blob) throw new Error(r.error ?? 'Conversion failed');
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      revokePreviewUrls();
       previewUrl = URL.createObjectURL(r.blob);
+      origUrl = URL.createObjectURL(file);
       ($('single-preview-img') as HTMLImageElement).src = previewUrl;
+      ($('cmp-orig') as HTMLImageElement).src = origUrl;
+      setComparePos(50);
+      ($('compare-slider') as HTMLInputElement).value = '50';
       const download = $('single-download-btn') as HTMLAnchorElement;
       download.href = previewUrl;
       download.download = r.name;
@@ -434,6 +571,7 @@ function handleSingleFile(file: File): void {
     .catch((err: Error) => {
       $('single-converting').classList.add('hidden');
       $('single-upload').classList.remove('hidden');
+      revokePreviewUrls();
       showToast(err.message || 'Conversion failed', 'error');
     })
     .finally(() => {
@@ -445,11 +583,9 @@ function handleSingleFile(file: File): void {
 function convertAnotherSingle(): void {
   $('single-result').classList.add('hidden');
   $('single-upload').classList.remove('hidden');
-  if (previewUrl) {
-    URL.revokeObjectURL(previewUrl);
-    previewUrl = null;
-  }
+  revokePreviewUrls();
   ($('single-preview-img') as HTMLImageElement).src = '';
+  ($('cmp-orig') as HTMLImageElement).src = '';
   ($('single-download-btn') as HTMLAnchorElement).href = '#';
   ($('single-file-input') as HTMLInputElement).value = '';
 }
@@ -461,15 +597,20 @@ let browseSelected = '';
 
 function openBrowse(): void {
   if (isConverting) return;
-  $('browse-modal').classList.remove('hidden');
+  const modal = $('browse-modal');
+  modal.classList.remove('hidden');
   browseSelected = '';
   $('browse-selected').textContent = 'Navigate to a folder';
   ($('browse-select-btn') as HTMLButtonElement).disabled = true;
+  setFocusTrap(modal, true);
+  // The overlay itself isn't focusable — land focus on the dialog body.
+  (modal.querySelector('.browse-modal-body') as HTMLElement | null)?.focus();
   void browseTo(selection?.folderPath ?? '');
 }
 
 function closeBrowse(): void {
   $('browse-modal').classList.add('hidden');
+  setFocusTrap($('browse-modal'), false);
 }
 
 async function browseTo(path: string): Promise<void> {
@@ -578,6 +719,9 @@ async function handleDrop(e: DragEvent): Promise<void> {
 function showShortcuts(visible: boolean): void {
   $('shortcuts-modal').classList.toggle('hidden', !visible);
   $('shortcuts-overlay').classList.toggle('hidden', !visible);
+  const modal = $('shortcuts-modal');
+  setFocusTrap(modal, visible);
+  if (visible) modal.focus();
 }
 
 /* -------------------------------- Init -------------------------------- */
@@ -615,6 +759,7 @@ function initUI(): void {
     $('quality-value').textContent = slider.value;
     slider.setAttribute('aria-valuetext', `${slider.value} out of 100`);
     updateSliderFill();
+    renderSourceInfo();
   });
   updateSliderFill();
   document.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach((btn) => {
@@ -622,11 +767,12 @@ function initUI(): void {
       slider.value = btn.dataset.preset!;
       $('quality-value').textContent = slider.value;
       updateSliderFill();
+      renderSourceInfo();
     });
   });
 
   // Toggles
-  if (cap.lossless) bindToggle($('toggle-lossless'));
+  if (cap.lossless) bindToggle($('toggle-lossless'), () => renderSourceInfo());
   if (cap.metadataControl) bindToggle($('toggle-metadata'));
 
   // Mode tabs
@@ -679,6 +825,18 @@ function initUI(): void {
   fallbackInput.webkitdirectory = true;
   fallbackInput.addEventListener('change', pickViaFallbackInput);
 
+  // iOS Safari cannot pick whole folders — never promise it in the copy.
+  if (!('webkitdirectory' in fallbackInput)) {
+    const title = dropZone.querySelector('.dz-title');
+    if (title) title.textContent = 'Select images';
+    $('drop-zone-sub').textContent = 'or drag images here — everything stays local';
+  }
+
+  // Single-image original-vs-WebP compare slider.
+  const compareSlider = $('compare-slider') as HTMLInputElement;
+  compareSlider.addEventListener('input', () => setComparePos(Number(compareSlider.value)));
+  setComparePos(50);
+
   // Full-window drag overlay
   window.addEventListener('dragenter', (e) => {
     if (!hasFiles(e)) return;
@@ -727,12 +885,9 @@ function initUI(): void {
     if (lastStats) void shareStats(lastStats);
   });
   $('convert-another-btn').addEventListener('click', convertAnotherSingle);
-
-  // History
-  $('history-btn').addEventListener('click', () => void openHistory(backend));
-  $('history-close-btn').addEventListener('click', closeHistory);
-  $('history-overlay').addEventListener('click', closeHistory);
-  $('history-clear-btn').addEventListener('click', () => void clearHistory(backend));
+  $('copy-path-btn').addEventListener('click', () =>
+    void copyText($('stat-output-path').textContent ?? ''),
+  );
 
   // Browse modal (python)
   if (cap.folderPick === 'server-browse') {
@@ -772,10 +927,8 @@ function initUI(): void {
     } else if (e.key === 'Escape') {
       if (!$('browse-modal').classList.contains('hidden')) closeBrowse();
       else if (!$('shortcuts-modal').classList.contains('hidden')) showShortcuts(false);
-      else if (!$('history-panel').classList.contains('hidden')) closeHistory();
       else if (isConverting && mode === 'folder') void cancelConversion();
-    } else if (e.key === 'h' || e.key === 'H') void openHistory(backend);
-    else if (e.key === 'b' || e.key === 'B') void selectFolder();
+    } else if (e.key === 'b' || e.key === 'B') void selectFolder();
     else if (e.key === '?') showShortcuts(true);
   });
 

@@ -2,9 +2,9 @@
  * Python backend: a thin HTTP client over the local FastAPI server
  * (pictowebp-web). Used by the `build:python` profile. The server owns the
  * conversion (Pillow + ProcessPool), the SSE progress stream, ZIP output,
- * folder browsing, history and "open folder".
+ * folder browsing and "open folder".
  */
-import { FileResult, formatBytes, formatDuration, replaceExtension } from '../core';
+import { FileResult, replaceExtension } from '../core';
 import { triggerDownload } from '../ui/dom';
 import type {
   BackendCapabilities,
@@ -12,7 +12,6 @@ import type {
   ConversionBackend,
   ConversionOptions,
   ConversionResult,
-  HistoryEntry,
   ProgressSnapshot,
   SourceSelection,
   SourceSummary,
@@ -34,17 +33,7 @@ interface PythonSnapshot {
   fraction_complete: number;
   elapsed_seconds: number;
   output_folder?: string | null;
-}
-
-interface PythonHistoryEntry {
-  id: string;
-  source_folder: string;
-  total_files: number;
-  converted_files: number;
-  bytes_saved: number;
-  reduction_percent: number;
-  elapsed_seconds: number;
-  timestamp: string;
+  current_file?: string | null;
 }
 
 async function readJson(res: Response): Promise<any> {
@@ -65,6 +54,7 @@ function mapProgress(d: PythonSnapshot): ProgressSnapshot {
     fraction,
     etaSeconds: fraction > 0 && fraction < 1 ? (d.elapsed_seconds * (1 - fraction)) / fraction : null,
     error: d.error ?? undefined,
+    currentFile: d.current_file ?? undefined,
   };
 }
 
@@ -92,19 +82,6 @@ function fromSnapshot(d: PythonSnapshot): ConversionResult {
   };
 }
 
-function mapHistoryEntry(h: PythonHistoryEntry): HistoryEntry {
-  const folder = h.source_folder.split(/[\\/]/).pop() || 'Conversion';
-  return {
-    id: h.id,
-    name: folder,
-    files: `${h.converted_files}/${h.total_files}`,
-    saved: formatBytes(h.bytes_saved),
-    percent: `${Number(h.reduction_percent).toFixed(1)}%`,
-    elapsed: formatDuration(h.elapsed_seconds),
-    timestamp: Date.parse(h.timestamp) || Date.now(),
-  };
-}
-
 export class PythonBackend implements ConversionBackend {
   readonly kind = 'python' as const;
   readonly capabilities: BackendCapabilities = {
@@ -113,7 +90,6 @@ export class PythonBackend implements ConversionBackend {
     lossless: true,
     metadataControl: true,
     openOutputFolder: true,
-    historyStore: 'server',
     serverValidate: true,
   };
 
@@ -290,15 +266,5 @@ export class PythonBackend implements ConversionBackend {
       success: true,
       blob,
     };
-  }
-
-  async getHistory(): Promise<HistoryEntry[]> {
-    const res = await fetch('/api/history');
-    const data = await readJson(res);
-    return (data?.history ?? []).map(mapHistoryEntry);
-  }
-
-  async clearHistory(): Promise<void> {
-    await fetch('/api/history', { method: 'DELETE' });
   }
 }

@@ -117,7 +117,7 @@ times on temp copies (cleaned up), prints a summary table and writes the
 | `tests/test_cli.py` | integration | argparse validation, interactive prompts, `main()` exit codes (0/2/3/130), lossless/keep-metadata/report/no-log flags, non-TTY progress suppression, `--version`, `~` expansion |
 | `tests/test_converter.py` | unit | the conversion engine: collisions, EXIF embedding, atomic writes, cancellation, error report |
 | `tests/test_discovery.py` `test_paths.py` `test_progress.py` `test_style.py` `test_utils.py` | unit | image discovery, output-folder allocation, thread-safe progress, ANSI styling, disk/format helpers |
-| `tests/test_web.py` | integration | FastAPI endpoints (convert/cancel/progress-SSE/validate/browse/history/single-upload/zip), SPA serving. One test is gated on `web-ts/dist-python` being built |
+| `tests/test_web.py` | integration | FastAPI endpoints (convert/cancel/progress-SSE/validate/browse/single-upload/zip), SPA serving. One test is gated on `web-ts/dist-python` being built |
 | `tests/e2e/test_cli_e2e.py` | **live subprocess e2e** | spawns the real `python -m pictowebp`: exit codes, `<source>_webp_<timestamp>` contract, collision/hidden/corrupt handling, crash-safe output, EXIF keep/strip, lossless, interactive prompts via stdin, empty/no-op folders, and the gated **realistic-dataset** run with perf capture |
 
 ### Rust — `cargo test` (42 = 32 unit + 10 live-binary)

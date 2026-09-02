@@ -136,6 +136,17 @@ export function webpQuality(quality: number): number {
   return Math.min(Math.max(quality, 1), 100) / 100;
 }
 
+/**
+ * Rough heuristic for how much a batch will shrink, used only for the pre-run
+ * "≈ X output" estimate in the source badge — never for anything authoritative.
+ * Higher quality keeps more data; the ratios are tuned to typical photo mixes.
+ */
+export function estimateWebpBytes(originalBytes: number, quality: number): number {
+  if (originalBytes <= 0) return 0;
+  const ratio = quality >= 90 ? 0.45 : quality >= 75 ? 0.38 : quality >= 60 ? 0.32 : 0.26;
+  return originalBytes * ratio;
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

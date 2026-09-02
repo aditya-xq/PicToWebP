@@ -203,8 +203,6 @@ API. Only one conversion runs at a time; concurrent requests get `429 Too Many R
 | `/api/status` | GET | One-shot JSON snapshot of the current progress |
 | `/api/validate` | POST | Validate a source folder |
 | `/api/browse` | POST | List subdirectories at a path |
-| `/api/history` | GET | Conversion history (newest first) |
-| `/api/history` | DELETE | Clear conversion history |
 | `/api/open-folder` | POST | Open a folder in the OS file explorer |
 | `/api/convert-single` | POST | Convert one uploaded image and stream the result back |
 | `/api/download-zip` | GET | Stream the last conversion's output folder as a ZIP |

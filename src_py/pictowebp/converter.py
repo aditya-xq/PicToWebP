@@ -254,6 +254,11 @@ def convert_folder(
                 ): path
                 for path in chunk
             }
+            # Surface a live "now converting" name for the web UI ticker. Work
+            # is parallel, so this is the most recently submitted file — a good
+            # enough approximation of what the pool is chewing on right now.
+            if chunk:
+                tracker.set_current_file(chunk[-1].name)
             for future in as_completed(futures):
                 if is_cancelled():
                     future.cancel()

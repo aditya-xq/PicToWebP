@@ -2,10 +2,10 @@
  * ConversionBackend contract: one UI, two conversion engines.
  *
  * - `browser` — everything happens in the tab (OffscreenCanvas workers, File
- *   System Access, JSZip, localStorage). Used by the static GitHub Pages build.
+ *   System Access, JSZip). Used by the static GitHub Pages build.
  * - `python` — a thin client over the local FastAPI server (fetch + SSE +
- *   uploads + server-side ZIP/browse/history). Used by the `build:python`
- *   profile served by `pictowebp-web`.
+ *   uploads + server-side ZIP/browse). Used by the `build:python` profile
+ *   served by `pictowebp-web`.
  *
  * The UI code only ever talks to `ConversionBackend`; capabilities tell it
  * which controls to show and which flows to run.
@@ -25,8 +25,6 @@ export interface BackendCapabilities {
   metadataControl: boolean;
   /** Open the output folder in the OS explorer (python only). */
   openOutputFolder: boolean;
-  /** Where conversion history is stored. */
-  historyStore: 'local' | 'server';
   /** Server-side pre-scan of a folder before converting (python only). */
   serverValidate: boolean;
 }
@@ -69,6 +67,8 @@ export interface ProgressSnapshot {
   fraction: number;
   etaSeconds: number | null;
   error?: string;
+  /** File currently being processed, for a live "now converting" ticker. */
+  currentFile?: string;
 }
 
 /** A folder (or set of files) selected by the user, in backend-specific terms. */
@@ -98,16 +98,6 @@ export interface BrowseResult {
   parent: string | null;
   drives: string[];
   entries: { name: string; path: string }[];
-}
-
-export interface HistoryEntry {
-  id: string;
-  name: string;
-  files: string;
-  saved: string;
-  percent: string;
-  elapsed: string;
-  timestamp: number;
 }
 
 export const TERMINAL_STATUSES: ReadonlySet<ProgressStatus> = new Set([
@@ -149,9 +139,6 @@ export interface ConversionBackend {
 
   /** Convert a single image (upload in python mode, in-tab in browser mode). */
   convertSingle(file: File, options: ConversionOptions): Promise<FileResult>;
-
-  getHistory(): Promise<HistoryEntry[]>;
-  clearHistory(): Promise<void>;
 }
 
 export type { FileResult, DirEntry };

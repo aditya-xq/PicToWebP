@@ -7,7 +7,6 @@ Endpoints:
     GET  /api/status    - one-shot JSON snapshot of the current progress
     POST /api/validate  - validate a source folder
     POST /api/browse    - list directories at a path
-    GET  /api/history   - conversion history
 """
 
 from __future__ import annotations
@@ -21,11 +20,9 @@ import os
 import string
 import sys
 import tempfile
-import uuid
 import zipfile
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from urllib.parse import urlparse
@@ -73,8 +70,6 @@ PROGRESS_POLL_SECONDS = 0.2
 #    (e.g. `PICTOWEBP_TRUSTED_HOSTS=192.168.1.5` with --host 0.0.0.0).
 # 2. Origin validation — a foreign Origin header is rejected outright.
 MAX_UPLOAD_BYTES = 256 * 1024 * 1024
-
-MAX_HISTORY = 50
 
 
 def _hostname_from_host_header(host: str) -> str:
@@ -146,29 +141,6 @@ def _invalid_folder_response(error: str) -> dict:
     }
 
 
-def _make_history_entry(
-    job_id: str,
-    source_folder: Path,
-    snap: dict,
-    payload: ConvertRequest,
-) -> dict:
-    """Build one conversion-history record from a finished job snapshot."""
-    return {
-        "id": job_id,
-        "source_folder": str(source_folder),
-        "output_folder": snap.get("output_folder", ""),
-        "output_format": "WEBP",
-        "quality": payload.quality,
-        "total_files": snap["total_files"],
-        "converted_files": snap["converted_files"],
-        "failed_files": snap["failed_files"],
-        "bytes_saved": snap["bytes_saved"],
-        "reduction_percent": snap["reduction_percent"],
-        "elapsed_seconds": snap["elapsed_seconds"],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-
-
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     setup_logging()
@@ -219,7 +191,6 @@ def create_app() -> FastAPI:
     progress = ConversionProgress()
     # A non-reentrant guard so only one conversion runs at a time.
     conversion_lock = Lock()
-    conversion_history: list[dict] = []
     # Output folder of the most recent successful job (for ZIP download).
     last_output: dict = {"folder": ""}
     app.state.progress = progress
@@ -262,7 +233,6 @@ def create_app() -> FastAPI:
         progress.set_source_folder(str(source_folder))
 
         def run_job() -> None:
-            job_id = str(uuid.uuid4())[:8]
             try:
                 result = convert_folder(
                     source_folder,
@@ -273,12 +243,7 @@ def create_app() -> FastAPI:
                     lossless=payload.lossless,
                     strip_metadata=payload.strip_metadata,
                 )
-                # Record in history
-                snap = result.snapshot()
-                conversion_history.append(_make_history_entry(job_id, source_folder, snap, payload))
-                if len(conversion_history) > MAX_HISTORY:
-                    conversion_history.pop(0)
-                last_output["folder"] = snap.get("output_folder", "")
+                last_output["folder"] = result.snapshot().get("output_folder", "")
             except Exception:
                 logger.exception("Conversion of %s failed", source_folder)
                 if progress.status not in TERMINAL_STATUSES:
@@ -418,17 +383,6 @@ def create_app() -> FastAPI:
             "parent": str(path.parent) if path.parent != path else None,
             "entries": _directory_entries(path),
         }
-
-    @app.get("/api/history")
-    def get_history() -> dict:
-        """Return conversion history (newest first)."""
-        return {"history": list(reversed(conversion_history))}
-
-    @app.delete("/api/history")
-    def clear_history() -> dict:
-        """Clear conversion history."""
-        conversion_history.clear()
-        return {"message": "History cleared"}
 
     @app.post("/api/open-folder")
     def open_folder_endpoint(payload: ValidateRequest) -> dict:

@@ -1,10 +1,10 @@
 /**
  * Browser backend: everything happens in the tab. Used by the static build
  * (GitHub Pages). Wraps the OffscreenCanvas worker pool, the File System
- * Access API, JSZip and localStorage behind the ConversionBackend contract.
+ * Access API and JSZip behind the ConversionBackend contract.
  */
 import JSZip from 'jszip';
-import { FileResult, findCollisions, formatBytes, formatDuration } from '../core';
+import { FileResult, findCollisions, formatBytes } from '../core';
 import {
   convertFile,
   enumerateFiles,
@@ -17,41 +17,12 @@ import type {
   ConversionBackend,
   ConversionOptions,
   ConversionResult,
-  HistoryEntry,
   ProgressSnapshot,
   SourceSelection,
   SourceSummary,
 } from './types';
 
 const CONCURRENCY = 4;
-const HISTORY_KEY = 'pictowebp-history';
-const HISTORY_LIMIT = 50;
-
-function isHistoryEntry(value: unknown): value is HistoryEntry {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as HistoryEntry).id === 'string' &&
-    typeof (value as HistoryEntry).timestamp === 'number'
-  );
-}
-
-/**
- * Read + validate the persisted history. localStorage content is user- or
- * extension-mutable, so never trust its shape: a parse failure or a valid
- * JSON value that is not an entry array yields [] instead of throwing —
- * a throw here would surface as a failed conversion.
- */
-function readHistory(): HistoryEntry[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isHistoryEntry) : [];
-  } catch {
-    return [];
-  }
-}
 
 export class BrowserBackend implements ConversionBackend {
   readonly kind = 'browser' as const;
@@ -61,7 +32,6 @@ export class BrowserBackend implements ConversionBackend {
     lossless: false,
     metadataControl: false,
     openOutputFolder: false,
-    historyStore: 'local',
     serverValidate: false,
   };
 
@@ -141,6 +111,8 @@ export class BrowserBackend implements ConversionBackend {
       quality: options.quality,
     };
 
+    let currentFile: string | undefined;
+
     const emit = (): void => {
       const processed = results.length;
       const fraction = total > 0 ? processed / total : 0;
@@ -152,6 +124,7 @@ export class BrowserBackend implements ConversionBackend {
         elapsedSeconds: elapsed,
         fraction,
         etaSeconds: fraction > 0 && fraction < 1 ? (elapsed * (1 - fraction)) / fraction : null,
+        currentFile,
       });
     };
 
@@ -160,6 +133,8 @@ export class BrowserBackend implements ConversionBackend {
     const worker = async (): Promise<void> => {
       while (next < queue.length && !this.cancelRequested) {
         const entry = queue[next++];
+        currentFile = entry.relativePath;
+        emit();
         try {
           const file = await resolveEntryFile(entry);
           results.push(await convertFile(file, coreOptions, entry.relativePath));
@@ -177,6 +152,7 @@ export class BrowserBackend implements ConversionBackend {
       }
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    currentFile = undefined;
     emit();
 
     const successful = results.filter((r) => r.success);
@@ -209,7 +185,6 @@ export class BrowserBackend implements ConversionBackend {
       },
     };
 
-    if (result.ok) this.recordHistory(selection.label, options.quality, result);
     return result;
   }
 
@@ -241,31 +216,5 @@ export class BrowserBackend implements ConversionBackend {
     return convertFile(file, {
       quality: options.quality,
     });
-  }
-
-  async getHistory(): Promise<HistoryEntry[]> {
-    return readHistory();
-  }
-
-  async clearHistory(): Promise<void> {
-    localStorage.removeItem(HISTORY_KEY);
-  }
-
-  private recordHistory(label: string, quality: number, result: ConversionResult): void {
-    const all = readHistory();
-    all.unshift({
-      id: Math.random().toString(36).slice(2, 10),
-      name: label,
-      files: `${result.stats.convertedFiles}/${result.stats.totalFiles}`,
-      saved: formatBytes(result.stats.bytesSaved),
-      percent: `${result.stats.reductionPercent.toFixed(1)}%`,
-      elapsed: formatDuration(result.stats.elapsedSeconds),
-      timestamp: Date.now(),
-    });
-    try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(all.slice(0, HISTORY_LIMIT)));
-    } catch {
-      // Storage may be unavailable (private mode / quota) — history is optional.
-    }
   }
 }

@@ -40,7 +40,7 @@ cd web-ts && npm run test:e2e:python            # python-backend Playwright smok
 ```
 
 All suites are expected green before committing (currently 94 pytest, 42 cargo
-test, 18 vitest, 10 Playwright e2e).
+test, 21 vitest, 10 Playwright e2e).
 
 Every tool is covered by a **live e2e regression suite** that runs the real
 artifact against a copy of the shared fixture corpus (`tests/e2e/fixtures`,
@@ -81,7 +81,8 @@ These are the product's core selling points — never break them:
 - EXIF/GPS metadata is stripped by default everywhere; the browser backend
   cannot preserve it at all (canvas decoding), so the `metadataControl`
   capability is false there and the toggle is hidden.
-- No image data is ever persisted; local storage holds only stats/history.
+- No image data is ever persisted; nothing is stored on the device or the
+  local server between sessions.
 
 ## Behavioral parity
 

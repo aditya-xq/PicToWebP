@@ -28,6 +28,7 @@ class ConversionProgress:
         self._elapsed_seconds = 0.0
         self._output_folder: str | None = None
         self._source_folder: str | None = None
+        self._current_file: str | None = None
         self._failure_details: list[tuple[str, str]] = []
 
     # -- lifecycle -------------------------------------------------------------
@@ -44,6 +45,7 @@ class ConversionProgress:
             self._original_bytes = 0
             self._converted_bytes = 0
             self._elapsed_seconds = 0.0
+            self._current_file = None
             self._failure_details = []
 
     def record(self, original_bytes: int, converted_bytes: int) -> None:
@@ -91,6 +93,11 @@ class ConversionProgress:
         """Set the source folder path for reference."""
         with self._lock:
             self._source_folder = path
+
+    def set_current_file(self, file_name: str | None) -> None:
+        """Set the file currently being processed (shown in the live UI)."""
+        with self._lock:
+            self._current_file = file_name
 
     # -- read-only accessors ----------------------------------------------------
 
@@ -145,6 +152,11 @@ class ConversionProgress:
                 return 0.0
             return min(1.0, self._processed_files / self._total_files)
 
+    @property
+    def current_file(self) -> str | None:
+        with self._lock:
+            return self._current_file
+
     def snapshot(self) -> dict[str, Any]:
         """Return a consistent JSON-serializable view of the current state."""
         with self._lock:
@@ -170,4 +182,5 @@ class ConversionProgress:
                 "elapsed_seconds": round(self._elapsed_seconds, 2),
                 "output_folder": self._output_folder,
                 "source_folder": self._source_folder,
+                "current_file": self._current_file,
             }

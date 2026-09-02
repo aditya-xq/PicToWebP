@@ -4,6 +4,7 @@ import {
   MAX_CANVAS_SIDE,
   clampToCanvasLimits,
   estimateEtaSeconds,
+  estimateWebpBytes,
   findCollisions,
   formatBytes,
   formatDuration,
@@ -139,5 +140,24 @@ describe('webpQuality', () => {
     expect(webpQuality(100)).toBe(1);
     expect(webpQuality(0)).toBe(0.01);
     expect(webpQuality(150)).toBe(1);
+  });
+});
+
+describe('estimateWebpBytes', () => {
+  it('returns 0 for empty sources', () => {
+    expect(estimateWebpBytes(0, 80)).toBe(0);
+  });
+
+  it('estimates smaller output at lower quality', () => {
+    const low = estimateWebpBytes(1_000_000, 60);
+    const high = estimateWebpBytes(1_000_000, 95);
+    expect(low).toBeLessThan(high);
+    expect(high).toBeLessThan(1_000_000);
+  });
+
+  it('estimates within a sane band for typical quality', () => {
+    const est = estimateWebpBytes(100_000_000, 80);
+    expect(est).toBeGreaterThan(0);
+    expect(est).toBeLessThan(100_000_000);
   });
 });

@@ -25,7 +25,6 @@ export type {
   ConversionOptions,
   ConversionResult,
   ConversionStats,
-  HistoryEntry,
   ProgressSnapshot,
   SourceSelection,
   SourceSummary,

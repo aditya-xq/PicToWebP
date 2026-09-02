@@ -1,6 +1,7 @@
 """Tests for the FastAPI application."""
 
 import json
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from threading import Lock
@@ -41,10 +42,17 @@ def test_index_serves_built_spa(client: TestClient):
     assert response.status_code == 200
     assert "PicToWebP" in response.text
     assert "Content-Security-Policy" in response.text
-    # No external assets — the UI must work fully offline.
-    body = response.text.replace("http://127.0.0.1", "").replace("http://localhost", "")
-    assert "http://" not in body
-    assert "https://" not in body
+    # No external *assets* — the UI must work fully offline. Scan every
+    # src/href for a scheme-qualified URL: anything external must be the
+    # single outbound author hyperlink (user-initiated navigation, never
+    # fetched by the page). The real no-network guarantee is enforced at
+    # runtime by the strict CSP and the e2e smoke suite.
+    external = sorted(
+        url
+        for url in re.findall(r'\b(?:src|href)=["\']([^"\']+)["\']', response.text)
+        if url.startswith(("http://", "https://"))
+    )
+    assert external == ["https://x.com/xq_is_here"], external
 
 
 def test_index_returns_setup_help_without_build(client: TestClient):

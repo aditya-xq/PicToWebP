@@ -42,40 +42,40 @@ function renderCanvas(stats: ShareStats): HTMLCanvasElement {
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
   // Card background + border + accent top strip.
-  ctx.fillStyle = '#0a0d14';
+  ctx.fillStyle = '#12100c';
   drawRoundRect(ctx, 0, 0, W, H, 28);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(99, 102, 241, 0.35)';
+  ctx.strokeStyle = 'rgba(240, 182, 90, 0.35)';
   ctx.lineWidth = 2;
   drawRoundRect(ctx, 1, 1, W - 2, H - 2, 28);
   ctx.stroke();
   const strip = ctx.createLinearGradient(0, 0, W, 0);
-  strip.addColorStop(0, '#6366f1');
-  strip.addColorStop(0.55, '#8b5cf6');
-  strip.addColorStop(1, '#d946ef');
+  strip.addColorStop(0, '#f0b65a');
+  strip.addColorStop(0.55, '#eaa94f');
+  strip.addColorStop(1, '#e0794d');
   ctx.fillStyle = strip;
   drawRoundRect(ctx, 28, 0, W - 56, 6, 3);
   ctx.fill();
 
   // Brand mark.
   const mark = ctx.createLinearGradient(56, 56, 120, 120);
-  mark.addColorStop(0, '#818cf8');
-  mark.addColorStop(1, '#d946ef');
+  mark.addColorStop(0, '#f0b65a');
+  mark.addColorStop(1, '#e0794d');
   ctx.fillStyle = mark;
   drawRoundRect(ctx, 56, 52, 64, 64, 18);
   ctx.fill();
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '800 36px system-ui, sans-serif';
+  ctx.fillStyle = '#241a09';
+  ctx.font = 'italic 700 38px Georgia, serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('P', 88, 86);
+  ctx.fillText('P', 88, 88);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
 
-  ctx.fillStyle = '#f8fafc';
-  ctx.font = '800 40px system-ui, sans-serif';
-  ctx.fillText('PicToWebP', 140, 88);
-  ctx.fillStyle = '#8391a8';
+  ctx.fillStyle = '#f4ede3';
+  ctx.font = '700 40px Georgia, serif';
+  ctx.fillText('PicToWebP', 140, 84);
+  ctx.fillStyle = '#8d7b66';
   ctx.font = '600 20px system-ui, sans-serif';
   ctx.fillText(
     stats.edition === 'python'
@@ -86,13 +86,13 @@ function renderCanvas(stats: ShareStats): HTMLCanvasElement {
   );
 
   // Hero stat: space saved.
-  ctx.fillStyle = '#8391a8';
+  ctx.fillStyle = '#8d7b66';
   ctx.font = '700 18px system-ui, sans-serif';
   ctx.fillText('S P A C E   S A V E D', 56, 196);
-  ctx.fillStyle = '#4ade80';
+  ctx.fillStyle = '#a6bb6b';
   ctx.font = '800 96px system-ui, sans-serif';
   ctx.fillText(stats.saved, 56, 288);
-  ctx.fillStyle = '#a7f3d0';
+  ctx.fillStyle = '#cfe0a8';
   ctx.font = '700 30px system-ui, sans-serif';
   ctx.fillText(`${stats.percent} smaller`, 56, 332);
 
@@ -103,11 +103,11 @@ function renderCanvas(stats: ShareStats): HTMLCanvasElement {
   ];
   secondary.forEach((s, i) => {
     const y = 190 + i * 78;
-    ctx.fillStyle = '#8391a8';
+    ctx.fillStyle = '#8d7b66';
     ctx.font = '700 16px system-ui, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(s.label, W - 56, y);
-    ctx.fillStyle = '#f1f5f9';
+    ctx.fillStyle = '#f4ede3';
     ctx.font = '800 38px system-ui, sans-serif';
     ctx.fillText(s.value, W - 56, y + 44);
   });
@@ -131,7 +131,7 @@ function renderCanvas(stats: ShareStats): HTMLCanvasElement {
     {
       label: `Original · ${stats.original}`,
       fraction: originalBytes / barMax,
-      fill: 'rgba(148, 163, 184, 0.35)',
+      fill: 'rgba(216, 180, 134, 0.38)',
     },
     {
       label: `WebP · ${stats.webp}`,
@@ -141,10 +141,10 @@ function renderCanvas(stats: ShareStats): HTMLCanvasElement {
   ];
   rows.forEach((row, i) => {
     const y = 396 + i * 76;
-    ctx.fillStyle = '#8391a8';
+    ctx.fillStyle = '#8d7b66';
     ctx.font = '600 18px system-ui, sans-serif';
     ctx.fillText(row.label, barX, y - 10);
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+    ctx.fillStyle = 'rgba(216, 180, 134, 0.1)';
     drawRoundRect(ctx, barX, y, barMaxWidth, 30, 10);
     ctx.fill();
     ctx.fillStyle = row.fill;
@@ -153,17 +153,17 @@ function renderCanvas(stats: ShareStats): HTMLCanvasElement {
   });
 
   // Footer.
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.strokeStyle = 'rgba(216, 180, 134, 0.16)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(56, H - 74);
   ctx.lineTo(W - 56, H - 74);
   ctx.stroke();
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = '#8d7b66';
   ctx.font = '600 18px system-ui, sans-serif';
   ctx.fillText('Runs offline · No uploads · EXIF & GPS stripped', 56, H - 36);
   ctx.textAlign = 'right';
-  ctx.fillStyle = '#a5b4fc';
+  ctx.fillStyle = '#f3c77e';
   ctx.fillText('aditya-xq.github.io/PicToWebP', W - 56, H - 36);
   ctx.textAlign = 'left';
 
