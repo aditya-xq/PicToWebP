@@ -1,6 +1,8 @@
 # PicToWebP 🖼️➡️🌐
 
-<img src="https://github.com/aditya-xq/PicToWebP/assets/32733783/8cdc0fd6-109e-4161-b63e-0632e477d105" alt="PicToWebP Logo" width="250" height="250">
+<p align="center">
+  <img src="https://github.com/aditya-xq/PicToWebP/assets/32733783/8cdc0fd6-109e-4161-b63e-0632e477d105" alt="PicToWebP Logo" width="250" height="250">
+</p>
 
 **PicToWebP** bulk-converts your chunky images into lightweight WebP beauties, from a CLI or your browser. In many collections it cuts file sizes by **90%+** with no visible quality loss.
 
