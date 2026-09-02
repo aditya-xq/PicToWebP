@@ -7,7 +7,7 @@ Guidance for AI coding agents working in this repository.
 PicToWebP converts images (JPG/PNG/WebP, plus BMP/TIFF/GIF in Python) to WebP,
 bulk or single, in three independent implementations:
 
-- `src/pictowebp/` — Python CLI + FastAPI server (uvicorn, binds `127.0.0.1`)
+- `src_py/pictowebp/` — Python CLI + FastAPI server (uvicorn, binds `127.0.0.1`)
 - `src_rust/` — Rust CLI (rayon, edition 2024)
 - `web-ts/` — the single web UI (Vite + TypeScript) with **two backends**
   behind one `ConversionBackend` adapter interface:
@@ -24,8 +24,8 @@ one codebase; the backend is chosen at build time (`VITE_BACKEND`).
 ```bash
 # Python (use uv; venv lives in .venv)
 uv sync
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check src_py tests
+uv run ruff format --check src_py tests
 uv run pyright
 uv run pytest
 

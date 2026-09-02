@@ -7,7 +7,7 @@ from a pull request.
 ## Project Layout
 
 ```
-├── src/pictowebp/            # Python package (CLI + FastAPI web UI)
+├── src_py/pictowebp/         # Python package (CLI + FastAPI web UI)
 │   ├── __main__.py           # `python -m pictowebp` entry point
 │   ├── cli.py                # argparse CLI: argument parsing, prompts, `main()`
 │   ├── ui.py                 # terminal output: banners, settings, summary (↔ Rust ui.rs)
@@ -88,8 +88,8 @@ npm test                 # unit tests for the conversion logic
 
 ```bash
 # Python: format, lint, test
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check src_py tests
+uv run ruff format --check src_py tests
 uv run pytest
 
 # Rust: format, lint, test

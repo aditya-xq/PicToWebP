@@ -11,8 +11,8 @@ same test data**.
 ```bash
 # Python (CLI + FastAPI) — unit, integration and live subprocess e2e
 uv sync
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check src_py tests
+uv run ruff format --check src_py tests
 uv run pyright
 uv run pytest
 

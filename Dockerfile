@@ -9,7 +9,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 COPY pyproject.toml .
-COPY src/ src/
+COPY src_py/ src_py/
 RUN pip install --no-cache-dir ".[web]"
 
 COPY --from=web /web/dist-python/ /app/web-ts/dist-python/
