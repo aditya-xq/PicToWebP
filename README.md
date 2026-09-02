@@ -4,7 +4,7 @@
   <img src="https://github.com/aditya-xq/PicToWebP/assets/32733783/8cdc0fd6-109e-4161-b63e-0632e477d105" alt="PicToWebP Logo" width="250" height="250">
 </p>
 
-**PicToWebP** bulk-converts your chunky images into lightweight WebP beauties, from a CLI or your browser. In many collections it cuts file sizes by **90%+** with no visible quality loss.
+**PicToWebP** bulk-converts your chunky images into lightweight WebP beauties, from a CLI or your browser. In many collections it cuts file sizes by **80%+** with no visible quality loss.
 
 ## Why Should You Care? 🤔
 
@@ -31,18 +31,12 @@ No install? No problem, use it right now:
 
 - **Bulk convert**: pick a folder and every image inside (including subfolders) is converted, with the directory structure preserved.
 - **Single-image convert**: drop one image, get its WebP instantly, with a draggable before/after comparison slider.
-- **One-click ZIP download** of the converted results, named `<source>_webp_<timestamp>.zip` to match the CLI output folder.
 - **Shareable stats card**: after a conversion, generate an image of your savings for social sharing.
 - **Detailed failure report**: anything that couldn't be converted is listed on screen and saved to `conversion-errors.txt`.
 - **Metadata handling**: strip EXIF (the default, best for the web) or keep it, per run.
 - **Graceful cancellation**: stop mid-run and keep everything already converted.
-- **Same-stem collision detection**: inputs like `photo.png` and `photo.jpg` that would write to the same `photo.webp` are reported, not silently overwritten.
-- **Crash-safe writing**: a `.webp` only appears once it's fully converted, so an interrupted run never leaves half-written images next to your photos.
 
-## Supported Formats 🎨
-
-- **Both CLIs:** JPG, PNG, WebP (including WebP sources being re-encoded smaller).
-- **Python CLI additionally:** BMP, TIFF, GIF.
+And tons of optimizations, edge cases handled, and performance tweaks to give the best experience to you!
 
 ## Quick Start 🏁
 
