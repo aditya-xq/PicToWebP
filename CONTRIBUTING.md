@@ -83,8 +83,8 @@ npm test                 # unit tests for the conversion logic
 
 ## Running Tests & Linters
 
-> For the full picture — what every suite covers, the shared fixture corpus,
-> and the live e2e guarantees — see [TESTING.md](TESTING.md).
+> For the full picture , what every suite covers, the shared fixture corpus,
+> and the live e2e guarantees , see [TESTING.md](TESTING.md).
 
 ```bash
 # Python: format, lint, test
@@ -112,12 +112,12 @@ npm run test:e2e:python    # python build served by FastAPI
 
 All test suites are expected to be green before submitting changes:
 
-- `python -m pytest` — **94 tests** (93 passed, 1 gated skip on the built SPA) covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, SPA serving, and end-to-end flows — **including 12 live subprocess tests** that run the real `python -m pictowebp` against the shared fixture corpus (exit codes, output-folder contract, collision/hidden/corrupt handling, EXIF keep/strip, lossless, interactive prompts, empty/no-op folders) plus a gated realistic-dataset run with performance capture.
-- `uv run pyright` — **0 errors, 0 warnings** under `[tool.pyright]` config (standard mode, Python 3.10).
-- `cargo test` — **42 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), EXIF embedding, atomic file writes, error report persistence, CLI argument validation — **including 10 live-binary tests** that spawn the compiled executable against the same shared fixture corpus (mirroring the Python subprocess suite and a gated realistic-dataset run).
-- `npm test` (in `web-ts/`) — **18 tests** covering collision detection, canvas-limit clamping, output-name handling, and formatting helpers.
-- `npm run test:e2e` (in `web-ts/`) — **6 Playwright tests** driving the static build in real Chromium (UI load, single-image conversion, a runtime proof that the conversion makes zero external network requests, a multi-file drop → batch conversion → ZIP download flow, its corrupt-input failure path, and a gated realistic 40-photo batch logging UI-reported throughput).
-- `npm run test:e2e:python` (in `web-ts/`) — **4 Playwright tests** driving the python build served by FastAPI (server edition, single-image upload, a full batch conversion: browse modal → folder convert via SSE → ZIP download inspected in the browser with sad-path results surfaced in the UI, and a gated realistic 40-photo server batch).
+- `python -m pytest` , **94 tests** (93 passed, 1 gated skip on the built SPA) covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, SPA serving, and end-to-end flows , **including 12 live subprocess tests** that run the real `python -m pictowebp` against the shared fixture corpus (exit codes, output-folder contract, collision/hidden/corrupt handling, EXIF keep/strip, lossless, interactive prompts, empty/no-op folders) plus a gated realistic-dataset run with performance capture.
+- `uv run pyright` , **0 errors, 0 warnings** under `[tool.pyright]` config (standard mode, Python 3.10).
+- `cargo test` , **42 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), EXIF embedding, atomic file writes, error report persistence, CLI argument validation , **including 10 live-binary tests** that spawn the compiled executable against the same shared fixture corpus (mirroring the Python subprocess suite and a gated realistic-dataset run).
+- `npm test` (in `web-ts/`) , **18 tests** covering collision detection, canvas-limit clamping, output-name handling, and formatting helpers.
+- `npm run test:e2e` (in `web-ts/`) , **6 Playwright tests** driving the static build in real Chromium (UI load, single-image conversion, a runtime proof that the conversion makes zero external network requests, a multi-file drop → batch conversion → ZIP download flow, its corrupt-input failure path, and a gated realistic 40-photo batch logging UI-reported throughput).
+- `npm run test:e2e:python` (in `web-ts/`) , **4 Playwright tests** driving the python build served by FastAPI (server edition, single-image upload, a full batch conversion: browse modal → folder convert via SSE → ZIP download inspected in the browser with sad-path results surfaced in the UI, and a gated realistic 40-photo server batch).
 
 Dependencies are declared in `pyproject.toml` (locked via `uv.lock`), `src_rust/Cargo.toml` (locked via `Cargo.lock`), and `web-ts/package.json` (locked via `package-lock.json`).
 
@@ -135,13 +135,13 @@ Two things the workflow needs from repository settings:
   `actions/*` can't be used).
 - **Pages** must have *Build and deployment → Source: GitHub Actions*.
 
-The production build injects a strict CSP and sets the base path for Pages —
+The production build injects a strict CSP and sets the base path for Pages ,
 both configured in `web-ts/vite.config.ts`. Don't weaken the CSP; it is part of
 the privacy guarantee.
 
 ### Shared UI design system
 
-There is one web UI and one stylesheet: `web-ts/src/ui.css` — the "Obsidian
+There is one web UI and one stylesheet: `web-ts/src/ui.css` , the "Obsidian
 Glass" design system (tokens, glassmorphism, components, responsive
 breakpoints). Both build profiles bundle it via an import in
 `web-ts/src/main.ts`. Change the design in `ui.css` only. The UI loads no
@@ -157,7 +157,7 @@ codebase with a different backend chosen at build time.
   makes sense (the CLIs intentionally share a surface; see the flags tables
   below).
 - Run the relevant test suite(s) and linters before pushing.
-- Never add network calls, telemetry, or external assets to any edition — see
+- Never add network calls, telemetry, or external assets to any edition , see
   the privacy guarantees in the README.
 
 ## Reference: CLI & API Details
@@ -183,7 +183,7 @@ codebase with a different backend chosen at build time.
 | ---- | ------------------------------------------------------------------------ |
 | `0`  | At least one file was converted successfully (skipped files are reported as warnings, not errors). |
 | `2`  | The source folder does not exist or is not a directory. |
-| `3`  | Every file failed to convert — a hard failure, no output produced. |
+| `3`  | Every file failed to convert , a hard failure, no output produced. |
 
 Pressing `Ctrl+C` stops the run gracefully: everything already converted is
 kept, the summary is printed, and the exit code is `0` (or `3` if nothing

@@ -7,13 +7,13 @@ Guidance for AI coding agents working in this repository.
 PicToWebP converts images (JPG/PNG/WebP, plus BMP/TIFF/GIF in Python) to WebP,
 bulk or single, in three independent implementations:
 
-- `src_py/pictowebp/` — Python CLI + FastAPI server (uvicorn, binds `127.0.0.1`)
-- `src_rust/` — Rust CLI (rayon, edition 2024)
-- `web-ts/` — the single web UI (Vite + TypeScript) with **two backends**
+- `src_py/pictowebp/` , Python CLI + FastAPI server (uvicorn, binds `127.0.0.1`)
+- `src_rust/` , Rust CLI (rayon, edition 2024)
+- `web-ts/` , the single web UI (Vite + TypeScript) with **two backends**
   behind one `ConversionBackend` adapter interface:
-  - *browser* backend (OffscreenCanvas workers, File System Access, JSZip) —
+  - *browser* backend (OffscreenCanvas workers, File System Access, JSZip) ,
     shipped to GitHub Pages via the static build;
-  - *python* backend (thin HTTP client over the FastAPI API + SSE) — shipped
+  - *python* backend (thin HTTP client over the FastAPI API + SSE) , shipped
     by the `build:python` profile and served by `pictowebp-web`.
 
 The two CLIs intentionally share the same flags and behavior. The web UI is
@@ -32,7 +32,7 @@ uv run pytest
 # Rust
 cd src_rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 
-# Web UI — one SPA, two build profiles
+# Web UI , one SPA, two build profiles
 cd web-ts && npm test && npm run build          # static (browser backend) → dist/
 cd web-ts && npm run build:python               # server profile → dist-python/
 cd web-ts && npm run test:e2e                   # static Playwright smoke (chromium)
@@ -59,18 +59,18 @@ The corpus mixes happy paths (every format, nested dirs) with sad paths
 (corrupt file), a hidden dir and a same-stem collision pair.
 
 For realistic large-scale runs there is also an optional **500-photo dataset**
-(`tests/e2e/real_images/`, gitignored) downloaded on demand — rate-limited,
-idempotent and never deleted — by `tests/e2e/download_real_dataset.py`. The
+(`tests/e2e/real_images/`, gitignored) downloaded on demand , rate-limited,
+idempotent and never deleted , by `tests/e2e/download_real_dataset.py`. The
 gated realistic tests exercise it automatically and capture **performance
 metrics** into `tests/e2e/perf-results.json` (gitignored); a dedicated
 Python-vs-Rust benchmark lives at `tests/e2e/run_realistic_bench.py`. Suites
 run the CLIs with `--no-log` inside disposable temp dirs, so a green run leaves
-no `pictowebp.log`, temp corpora, or output folders behind — only the
+no `pictowebp.log`, temp corpora, or output folders behind , only the
 gitignored perf JSON.
 
 ## Non-negotiable privacy guarantees
 
-These are the product's core selling points — never break them:
+These are the product's core selling points , never break them:
 
 - **No network calls, no telemetry, no analytics, no cookies, no external
   assets** (fonts/CDNs) in any edition. The Python web UI binds `127.0.0.1`.
@@ -86,7 +86,7 @@ These are the product's core selling points — never break them:
 
 ## Behavioral parity
 
-Features shared across editions — keep them consistent when changing one:
+Features shared across editions , keep them consistent when changing one:
 
 - Same-stem collisions (e.g. `a.png` + `a.jpg` → `a.webp`) are skipped and
   reported, never silently overwritten.
@@ -94,14 +94,14 @@ Features shared across editions — keep them consistent when changing one:
 - Output folder per run is unique (`<source>_webp_<timestamp>`); files are
   written crash-safe (only fully converted files appear).
 - Browser canvas limits are clamped in `web-ts/src/core.ts`
-  (`clampToCanvasLimits`) — oversized inputs downscale instead of failing.
+  (`clampToCanvasLimits`) , oversized inputs downscale instead of failing.
 - There is **one** web UI: `web-ts/`. `main.ts` only talks to the
-  `ConversionBackend` interface in `web-ts/src/backend/` — never to HTTP or
+  `ConversionBackend` interface in `web-ts/src/backend/` , never to HTTP or
   to the worker pool directly. Capabilities (`backend/capabilities`) decide
   which controls render (lossless/metadata/open-folder are python-only).
   Add features to the shared UI + both backends, never fork a second UI.
 - The stylesheet lives at `web-ts/src/ui.css` (imported by `main.ts` and
-  bundled into both build profiles). Restyle there only — never in a separate
+  bundled into both build profiles). Restyle there only , never in a separate
   UI. No external assets (fonts/CDNs).
 - All event wiring uses `addEventListener` (no inline handlers) so the strict
   CSP never needs `unsafe-inline` for scripts.
@@ -111,7 +111,7 @@ Features shared across editions — keep them consistent when changing one:
   CSS tokens (`prefers-color-scheme`) in `ui.css`.
 - TS conversions run in an OffscreenCanvas worker pool
   (`web-ts/src/worker.ts`, pooled in `converter.ts`); the main-thread path is
-  a fallback — keep both working. Canvas-limit clamping lives in `core.ts`
+  a fallback , keep both working. Canvas-limit clamping lives in `core.ts`
   because the worker imports it.
 
 ## Conventions
@@ -120,7 +120,7 @@ Features shared across editions — keep them consistent when changing one:
   in code and commit messages.
 - Commit style: conventional, scoped (e.g. `feat(web-ts): ...`,
   `fix(web): ...`).
-- Dependencies are locked (`uv.lock`, `Cargo.lock`, `package-lock.json`) —
+- Dependencies are locked (`uv.lock`, `Cargo.lock`, `package-lock.json`) ,
   commit lockfile changes alongside `pyproject.toml`/`Cargo.toml`/
   `package.json`.
 - Never commit secrets or log files (`pictowebp.log` is gitignored).
@@ -134,7 +134,7 @@ Features shared across editions — keep them consistent when changing one:
 - The workflow requires repo Actions permissions set to *Allow all actions*
   (not `local_only`) and Pages source *GitHub Actions*; the `github-pages`
   environment has a branch policy for `main`.
-- `vite.config.ts` sets `base: '/PicToWebP/'` for the static profile — don't
+- `vite.config.ts` sets `base: '/PicToWebP/'` for the static profile , don't
   remove it, the site breaks on Pages without it. The `python` profile uses
   `base: '/'` and is served by `pictowebp-web` from `web-ts/dist-python`.
 
