@@ -7,12 +7,8 @@ from pydantic import BaseModel, Field
 from pictowebp.constants import (
     DEFAULT_QUALITY,
     MAX_QUALITY,
-    MAX_RESIZE_HEIGHT,
-    MAX_RESIZE_WIDTH,
     MAX_THREADS,
     MIN_QUALITY,
-    MIN_RESIZE_HEIGHT,
-    MIN_RESIZE_WIDTH,
 )
 
 
@@ -24,8 +20,6 @@ class ConvertRequest(BaseModel):
     threads: Annotated[int | None, Field(ge=1, le=MAX_THREADS)] = None
     lossless: bool = False
     strip_metadata: bool = True
-    resize_width: Annotated[int | None, Field(ge=MIN_RESIZE_WIDTH, le=MAX_RESIZE_WIDTH)] = None
-    resize_height: Annotated[int | None, Field(ge=MIN_RESIZE_HEIGHT, le=MAX_RESIZE_HEIGHT)] = None
 
 
 class ValidateRequest(BaseModel):

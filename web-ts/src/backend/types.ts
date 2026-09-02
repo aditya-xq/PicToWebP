@@ -35,8 +35,6 @@ export interface ConversionOptions {
   quality: number;
   lossless: boolean;
   stripMetadata: boolean;
-  resizeWidth: number | null;
-  resizeHeight: number | null;
 }
 
 export interface ConversionStats {

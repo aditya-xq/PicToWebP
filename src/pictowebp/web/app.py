@@ -272,8 +272,6 @@ def create_app() -> FastAPI:
                     show_progress_bar=False,
                     lossless=payload.lossless,
                     strip_metadata=payload.strip_metadata,
-                    resize_width=payload.resize_width,
-                    resize_height=payload.resize_height,
                 )
                 # Record in history
                 snap = result.snapshot()
@@ -457,8 +455,6 @@ def create_app() -> FastAPI:
         quality: int = 80,
         lossless: bool = False,
         strip_metadata: bool = True,
-        resize_width: int | None = None,
-        resize_height: int | None = None,
     ) -> Response:
         """Convert a single uploaded image to WebP and return it for download."""
         if not file.content_type or not file.content_type.startswith("image/"):
@@ -483,11 +479,7 @@ def create_app() -> FastAPI:
         def encode() -> bytes:
             """CPU-bound Pillow work — runs in a worker thread so the event
             loop (and any SSE progress stream) stays responsive."""
-            prepared = prepare_image(
-                img,
-                resize_width=resize_width,
-                resize_height=resize_height,
-            )
+            prepared = prepare_image(img)
             buf = io.BytesIO()
             save_kwargs = build_save_kwargs(
                 img,

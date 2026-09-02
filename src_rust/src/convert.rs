@@ -112,8 +112,6 @@ pub fn convert_all(
                         settings.quality,
                         settings.lossless,
                         settings.strip_metadata,
-                        settings.resize_width,
-                        settings.resize_height,
                     );
                     ((*file).clone(), result)
                 })
@@ -245,7 +243,6 @@ fn categorize_error(message: &str) -> &'static str {
 }
 
 /// Convert a single image to WebP.
-#[allow(clippy::too_many_arguments)]
 pub fn process_file(
     file_path: &Path,
     source_folder: &Path,
@@ -253,8 +250,6 @@ pub fn process_file(
     quality: u8,
     lossless: bool,
     strip_metadata: bool,
-    resize_width: Option<u32>,
-    resize_height: Option<u32>,
 ) -> Result<FileOutcome> {
     let relative_path = file_path.strip_prefix(source_folder)?;
     let mut destination = output_folder.to_path_buf();
@@ -274,7 +269,6 @@ pub fn process_file(
     let exif = decoder.exif_metadata()?.as_deref().and_then(normalize_exif);
     let image = image::DynamicImage::from_decoder(decoder)?;
 
-    let image = prepare_image(image, resize_width, resize_height);
     let rgba = image.to_rgba8();
     let (width, height) = rgba.dimensions();
     let encoded = if lossless {
@@ -302,42 +296,6 @@ pub fn process_file(
         original_bytes,
         converted_bytes,
     })
-}
-
-/// Apply optional resize caps, preserving aspect ratio and never upscaling.
-///
-/// Mirrors the Python implementation: a width cap shrinks first, then a
-/// height cap shrinks the intermediate result. Images already within the
-/// bounds are returned unchanged.
-fn prepare_image(
-    image: image::DynamicImage,
-    resize_width: Option<u32>,
-    resize_height: Option<u32>,
-) -> image::DynamicImage {
-    const FILTER: image::imageops::FilterType = image::imageops::FilterType::Lanczos3;
-    let (original_width, original_height) = (image.width(), image.height());
-    let mut new_width = original_width;
-    let mut new_height = original_height;
-
-    if let Some(max_width) = resize_width {
-        if original_width > max_width {
-            let scale = f64::from(max_width) / f64::from(original_width);
-            new_width = max_width;
-            new_height = ((f64::from(original_height) * scale) as u32).max(1);
-        }
-    }
-    if let Some(max_height) = resize_height {
-        if new_height > max_height {
-            let scale = f64::from(max_height) / f64::from(new_height);
-            new_height = max_height;
-            new_width = ((f64::from(new_width) * scale) as u32).max(1);
-        }
-    }
-
-    if (new_width, new_height) == (original_width, original_height) {
-        return image;
-    }
-    image.resize_exact(new_width, new_height, FILTER)
 }
 
 /// Normalize a raw EXIF payload so it can be stored in a WebP chunk.
@@ -680,16 +638,7 @@ mod tests {
         create_test_image(&source.join("nested/deep/b.jpg"), 16, 16);
 
         let output = root.join("out");
-        let png = process_file(
-            &source.join("a.png"),
-            &source,
-            &output,
-            80,
-            false,
-            true,
-            None,
-            None,
-        );
+        let png = process_file(&source.join("a.png"), &source, &output, 80, false, true);
         let jpg = process_file(
             &source.join("nested/deep/b.jpg"),
             &source,
@@ -697,8 +646,6 @@ mod tests {
             80,
             false,
             true,
-            None,
-            None,
         );
 
         assert!(png.is_ok(), "png conversion failed: {png:?}");
@@ -724,8 +671,6 @@ mod tests {
             80,
             false,
             true,
-            None,
-            None,
         );
 
         assert!(result.is_err());
@@ -743,60 +688,6 @@ mod tests {
     }
 
     #[test]
-    fn process_file_resizes_and_never_upscales() {
-        let root = scratch_dir("e2e-resize");
-        let source = root.join("source");
-        let output = root.join("out");
-        fs::create_dir_all(&source).unwrap();
-
-        // Downscale width-only: 64x32 with max width 32 -> 32x16.
-        create_test_image(&source.join("wide.png"), 64, 32);
-        let result = process_file(
-            &source.join("wide.png"),
-            &source,
-            &output,
-            80,
-            false,
-            true,
-            Some(32),
-            None,
-        );
-        assert!(result.is_ok());
-        assert_eq!(output_dimensions(&output.join("wide.webp")), (32, 16));
-
-        // Downscale height-only: 32x64 with max height 32 -> 16x32.
-        create_test_image(&source.join("tall.png"), 32, 64);
-        let result = process_file(
-            &source.join("tall.png"),
-            &source,
-            &output,
-            80,
-            false,
-            true,
-            None,
-            Some(32),
-        );
-        assert!(result.is_ok());
-        assert_eq!(output_dimensions(&output.join("tall.webp")), (16, 32));
-
-        // Never upscale: max dimensions larger than the source are a no-op.
-        create_test_image(&source.join("small.png"), 16, 16);
-        let result = process_file(
-            &source.join("small.png"),
-            &source,
-            &output,
-            80,
-            false,
-            true,
-            Some(256),
-            Some(256),
-        );
-        assert!(result.is_ok());
-        assert_eq!(output_dimensions(&output.join("small.webp")), (16, 16));
-        fs::remove_dir_all(&root).ok();
-    }
-
-    #[test]
     fn process_file_strips_and_keeps_metadata_end_to_end() {
         let root = scratch_dir("e2e-metadata");
         let source = root.join("source");
@@ -804,17 +695,8 @@ mod tests {
         fs::create_dir_all(&source).unwrap();
         create_test_image(&source.join("photo.png"), 16, 16);
 
-        let stripped = process_file(
-            &source.join("photo.png"),
-            &source,
-            &output,
-            80,
-            false,
-            true,
-            None,
-            None,
-        )
-        .unwrap();
+        let stripped =
+            process_file(&source.join("photo.png"), &source, &output, 80, false, true).unwrap();
         let kept = process_file(
             &source.join("photo.png"),
             &source,
@@ -822,8 +704,6 @@ mod tests {
             80,
             false,
             false,
-            None,
-            None,
         )
         .unwrap();
 
@@ -860,8 +740,6 @@ mod tests {
             threads: std::num::NonZeroUsize::new(2).unwrap(),
             lossless: false,
             strip_metadata: true,
-            resize_width: None,
-            resize_height: None,
             no_progress: true,
             report_path: None,
         };
@@ -902,8 +780,6 @@ mod tests {
             threads: std::num::NonZeroUsize::new(1).unwrap(),
             lossless: false,
             strip_metadata: true,
-            resize_width: None,
-            resize_height: None,
             no_progress: true,
             report_path: None,
         };

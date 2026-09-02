@@ -17,8 +17,6 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Instant;
 
-use image::GenericImageView;
-
 const FIXTURES_REL: &str = "../tests/e2e/fixtures";
 const ERROR_REPORT_NAME: &str = "conversion-errors.txt";
 
@@ -148,11 +146,19 @@ fn realistic_dataset_converts_and_reports_performance() {
     if real_image_count() < EXPECTED {
         // On-demand, rate-limited download through the shared Python script.
         let status = Command::new("uv")
-            .args(["run", "python", "tests/e2e/download_real_dataset.py", "--count", "500"])
+            .args([
+                "run",
+                "python",
+                "tests/e2e/download_real_dataset.py",
+                "--count",
+                "500",
+            ])
             .current_dir(repo_root())
             .status();
         if !status.is_ok_and(|s| s.success()) || real_image_count() < EXPECTED {
-            eprintln!("skipping: realistic dataset unavailable; run `uv run python tests/e2e/download_real_dataset.py`");
+            eprintln!(
+                "skipping: realistic dataset unavailable; run `uv run python tests/e2e/download_real_dataset.py`"
+            );
             return;
         }
     }
@@ -173,8 +179,15 @@ fn realistic_dataset_converts_and_reports_performance() {
 
     assert_eq!(status.code(), Some(0));
     let output = output_folder(&source);
-    assert_eq!(converted_webp(&output).len(), n, "every realistic photo must convert");
-    assert!(!output.join(ERROR_REPORT_NAME).exists(), "no failures expected in the dataset");
+    assert_eq!(
+        converted_webp(&output).len(),
+        n,
+        "every realistic photo must convert"
+    );
+    assert!(
+        !output.join(ERROR_REPORT_NAME).exists(),
+        "no failures expected in the dataset"
+    );
 
     let per_second = n as f64 / elapsed.as_secs_f64();
     let source_mib = walk_files(&source)
@@ -205,9 +218,17 @@ fn converts_supported_formats_and_skips_the_rest() {
     // directories are skipped entirely.
     assert!(!output.join("broken.webp").exists());
     assert!(!output.join("dup.webp").exists());
-    assert!(!converted_webp(&output).iter().any(|p| p.contains(".hidden")));
+    assert!(
+        !converted_webp(&output)
+            .iter()
+            .any(|p| p.contains(".hidden"))
+    );
     // Unsupported formats (bmp/tiff/gif) are never discovered.
-    assert!(!converted_webp(&output).iter().any(|p| matches!(p.as_str(), "d.webp" | "e.webp" | "f.webp")));
+    assert!(
+        !converted_webp(&output)
+            .iter()
+            .any(|p| matches!(p.as_str(), "d.webp" | "e.webp" | "f.webp"))
+    );
 
     cleanup(&source);
 }
@@ -244,9 +265,11 @@ fn failure_report_lists_corrupt_file() {
 fn hidden_directory_is_never_converted() {
     let source = copy_corpus();
     assert_eq!(run_cli(&source).code(), Some(0));
-    assert!(!converted_webp(&output_folder(&source))
-        .iter()
-        .any(|p| p.contains(".hidden")));
+    assert!(
+        !converted_webp(&output_folder(&source))
+            .iter()
+            .any(|p| p.contains(".hidden"))
+    );
     cleanup(&source);
 }
 
@@ -293,9 +316,13 @@ fn empty_and_no_image_folders_are_noops() {
     for source in [&empty, &text_only] {
         assert_eq!(run_cli(source).code(), Some(0));
         // No output folder is created for a no-op run.
-        assert!(!fs::read_dir(&root)
-            .unwrap()
-            .any(|e| e.unwrap().file_name().to_string_lossy().ends_with("_webp_")));
+        assert!(
+            !fs::read_dir(&root).unwrap().any(|e| e
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with("_webp_"))
+        );
     }
 
     fs::remove_dir_all(&root).ok();
@@ -313,26 +340,6 @@ fn lossless_flag_converts() {
         .status;
     assert_eq!(status.code(), Some(0));
     assert!(output_folder(&source).join("a.webp").exists());
-    cleanup(&source);
-}
-
-#[test]
-fn resize_flag_applies() {
-    let source = copy_corpus();
-    let status = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
-        .arg(&source)
-        .args(["-q", "80", "-t", "2", "--no-progress", "--resize-width", "16"])
-        .current_dir(source.parent().unwrap())
-        .output()
-        .unwrap()
-        .status;
-    assert_eq!(status.code(), Some(0));
-
-    // leaf.png is 32x16; --resize-width 16 must never upscale and must keep
-    // the aspect ratio (16x8), verified against the real decoded WebP.
-    let leaf = output_folder(&source).join("nested").join("deep").join("leaf.webp");
-    let (w, h) = image::open(&leaf).unwrap().dimensions();
-    assert_eq!((w, h), (16, 8));
     cleanup(&source);
 }
 

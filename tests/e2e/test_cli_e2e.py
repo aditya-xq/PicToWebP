@@ -173,16 +173,6 @@ def test_missing_path_exits_2(tmp_path: Path):
     assert proc.returncode == 2
 
 
-def test_resize_flag_applies_end_to_end(source: Path):
-    """--resize-width clamps the real output dimensions (never upscales)."""
-    proc = run_cli(source, "--resize-width", "16", cwd=source.parent)
-    assert proc.returncode == 0
-
-    leaf = output_folder(source) / "nested" / "deep" / "leaf.webp"
-    with Image.open(leaf) as img:
-        assert img.size == (16, 8)
-
-
 def test_output_folder_naming_uses_timestamp(source: Path):
     """The output folder follows the unique `<source>_webp_<timestamp>` contract."""
     run_cli(source, cwd=source.parent)

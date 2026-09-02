@@ -230,46 +230,6 @@ def test_process_file_survives_decompression_bomb(image_factory, source_dir, mon
     assert not (output_root / "bomb.webp").exists()
 
 
-def _convert_with_size(source_dir, width, height, **kwargs):
-    """Create an image of the given size, convert it, return the output size."""
-    path = source_dir / "resized.png"
-    Image.new("RGB", (width, height), (5, 5, 5)).save(path)
-    output_root = source_dir.parent / "out"
-    output_root.mkdir(exist_ok=True)
-    result = process_file(path, source_dir, output_root, 80, OutputImageFormat.WEBP, **kwargs)
-    assert isinstance(result, ProcessedFile)
-    with Image.open(output_root / "resized.webp") as converted:
-        return converted.size
-
-
-def test_resize_width_only_preserves_aspect_ratio(source_dir):
-    assert _convert_with_size(source_dir, 640, 480, resize_width=320) == (320, 240)
-
-
-def test_resize_height_only_preserves_aspect_ratio(source_dir):
-    assert _convert_with_size(source_dir, 640, 480, resize_height=240) == (320, 240)
-
-
-def test_resize_fits_within_both_bounds(source_dir):
-    assert _convert_with_size(source_dir, 1000, 500, resize_width=320, resize_height=100) == (
-        200,
-        100,
-    )
-
-
-def test_resize_never_upscales(source_dir):
-    assert _convert_with_size(source_dir, 100, 50, resize_width=320, resize_height=320) == (
-        100,
-        50,
-    )
-
-
-def test_resize_never_produces_zero_dimension(source_dir):
-    """Pathological aspect ratios must collapse no dimension to zero (matches CLIs)."""
-    assert _convert_with_size(source_dir, 100000, 1, resize_width=16)[1] == 1
-    assert _convert_with_size(source_dir, 1, 100000, resize_height=16)[0] == 1
-
-
 def test_process_file_mirrors_nested_structure(image_factory, source_dir):
     original = image_factory("nested/deep/photo.jpg")
     output_root = source_dir.parent / "out"

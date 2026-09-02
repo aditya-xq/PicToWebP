@@ -110,33 +110,33 @@ times on temp copies (cleaned up), prints a summary table and writes the
 
 ## Suite deep-dives
 
-### Python — `pytest` (97 = 96 passed, 1 gated skip)
+### Python — `pytest` (94 = 93 passed, 1 gated skip)
 
 | File | Kind | What it covers |
 | --- | --- | --- |
-| `tests/test_cli.py` | integration | argparse validation, interactive prompts, `main()` exit codes (0/2/3/130), lossless/resize/keep-metadata/report/no-log flags, non-TTY progress suppression, `--version`, `~` expansion |
-| `tests/test_converter.py` | unit | the conversion engine: collisions, resize math, EXIF embedding, atomic writes, cancellation, error report |
+| `tests/test_cli.py` | integration | argparse validation, interactive prompts, `main()` exit codes (0/2/3/130), lossless/keep-metadata/report/no-log flags, non-TTY progress suppression, `--version`, `~` expansion |
+| `tests/test_converter.py` | unit | the conversion engine: collisions, EXIF embedding, atomic writes, cancellation, error report |
 | `tests/test_discovery.py` `test_paths.py` `test_progress.py` `test_style.py` `test_utils.py` | unit | image discovery, output-folder allocation, thread-safe progress, ANSI styling, disk/format helpers |
 | `tests/test_web.py` | integration | FastAPI endpoints (convert/cancel/progress-SSE/validate/browse/history/single-upload/zip), SPA serving. One test is gated on `web-ts/dist-python` being built |
-| `tests/e2e/test_cli_e2e.py` | **live subprocess e2e** | spawns the real `python -m pictowebp`: exit codes, `<source>_webp_<timestamp>` contract, collision/hidden/corrupt handling, crash-safe output, resize, EXIF keep/strip, lossless, interactive prompts via stdin, empty/no-op folders, and the gated **realistic-dataset** run with perf capture |
+| `tests/e2e/test_cli_e2e.py` | **live subprocess e2e** | spawns the real `python -m pictowebp`: exit codes, `<source>_webp_<timestamp>` contract, collision/hidden/corrupt handling, crash-safe output, EXIF keep/strip, lossless, interactive prompts via stdin, empty/no-op folders, and the gated **realistic-dataset** run with perf capture |
 
-### Rust — `cargo test` (44 = 33 unit + 11 live-binary)
+### Rust — `cargo test` (42 = 32 unit + 10 live-binary)
 
 - **Unit** (inline `#[cfg(test)]` in `convert.rs`, `discovery.rs`, `paths.rs`,
   `settings.rs`, `style.rs`, `ui.rs`, `main.rs`): mirrors the Python unit
-  coverage — conversion engine, collisions, resize, EXIF embedding, atomic
+  coverage — conversion engine, collisions, EXIF embedding, atomic
   writes, error report, argument validation.
 - **`tests/cli_e2e.rs`** (**live e2e**): spawns the **compiled binary** via
   `CARGO_BIN_EXE_pictowebp` against the shared corpus and asserts the same
-  behaviours as the Python subprocess suite — plus resize verified against the
-  **decoded** output WebP, interactive prompt flow via piped stdin, and the
-  gated **realistic-dataset** run reporting elapsed time and throughput.
+  behaviours as the Python subprocess suite — interactive prompt flow via
+  piped stdin, and the gated **realistic-dataset** run reporting elapsed
+  time and throughput.
 
-### Web UI — vitest (23)
+### Web UI — vitest (18)
 
 `web-ts/src/core.test.ts` covers the pure logic shared by both backends:
-collision detection, canvas-limit clamping, resize math (never upscales),
-output-name handling, and formatting helpers.
+collision detection, canvas-limit clamping, output-name handling, and
+formatting helpers.
 
 ### Web UI — Playwright (10)
 

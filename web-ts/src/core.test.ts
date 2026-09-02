@@ -3,7 +3,6 @@ import {
   MAX_CANVAS_AREA,
   MAX_CANVAS_SIDE,
   clampToCanvasLimits,
-  computeResize,
   estimateEtaSeconds,
   findCollisions,
   formatBytes,
@@ -11,7 +10,6 @@ import {
   hasHiddenDirectorySegment,
   isSupportedImage,
   replaceExtension,
-  targetDimensions,
   webpQuality,
 } from './core';
 
@@ -74,28 +72,6 @@ describe('replaceExtension', () => {
   });
 });
 
-describe('computeResize', () => {
-  it('never upscales', () => {
-    expect(computeResize(16, 16, 256, 256)).toEqual({ width: 16, height: 16 });
-  });
-
-  it('caps by width preserving aspect ratio', () => {
-    expect(computeResize(640, 480, 320, null)).toEqual({ width: 320, height: 240 });
-  });
-
-  it('caps by height preserving aspect ratio', () => {
-    expect(computeResize(640, 480, null, 240)).toEqual({ width: 320, height: 240 });
-  });
-
-  it('applies width then height caps', () => {
-    expect(computeResize(1000, 500, 320, 100)).toEqual({ width: 200, height: 100 });
-  });
-
-  it('leaves images within bounds untouched', () => {
-    expect(computeResize(300, 200, 320, 240)).toEqual({ width: 300, height: 200 });
-  });
-});
-
 describe('formatBytes', () => {
   it('uses readable units', () => {
     expect(formatBytes(512)).toBe('512 B');
@@ -154,21 +130,6 @@ it('never returns zero or negative dimensions', () => {
     const r = clampToCanvasLimits(MAX_CANVAS_SIDE + 1, 1);
     expect(r.width).toBeGreaterThanOrEqual(1);
     expect(r.height).toBeGreaterThanOrEqual(1);
-  });
-});
-
-describe('targetDimensions', () => {
-  it('applies user resize caps before canvas clamping', () => {
-    const options = { quality: 80, resizeWidth: 320, resizeHeight: null };
-    expect(targetDimensions(640, 480, options)).toEqual({ width: 320, height: 240 });
-  });
-
-  it('clamps oversized inputs to the canvas limits', () => {
-    const options = { quality: 80, resizeWidth: null, resizeHeight: null };
-    const r = targetDimensions(40000, 20000, options);
-    expect(r.width).toBeLessThanOrEqual(MAX_CANVAS_SIDE);
-    expect(r.height).toBeLessThanOrEqual(MAX_CANVAS_SIDE);
-    expect(r.width * r.height).toBeLessThanOrEqual(MAX_CANVAS_AREA);
   });
 });
 

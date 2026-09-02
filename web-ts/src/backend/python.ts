@@ -170,8 +170,6 @@ export class PythonBackend implements ConversionBackend {
       quality: options.quality,
       lossless: options.lossless,
       strip_metadata: options.stripMetadata,
-      resize_width: options.resizeWidth,
-      resize_height: options.resizeHeight,
     };
     const res = await fetch('/convert', {
       method: 'POST',
@@ -274,8 +272,6 @@ export class PythonBackend implements ConversionBackend {
     form.append('quality', String(options.quality));
     form.append('lossless', String(options.lossless));
     form.append('strip_metadata', String(options.stripMetadata));
-    if (options.resizeWidth) form.append('resize_width', String(options.resizeWidth));
-    if (options.resizeHeight) form.append('resize_height', String(options.resizeHeight));
 
     const res = await fetch('/api/convert-single', { method: 'POST', body: form });
     if (!res.ok) {

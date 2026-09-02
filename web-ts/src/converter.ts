@@ -1,10 +1,10 @@
 import {
   ConversionOptions,
   FileResult,
+  clampToCanvasLimits,
   failureResult,
   isSupportedImage,
   successResult,
-  targetDimensions,
   webpQuality,
 } from './core';
 
@@ -173,7 +173,7 @@ async function convertOnMainThread(
     if (img.naturalWidth === 0 || img.naturalHeight === 0) {
       throw new Error(`${file.name} has no pixel data (corrupt or unsupported format)`);
     }
-    const target = targetDimensions(img.naturalWidth, img.naturalHeight, options);
+    const target = clampToCanvasLimits(img.naturalWidth, img.naturalHeight);
     const canvas = document.createElement('canvas');
     canvas.width = target.width;
     canvas.height = target.height;

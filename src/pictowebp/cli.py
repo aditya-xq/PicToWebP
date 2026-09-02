@@ -13,12 +13,8 @@ from pictowebp.constants import (
     DEFAULT_QUALITY,
     DEFAULT_THREADS,
     MAX_QUALITY,
-    MAX_RESIZE_HEIGHT,
-    MAX_RESIZE_WIDTH,
     MAX_THREADS,
     MIN_QUALITY,
-    MIN_RESIZE_HEIGHT,
-    MIN_RESIZE_WIDTH,
     MIN_THREADS,
 )
 from pictowebp.converter import convert_folder
@@ -91,13 +87,6 @@ def _threads_arg(raw: str) -> int:
     return _int_in_range(raw, label="threads", low=MIN_THREADS, high=MAX_THREADS)
 
 
-def _make_resize_arg(label: str, low: int, high: int):
-    def parse(raw: str) -> int:
-        return _int_in_range(raw, label=label, low=low, high=high)
-
-    return parse
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pictowebp",
@@ -137,16 +126,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--keep-metadata",
         action="store_true",
         help=f"keep EXIF/metadata (default: {'strip' if _STRIP_METADATA_DEFAULT else 'keep'})",
-    )
-    parser.add_argument(
-        "--resize-width",
-        type=_make_resize_arg("width", MIN_RESIZE_WIDTH, MAX_RESIZE_WIDTH),
-        help=f"max width in pixels, {MIN_RESIZE_WIDTH}-{MAX_RESIZE_WIDTH}",
-    )
-    parser.add_argument(
-        "--resize-height",
-        type=_make_resize_arg("height", MIN_RESIZE_HEIGHT, MAX_RESIZE_HEIGHT),
-        help=f"max height in pixels, {MIN_RESIZE_HEIGHT}-{MAX_RESIZE_HEIGHT}",
     )
     parser.add_argument(
         "--no-progress",
@@ -233,8 +212,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             show_progress_bar=not args.no_progress,
             lossless=args.lossless,
             strip_metadata=not args.keep_metadata,
-            resize_width=args.resize_width,
-            resize_height=args.resize_height,
             report_path=args.report,
             on_started=lambda output, effective_workers: print_settings(
                 source_folder,
@@ -243,8 +220,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 threads,
                 lossless=args.lossless,
                 strip_metadata=not args.keep_metadata,
-                resize_width=args.resize_width,
-                resize_height=args.resize_height,
             ),
         )
     except KeyboardInterrupt:

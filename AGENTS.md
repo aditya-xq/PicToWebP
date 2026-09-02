@@ -39,15 +39,15 @@ cd web-ts && npm run test:e2e                   # static Playwright smoke (chrom
 cd web-ts && npm run test:e2e:python            # python-backend Playwright smoke
 ```
 
-All suites are expected green before committing (currently 97 pytest, 44 cargo
-test, 23 vitest, 10 Playwright e2e).
+All suites are expected green before committing (currently 94 pytest, 42 cargo
+test, 18 vitest, 10 Playwright e2e).
 
 Every tool is covered by a **live e2e regression suite** that runs the real
 artifact against a copy of the shared fixture corpus (`tests/e2e/fixtures`,
 regenerated via `uv run python tests/e2e/gen_fixtures.py`):
 - `tests/e2e/test_cli_e2e.py` spawns `python -m pictowebp` as a subprocess
   (exit codes, output-folder contract, collision/hidden/corrupt handling,
-  resize, EXIF keep/strip, lossless, interactive prompts, empty/no-op folders);
+  EXIF keep/strip, lossless, interactive prompts, empty/no-op folders);
 - `src_rust/tests/cli_e2e.rs` spawns the compiled binary via
   `CARGO_BIN_EXE_pictowebp` and mirrors the same behaviors; both clean up
   their temp folders afterwards;
@@ -87,15 +87,13 @@ These are the product's core selling points — never break them:
 
 Features shared across editions — keep them consistent when changing one:
 
-- Never upscale on resize; aspect ratio preserved; side limit 16–16384 px.
 - Same-stem collisions (e.g. `a.png` + `a.jpg` → `a.webp`) are skipped and
   reported, never silently overwritten.
 - Hidden (dot-prefixed) directories are skipped during enumeration.
 - Output folder per run is unique (`<source>_webp_<timestamp>`); files are
   written crash-safe (only fully converted files appear).
 - Browser canvas limits are clamped in `web-ts/src/core.ts`
-  (`clampToCanvasLimits`/`targetDimensions`) — oversized inputs downscale
-  instead of failing.
+  (`clampToCanvasLimits`) — oversized inputs downscale instead of failing.
 - There is **one** web UI: `web-ts/`. `main.ts` only talks to the
   `ConversionBackend` interface in `web-ts/src/backend/` — never to HTTP or
   to the worker pool directly. Capabilities (`backend/capabilities`) decide

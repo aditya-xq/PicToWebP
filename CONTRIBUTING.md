@@ -46,7 +46,7 @@ from a pull request.
     │   ├── ui.css            # shared design system (both editions bundle it)
     │   ├── converter.ts      # worker pool, Canvas→WebP fallback, folder enumeration
     │   ├── worker.ts         # OffscreenCanvas conversion worker
-    │   └── core.ts           # pure logic: collisions, resize math, formatting
+    │   └── core.ts           # pure logic: collisions, canvas-limit clamping, formatting
     ├── e2e/                  # Playwright tests (static/browser backend;
                           #   batch.spec.ts = multi-file drop → batch → ZIP)
     └── e2e-python/           # Playwright tests (python backend via FastAPI;
@@ -112,10 +112,10 @@ npm run test:e2e:python    # python build served by FastAPI
 
 All test suites are expected to be green before submitting changes:
 
-- `python -m pytest` — **97 tests** (96 passed, 1 gated skip on the built SPA) covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, SPA serving, and end-to-end flows — **including 13 live subprocess tests** that run the real `python -m pictowebp` against the shared fixture corpus (exit codes, output-folder contract, collision/hidden/corrupt handling, resize, EXIF keep/strip, lossless, interactive prompts, empty/no-op folders) plus a gated realistic-dataset run with performance capture.
+- `python -m pytest` — **94 tests** (93 passed, 1 gated skip on the built SPA) covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, SPA serving, and end-to-end flows — **including 12 live subprocess tests** that run the real `python -m pictowebp` against the shared fixture corpus (exit codes, output-folder contract, collision/hidden/corrupt handling, EXIF keep/strip, lossless, interactive prompts, empty/no-op folders) plus a gated realistic-dataset run with performance capture.
 - `uv run pyright` — **0 errors, 0 warnings** under `[tool.pyright]` config (standard mode, Python 3.10).
-- `cargo test` — **44 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), resize behavior, EXIF embedding, atomic file writes, error report persistence, CLI argument validation — **including 11 live-binary tests** that spawn the compiled executable against the same shared fixture corpus (mirroring the Python subprocess suite plus real decoded-output dimension checks and a gated realistic-dataset run).
-- `npm test` (in `web-ts/`) — **23 tests** covering collision detection, canvas-limit clamping, resize math (never upscales), output-name handling, and formatting helpers.
+- `cargo test` — **42 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), EXIF embedding, atomic file writes, error report persistence, CLI argument validation — **including 10 live-binary tests** that spawn the compiled executable against the same shared fixture corpus (mirroring the Python subprocess suite and a gated realistic-dataset run).
+- `npm test` (in `web-ts/`) — **18 tests** covering collision detection, canvas-limit clamping, output-name handling, and formatting helpers.
 - `npm run test:e2e` (in `web-ts/`) — **6 Playwright tests** driving the static build in real Chromium (UI load, single-image conversion, a runtime proof that the conversion makes zero external network requests, a multi-file drop → batch conversion → ZIP download flow, its corrupt-input failure path, and a gated realistic 40-photo batch logging UI-reported throughput).
 - `npm run test:e2e:python` (in `web-ts/`) — **4 Playwright tests** driving the python build served by FastAPI (server edition, single-image upload, a full batch conversion: browse modal → folder convert via SSE → ZIP download inspected in the browser with sad-path results surfaced in the UI, and a gated realistic 40-photo server batch).
 
@@ -171,8 +171,6 @@ codebase with a different backend chosen at build time.
 | `-t, --threads` | Number of workers converting in parallel | all CPU cores |
 | `--lossless` | Use lossless WebP encoding (overrides `--quality`) | off |
 | `--keep-metadata` | Keep EXIF/metadata (default: strip) | off |
-| `--resize-width` | Maximum width in pixels, 16–16384 | original |
-| `--resize-height` | Maximum height in pixels, 16–16384 | original |
 | `--no-progress` | Disable the progress bar | off |
 | `--no-log` | Do not write to `pictowebp.log` | off |
 | `--report PATH` | Custom path for the conversion-errors report | `<output>/conversion-errors.txt` |
@@ -232,8 +230,6 @@ the Python one (minus `--no-log`, which has no analogue):
 | `-t, --threads` | Number of conversion workers |
 | `--lossless` | Lossless WebP encoding (overrides `--quality`) |
 | `--keep-metadata` | Keep EXIF/metadata (default: strip) |
-| `--resize-width` | Maximum width in pixels, 16–16384 |
-| `--resize-height` | Maximum height in pixels, 16–16384 |
 | `--no-progress` | Do not render the progress bar |
 | `--report` | Custom path for the conversion-errors report |
 | `-V, --version` | Print version and exit |

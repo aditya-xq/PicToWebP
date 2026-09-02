@@ -94,26 +94,6 @@
           </div>
         </div>
 
-        <div class="stack">
-          <div class="row">
-            <div>
-              <div class="option-title">Resize</div>
-              <div class="option-desc">Shrink images before converting — set a max width or height</div>
-            </div>
-            <div id="toggle-resize" class="toggle" role="switch" aria-checked="false" tabindex="0"></div>
-          </div>
-          <div id="resize-inputs" class="field-grid hidden">
-            <div>
-              <label class="field-label" for="resize-width">Max Width</label>
-              <input type="number" id="resize-width" class="field mono" placeholder="px" min="16" max="16384">
-            </div>
-            <div>
-              <label class="field-label" for="resize-height">Max Height</label>
-              <input type="number" id="resize-height" class="field mono" placeholder="px" min="16" max="16384">
-            </div>
-          </div>
-        </div>
-
         <p class="note" id="browser-note">
           Browser conversion always strips EXIF/GPS metadata, and encoding uses
           the browser's built-in WebP encoder — there is no separate lossless

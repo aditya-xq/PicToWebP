@@ -128,8 +128,6 @@ def convert_folder(
     show_progress_bar: bool = True,
     lossless: bool = False,
     strip_metadata: bool = True,
-    resize_width: int | None = None,
-    resize_height: int | None = None,
     on_started: Callable[[Path, int], None] | None = None,
     report_path: Path | None = None,
 ) -> ConversionProgress:
@@ -146,8 +144,6 @@ def convert_folder(
     :param show_progress_bar: Render a tqdm bar (disable for headless use).
     :param lossless: Use lossless WebP encoding.
     :param strip_metadata: Remove EXIF/metadata from output images.
-    :param resize_width: Optional max width to resize to (preserves aspect ratio).
-    :param resize_height: Optional max height to resize to (preserves aspect ratio).
     :param on_started: Optional callback invoked with the output folder and
         effective worker count immediately before conversion begins.
     :param report_path: Optional path to write the failure report. When
@@ -196,7 +192,7 @@ def convert_folder(
     # same information via ``logger.info`` would just be noise on stderr.
     logger.debug(
         "Converting %d images from %s to %s (quality=%d, threads=%d, lossless=%s, "
-        "strip_metadata=%s, resize=%sx%s)",
+        "strip_metadata=%s)",
         tracker.total_files,
         source_folder,
         output_folder,
@@ -204,8 +200,6 @@ def convert_folder(
         worker_count,
         lossless,
         strip_metadata,
-        resize_width or "auto",
-        resize_height or "auto",
     )
 
     started = perf_counter()
@@ -257,8 +251,6 @@ def convert_folder(
                     output_format,
                     lossless=lossless,
                     strip_metadata=strip_metadata,
-                    resize_width=resize_width,
-                    resize_height=resize_height,
                 ): path
                 for path in chunk
             }
@@ -356,8 +348,6 @@ def process_file(
     *,
     lossless: bool = False,
     strip_metadata: bool = True,
-    resize_width: int | None = None,
-    resize_height: int | None = None,
 ) -> ProcessedFile | ConversionError:
     """Convert a single image into ``output_format``.
 
@@ -386,7 +376,7 @@ def process_file(
         os.close(fd)
 
         with Image.open(file_path) as img:
-            prepared = prepare_image(img, resize_width=resize_width, resize_height=resize_height)
+            prepared = prepare_image(img)
             save_kwargs = build_save_kwargs(
                 img,
                 output_format,
@@ -413,13 +403,8 @@ def process_file(
     return ProcessedFile(original_bytes=original_bytes, converted_bytes=destination.stat().st_size)
 
 
-def prepare_image(
-    img: Image.Image,
-    *,
-    resize_width: int | None = None,
-    resize_height: int | None = None,
-) -> Image.Image:
-    """Normalise the image mode and optionally resize."""
+def prepare_image(img: Image.Image) -> Image.Image:
+    """Normalise the image mode for WebP encoding."""
     # Convert mode for format compatibility
     if img.mode == "RGB":
         result = img
@@ -427,10 +412,6 @@ def prepare_image(
         result = img.convert("RGBA")
     else:
         result = img.convert("RGB")
-
-    # Resize if requested (preserve aspect ratio)
-    if resize_width or resize_height:
-        result = _resize_image(result, resize_width, resize_height)
 
     return result
 
@@ -459,27 +440,3 @@ def build_save_kwargs(
         if icc := img.info.get("icc_profile"):
             save_kwargs["icc_profile"] = icc
     return save_kwargs
-
-
-def _resize_image(
-    img: Image.Image,
-    max_width: int | None,
-    max_height: int | None,
-) -> Image.Image:
-    """Resize image to fit within max dimensions while preserving aspect ratio."""
-    orig_w, orig_h = img.size
-    new_w, new_h = orig_w, orig_h
-
-    if max_width and orig_w > max_width:
-        ratio = max_width / orig_w
-        new_w = max_width
-        new_h = max(1, int(orig_h * ratio))
-
-    if max_height and new_h > max_height:
-        ratio = max_height / new_h
-        new_h = max_height
-        new_w = max(1, int(new_w * ratio))
-
-    if (new_w, new_h) != (orig_w, orig_h):
-        return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    return img

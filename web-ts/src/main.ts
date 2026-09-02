@@ -80,15 +80,13 @@ function setBusy(busy: boolean): void {
   document.querySelectorAll<HTMLButtonElement>('.preset-btn, .mode-tab').forEach((btn) => {
     btn.disabled = busy;
   });
-  for (const id of ['toggle-lossless', 'toggle-metadata', 'toggle-resize']) {
+  for (const id of ['toggle-lossless', 'toggle-metadata']) {
     const el = document.getElementById(id);
     if (el) {
       el.classList.toggle('disabled', busy);
       el.setAttribute('aria-disabled', String(busy));
     }
   }
-  ($('resize-width') as HTMLInputElement).disabled = busy;
-  ($('resize-height') as HTMLInputElement).disabled = busy;
   for (const id of ['drop-zone', 'single-drop-zone']) {
     $(id).classList.toggle('disabled', busy);
     $(id).setAttribute('aria-disabled', String(busy));
@@ -96,17 +94,12 @@ function setBusy(busy: boolean): void {
 }
 
 function getOptions(): ConversionOptions {
-  const resizeActive = $('toggle-resize').classList.contains('active');
-  const width = ($('resize-width') as HTMLInputElement).valueAsNumber;
-  const height = ($('resize-height') as HTMLInputElement).valueAsNumber;
   const losslessEl = document.getElementById('toggle-lossless');
   const metadataEl = document.getElementById('toggle-metadata');
   return {
     quality: Number(($('quality-slider') as HTMLInputElement).value),
     lossless: cap.lossless && (losslessEl?.classList.contains('active') ?? false),
     stripMetadata: cap.metadataControl ? (metadataEl?.classList.contains('active') ?? true) : true,
-    resizeWidth: resizeActive && Number.isFinite(width) ? width : null,
-    resizeHeight: resizeActive && Number.isFinite(height) ? height : null,
   };
 }
 
@@ -635,8 +628,6 @@ function initUI(): void {
   // Toggles
   if (cap.lossless) bindToggle($('toggle-lossless'));
   if (cap.metadataControl) bindToggle($('toggle-metadata'));
-  const resizeToggle = $('toggle-resize');
-  bindToggle(resizeToggle, () => $('resize-inputs').classList.toggle('hidden'));
 
   // Mode tabs
   document.querySelectorAll<HTMLButtonElement>('.mode-tab').forEach((tab) => {

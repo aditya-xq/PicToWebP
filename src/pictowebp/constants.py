@@ -16,12 +16,6 @@ MAX_THREADS = 256
 # number keeps workers busier but increases memory pressure from pending futures.
 CHUNK_SIZE = 64
 
-# Bounds for explicit resize requests.
-MIN_RESIZE_WIDTH = 16
-MAX_RESIZE_WIDTH = 16384
-MIN_RESIZE_HEIGHT = 16
-MAX_RESIZE_HEIGHT = 16384
-
 # Maximum length of an error reason shown in the terminal; longer messages
 # are truncated with an ellipsis so a single bad file cannot blow up the
 # column width.

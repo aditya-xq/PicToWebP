@@ -9,9 +9,9 @@
 import {
   ConversionOptions,
   FileResult,
+  clampToCanvasLimits,
   failureResult,
   successResult,
-  targetDimensions,
   webpQuality,
 } from './core';
 
@@ -32,7 +32,7 @@ async function convert(request: ConvertRequest): Promise<FileResult> {
       if (bitmap.width === 0 || bitmap.height === 0) {
         throw new Error(`${file.name} has no pixel data (corrupt or unsupported format)`);
       }
-      const target = targetDimensions(bitmap.width, bitmap.height, options);
+      const target = clampToCanvasLimits(bitmap.width, bitmap.height);
       const canvas = new OffscreenCanvas(target.width, target.height);
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('OffscreenCanvas 2D context unavailable');

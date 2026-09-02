@@ -60,8 +60,6 @@ def print_settings(
     *,
     lossless: bool,
     strip_metadata: bool,
-    resize_width: int | None,
-    resize_height: int | None,
 ) -> None:
     """Print the settings banner before conversion starts."""
     print()
@@ -73,11 +71,6 @@ def print_settings(
     field("Threads:", threads)
     field("Mode:", "lossless" if lossless else f"lossy q={quality}")
     field("Metadata:", "strip" if strip_metadata else "keep")
-    if resize_width or resize_height:
-        size = f"{resize_width or 'auto'}x{resize_height or 'auto'}"
-        field("Resize:", f"max {size}")
-    else:
-        field("Resize:", "original")
     print()
 
 

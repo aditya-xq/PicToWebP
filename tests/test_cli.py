@@ -16,8 +16,6 @@ def test_parser_accepts_flags(tmp_path: Path):
     assert args.no_progress is False
     assert args.lossless is False
     assert args.keep_metadata is False
-    assert args.resize_width is None
-    assert args.resize_height is None
 
 
 def test_parser_accepts_advanced_flags(tmp_path: Path):
@@ -28,10 +26,6 @@ def test_parser_accepts_advanced_flags(tmp_path: Path):
             "75",
             "--lossless",
             "--keep-metadata",
-            "--resize-width",
-            "800",
-            "--resize-height",
-            "600",
             "--no-progress",
             "--no-log",
             "--report",
@@ -41,8 +35,6 @@ def test_parser_accepts_advanced_flags(tmp_path: Path):
     assert args.quality == 75
     assert args.lossless is True
     assert args.keep_metadata is True
-    assert args.resize_width == 800
-    assert args.resize_height == 600
     assert args.no_progress is True
     assert args.no_log is True
     assert args.report == tmp_path / "report.txt"
@@ -66,17 +58,6 @@ def test_parser_rejects_out_of_range_threads():
     else:
         msg = "expected SystemExit for invalid threads"
         raise AssertionError(msg)
-
-
-def test_parser_rejects_out_of_range_resize():
-    for flag in ("--resize-width", "--resize-height"):
-        try:
-            build_parser().parse_args([flag, "1"])
-        except SystemExit:
-            pass
-        else:
-            msg = f"expected SystemExit for invalid {flag}"
-            raise AssertionError(msg)
 
 
 def test_prompt_for_directory_retries_then_accepts(monkeypatch, tmp_path: Path):
@@ -152,34 +133,6 @@ def test_main_lossless_flag_runs(tmp_path: Path, capsys: pytest.CaptureFixture[s
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "lossless" in captured.out.lower()
-
-
-def test_main_resize_flag_runs(tmp_path: Path):
-    source = tmp_path / "pics"
-    source.mkdir()
-    Image.new("RGB", (640, 480), (255, 0, 0)).save(source / "big.png")
-
-    exit_code = main(
-        [
-            str(source),
-            "-q",
-            "80",
-            "--resize-width",
-            "320",
-            "-t",
-            "1",
-            "--no-progress",
-        ]
-    )
-
-    assert exit_code == 0
-    output_folders = [p for p in source.parent.iterdir() if p.is_dir() and p != source]
-    assert output_folders, "expected an output folder to be created"
-    resized = next(output_folders[0].rglob("big.webp"))
-    with Image.open(resized) as img:
-        # Width should be 320; height is scaled proportionally.
-        assert img.size[0] == 320
-        assert img.size[1] < 480
 
 
 def test_main_keep_metadata_flag_runs(tmp_path: Path):

@@ -139,8 +139,6 @@ export class BrowserBackend implements ConversionBackend {
 
     const coreOptions = {
       quality: options.quality,
-      resizeWidth: options.resizeWidth,
-      resizeHeight: options.resizeHeight,
     };
 
     const emit = (): void => {
@@ -242,8 +240,6 @@ export class BrowserBackend implements ConversionBackend {
   async convertSingle(file: File, options: ConversionOptions): Promise<FileResult> {
     return convertFile(file, {
       quality: options.quality,
-      resizeWidth: options.resizeWidth,
-      resizeHeight: options.resizeHeight,
     });
   }
 

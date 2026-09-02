@@ -168,22 +168,6 @@ pub fn print_settings(source: &Path, output: &Path, threads: usize, settings: &S
             "keep"
         },
     );
-    if settings.resize_width.is_some() || settings.resize_height.is_some() {
-        let size = format!(
-            "{}x{}",
-            settings
-                .resize_width
-                .map(|w| w.to_string())
-                .unwrap_or_else(|| "auto".to_string()),
-            settings
-                .resize_height
-                .map(|h| h.to_string())
-                .unwrap_or_else(|| "auto".to_string())
-        );
-        field("Resize:", format!("max {size}"));
-    } else {
-        field("Resize:", "original");
-    }
     println!();
 }
 

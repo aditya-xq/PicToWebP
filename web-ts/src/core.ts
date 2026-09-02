@@ -2,8 +2,6 @@
 
 export interface ConversionOptions {
   quality: number;
-  resizeWidth: number | null;
-  resizeHeight: number | null;
 }
 
 export interface FileResult {
@@ -107,27 +105,6 @@ export function replaceExtension(path: string, extension: string): string {
   return path.slice(0, dot) + extension;
 }
 
-/** Clamp-based resize that never upscales and preserves the aspect ratio. */
-export function computeResize(
-  width: number,
-  height: number,
-  maxWidth: number | null,
-  maxHeight: number | null,
-): { width: number; height: number } {
-  let newWidth = width;
-  let newHeight = height;
-
-  if (maxWidth !== null && maxWidth > 0 && newWidth > maxWidth) {
-    newHeight = Math.max(Math.floor((newHeight * maxWidth) / newWidth), 1);
-    newWidth = maxWidth;
-  }
-  if (maxHeight !== null && maxHeight > 0 && newHeight > maxHeight) {
-    newWidth = Math.max(Math.floor((newWidth * maxHeight) / newHeight), 1);
-    newHeight = maxHeight;
-  }
-  return { width: newWidth, height: newHeight };
-}
-
 /**
  * Canvas limits: browsers silently fail (or return blank/empty output) beyond
  * these, so oversized inputs are downscaled instead of producing corrupt files.
@@ -152,16 +129,6 @@ export function clampToCanvasLimits(width: number, height: number): { width: num
     newHeight = Math.max(Math.floor(newHeight * scale), 1);
   }
   return { width: newWidth, height: newHeight };
-}
-
-/** Apply user resize caps, then clamp to what the canvas can encode. */
-export function targetDimensions(
-  width: number,
-  height: number,
-  options: ConversionOptions,
-): { width: number; height: number } {
-  const fitted = computeResize(width, height, options.resizeWidth, options.resizeHeight);
-  return clampToCanvasLimits(fitted.width, fitted.height);
 }
 
 /** Normalise a 1-100 quality value to the 0-1 range the canvas API expects. */

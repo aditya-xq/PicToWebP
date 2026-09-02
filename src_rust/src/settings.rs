@@ -8,10 +8,6 @@ use clap::Parser;
 use crate::ui;
 
 pub const DEFAULT_QUALITY: u8 = 80;
-pub const MIN_RESIZE_WIDTH: u32 = 16;
-pub const MAX_RESIZE_WIDTH: u32 = 16384;
-pub const MIN_RESIZE_HEIGHT: u32 = 16;
-pub const MAX_RESIZE_HEIGHT: u32 = 16384;
 
 /// Fully resolved user settings for one run.
 #[derive(Debug, Clone)]
@@ -21,8 +17,6 @@ pub struct Settings {
     pub threads: NonZeroUsize,
     pub lossless: bool,
     pub strip_metadata: bool,
-    pub resize_width: Option<u32>,
-    pub resize_height: Option<u32>,
     pub no_progress: bool,
     pub report_path: Option<PathBuf>,
 }
@@ -49,14 +43,6 @@ pub struct Cli {
     /// Keep EXIF/metadata in the converted image (default: strip)
     #[arg(long)]
     pub keep_metadata: bool,
-
-    /// Maximum width in pixels, 16-16384
-    #[arg(long, value_parser = parse_resize_width)]
-    pub resize_width: Option<u32>,
-
-    /// Maximum height in pixels, 16-16384
-    #[arg(long, value_parser = parse_resize_height)]
-    pub resize_height: Option<u32>,
 
     /// Do not render the conversion progress bar
     #[arg(long)]
@@ -119,8 +105,6 @@ pub fn resolve(cli: Cli) -> anyhow::Result<Settings> {
         threads,
         lossless: cli.lossless,
         strip_metadata: !cli.keep_metadata,
-        resize_width: cli.resize_width,
-        resize_height: cli.resize_height,
         no_progress: cli.no_progress,
         report_path: cli.report,
     })
@@ -140,25 +124,6 @@ fn parse_quality(raw: &str) -> Result<u8, String> {
 fn parse_threads(raw: &str) -> Result<NonZeroUsize, String> {
     raw.parse::<NonZeroUsize>()
         .map_err(|_| "must be a positive number".to_string())
-}
-
-fn parse_resize_width(raw: &str) -> Result<u32, String> {
-    parse_resize(raw, MIN_RESIZE_WIDTH, MAX_RESIZE_WIDTH)
-}
-
-fn parse_resize_height(raw: &str) -> Result<u32, String> {
-    parse_resize(raw, MIN_RESIZE_HEIGHT, MAX_RESIZE_HEIGHT)
-}
-
-fn parse_resize(raw: &str, min: u32, max: u32) -> Result<u32, String> {
-    let value = raw
-        .parse::<u32>()
-        .map_err(|_| "must be a number".to_string())?;
-    if (min..=max).contains(&value) {
-        Ok(value)
-    } else {
-        Err(format!("must be between {min} and {max}"))
-    }
 }
 
 fn default_thread_count() -> usize {
@@ -232,10 +197,6 @@ mod tests {
         assert_eq!(parse_quality("80"), Ok(80));
         assert!(parse_quality("0").is_err());
         assert!(parse_threads("0").is_err());
-        assert_eq!(parse_resize_width("1024"), Ok(1024));
-        assert!(parse_resize_width("8").is_err());
-        assert_eq!(parse_resize_height("768"), Ok(768));
-        assert!(parse_resize_height("8").is_err());
     }
 
     #[test]

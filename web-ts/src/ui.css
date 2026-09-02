@@ -348,24 +348,6 @@ body {
 .toggle.disabled { opacity: 0.45; cursor: not-allowed; }
 .toggle.disabled.active { box-shadow: none; filter: saturate(0.4); }
 
-.field-label { font-size: 10px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; display: block; }
-.field {
-  background: var(--surface-deep-strong);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  color: var(--text-1);
-  font-family: inherit;
-  font-size: 14px;
-  padding: 9px 12px;
-  border-radius: var(--radius-s);
-  width: 100%;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  min-height: 42px;
-}
-.field::placeholder { color: var(--text-3); }
-.field:focus { border-color: rgba(129, 140, 248, 0.65); box-shadow: var(--focus-ring); outline: none; }
-
-.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-
 .note { font-size: 11px; color: var(--text-3); line-height: 1.5; }
 
 /* -------------------------------- Tabs ------------------------------ */
@@ -885,8 +867,6 @@ kbd {
   .source-badge { max-width: 100%; }
   .dropzone { min-height: 160px; }
   .dz-icon { font-size: 30px; }
-  /* 16px inputs keep iOS Safari from zooming on focus. */
-  .field { font-size: 16px; }
   .grow { min-height: 260px; }
   .preview-box { max-height: 220px; }
   .preview-box img { max-height: 220px; }

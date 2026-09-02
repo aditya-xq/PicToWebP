@@ -122,7 +122,7 @@ pictowebp   # then follow the prompts
 ```
 
 The Rust CLI exposes the same flags and behaviour as the Python one (`-q`, `-t`,
-`--lossless`, `--keep-metadata`, `--resize-width/height`, ...). Run
+`--lossless`, `--keep-metadata`, ...). Run
 `pictowebp --help` for the full list.
 
 That's an **85.79% reduction** across 2,598 images in 46 seconds. The eight
