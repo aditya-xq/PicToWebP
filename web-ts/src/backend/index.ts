@@ -6,7 +6,7 @@
  *   `VITE_BACKEND=python` → Python backend.
  *
  * Picking at build time keeps the static build's strict CSP
- * (`connect-src 'none'`) intact — no runtime probing of any network origin.
+ * (`connect-src 'none'`) intact , no runtime probing of any network origin.
  */
 import { BrowserBackend } from './browser';
 import { PythonBackend } from './python';

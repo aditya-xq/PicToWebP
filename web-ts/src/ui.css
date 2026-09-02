@@ -1,5 +1,5 @@
 /* ============================================================
-   PicToWebP shared UI design system — "Obsidian Glass"
+   PicToWebP shared UI design system , "Obsidian Glass"
    Single source of truth for both the Python web UI
    (served at /static/ui.css) and the browser edition
    (bundled by Vite from web-ts/src/main.ts).
@@ -10,21 +10,21 @@
 /* ------------------------------ Tokens ------------------------------ */
 /* "Warm darkroom" system: a warm charcoal canvas, near-white ink, one amber
    accent, and a serif display paired with a humanist sans. Flat surfaces with
-   hairline rules — deliberately no purple gradients, no glassmorphism, no glow
+   hairline rules , deliberately no purple gradients, no glassmorphism, no glow
    (the AI-default fingerprint). */
 :root {
-  --bg-0: #0c0a09;
-  --bg-1: #12100d;
+  --bg-0: #070605;
+  --bg-1: #0d0b09;
 
-  --glass-bg: rgba(27, 22, 17, 0.94);
-  --glass-bg-strong: rgba(18, 15, 12, 0.97);
-  --glass-border: rgba(216, 180, 134, 0.13);
-  --glass-border-soft: rgba(216, 180, 134, 0.08);
+  --glass-bg: rgba(22, 17, 13, 0.95);
+  --glass-bg-strong: rgba(15, 12, 9, 0.97);
+  --glass-border: rgba(216, 180, 134, 0.15);
+  --glass-border-soft: rgba(216, 180, 134, 0.09);
   --glass-highlight: inset 0 1px 0 rgba(255, 240, 214, 0.05);
 
-  --text-1: #f4ede3;
-  --text-2: #cbbcac;
-  --text-3: #8d7b66;
+  --text-1: #f7f0e6;
+  --text-2: #d2c4b4;
+  --text-3: #9c8871;
 
   --brand-300: #f3c77e;
   --brand-400: #eeb056;
@@ -84,7 +84,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* A whisper of film grain — a hand-crafted detail that keeps the darkroom
+/* A whisper of film grain , a hand-crafted detail that keeps the darkroom
    feel and is invisible on its own (data URI, fully offline). */
 body::before {
   content: '';
@@ -144,38 +144,14 @@ p { text-wrap: pretty; }
 }
 
 /* --------------------------- Shortcut button ------------------------ */
-/* The "?" help control floats in the top-right corner (the header is gone). */
-.shortcut-fab {
-  position: fixed;
-  top: calc(14px + env(safe-area-inset-top));
-  right: calc(16px + env(safe-area-inset-right));
-  z-index: 45;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--text-2);
-  background: var(--surface-tint);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-pop);
-  cursor: pointer;
-  transition: background 0.15s var(--ease-out-expo), color 0.15s var(--ease-out-expo),
-    border-color 0.15s var(--ease-out-expo), transform 0.15s var(--ease-out-expo);
-}
-.shortcut-fab:hover { background: var(--surface-tint-strong); color: var(--text-1); transform: translateY(-1px); }
-.shortcut-fab:active { transform: scale(0.94); }
+/* (removed , the keyboard-shortcuts help FAB is gone) */
 
 .badge {
-  font-size: 10px; font-weight: 600;
+  font-size: 11px; font-weight: 600;
   color: var(--brand-300);
   background: rgba(227, 154, 47, 0.12);
   border: 1px solid rgba(227, 154, 47, 0.3);
-  padding: 2px 8px; border-radius: 999px;
+  padding: 3px 10px; border-radius: 999px;
   white-space: nowrap;
 }
 
@@ -259,7 +235,7 @@ p { text-wrap: pretty; }
 .chip:active { transform: scale(0.95); }
 
 /* -------------------------------- Hero ------------------------------ */
-.main { width: 100%; max-width: 1120px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; }
+.main { width: 100%; max-width: 880px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; }
 
 .hero { text-align: center; margin-bottom: 12px; }
 .hero-title-row {
@@ -271,7 +247,7 @@ p { text-wrap: pretty; }
 }
 .hero-title {
   font-family: var(--font-display);
-  font-size: clamp(26px, 3.4vw, 34px);
+  font-size: clamp(30px, 4.2vw, 44px);
   font-weight: 700;
   letter-spacing: -0.015em;
   line-height: 1.05;
@@ -282,23 +258,6 @@ p { text-wrap: pretty; }
   font-style: italic;
   font-weight: 400;
   color: var(--brand-400);
-}
-.hero-sub { color: var(--text-3); font-size: 13px; margin-top: 5px; }
-.hero-note {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 11.5px;
-  color: var(--text-3);
-  padding: 0 12px;
-}
-.hero-note::before {
-  content: '';
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--brand-400);
-  flex-shrink: 0;
 }
 
 /* ------------------------------- Footer ------------------------------ */
@@ -324,14 +283,14 @@ p { text-wrap: pretty; }
 
 .privacy-strip { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 11px; font-weight: 500; color: var(--text-2);
-  background: var(--surface-tint);
-  border: 1px solid var(--glass-border-soft);
-  padding: 5px 12px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+  background: var(--surface-tint-strong);
+  border: 1px solid var(--glass-border);
+  padding: 7px 14px; border-radius: 999px;
   white-space: nowrap;
 }
-.pill svg { width: 12px; height: 12px; flex-shrink: 0; color: var(--brand-400); }
+.pill svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--brand-400); }
 
 /* ------------------------------- Layout ----------------------------- */
 .work {
@@ -342,7 +301,7 @@ p { text-wrap: pretty; }
 }
 /* The drop/work canvas comes first in reading order; the options bar is a
    second row beneath it (the markup keeps options first for mobile where the
-   source pick is the star — this order puts the canvas on top). */
+   source pick is the star , this order puts the canvas on top). */
 .work > .work-card { order: 1; }
 .work > .options-card { order: 2; }
 .work-card {
@@ -351,7 +310,7 @@ p { text-wrap: pretty; }
   flex-direction: column;
 }
 /* Options bar: quality on the left, toggles/notes in the middle, the primary
-   Convert action anchored right — one clean horizontal flow on desktop. */
+   Convert action anchored right , one clean horizontal flow on desktop. */
 .options-card {
   flex-shrink: 0;
   display: flex;
@@ -410,6 +369,11 @@ p { text-wrap: pretty; }
   box-shadow: 0 0 0 2px rgba(227, 154, 47, 0.25);
 }
 
+/* Quality controls dim while lossless is on: the slider/chips are ignored by
+   the encoder in that mode, so the UI must not pretend otherwise. */
+.quality-dim { opacity: 0.45; transition: opacity 0.2s ease; }
+.quality-dim .slider, .quality-dim .chips { pointer-events: none; }
+
 .slider-hints { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); margin-top: 6px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -425,6 +389,11 @@ p { text-wrap: pretty; }
   min-height: 30px;
 }
 .chip:hover { color: #fff; background: rgba(227, 154, 47, 0.18); border-color: rgba(227, 154, 47, 0.4); }
+.chip.active {
+  background: rgba(227, 154, 47, 0.16);
+  color: var(--brand-300);
+  border-color: rgba(227, 154, 47, 0.42);
+}
 
 /* ------------------------------ Options ----------------------------- */
 .option-title { font-size: 14px; font-weight: 600; color: var(--text-1); }
@@ -497,7 +466,7 @@ p { text-wrap: pretty; }
 /* ----------------------------- Drop zones --------------------------- */
 .dropzone {
   flex: 1;
-  min-height: 240px;
+  min-height: 210px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -566,7 +535,7 @@ p { text-wrap: pretty; }
 }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 .progress-percent { font-size: 14px; font-weight: 600; color: var(--brand-300); font-family: var(--font-mono); }
-.running-elapsed { font-size: 12px; color: var(--text-3); font-family: var(--font-mono); }
+.running-elapsed { font-size: 12px; color: var(--text-3); font-family: var(--font-mono); margin-bottom: 14px; }
 
 .progress-track {
   width: 100%; height: 10px;
@@ -824,6 +793,7 @@ p { text-wrap: pretty; }
 }
 .error-state .title { font-size: 18px; font-weight: 700; color: var(--text-1); margin-bottom: 5px; }
 .error-state .message { font-size: 14px; color: var(--text-2); margin-bottom: 18px; max-width: 420px; }
+.error-action { flex: none; padding: 11px 22px; }
 
 /* ------------------------------ Spinner ----------------------------- */
 .spinner {
@@ -842,44 +812,73 @@ p { text-wrap: pretty; }
   border-radius: var(--radius-m);
   overflow: hidden;
   border: 1px solid var(--glass-border-soft);
-  background: rgba(4, 6, 12, 0.5);
+  /* Warm checkerboard: reveals transparent WebP regions and matches the
+     palette (a cool blue-tinted dark would clash with the darkroom theme). */
+  background:
+    repeating-conic-gradient(var(--surface-deep-strong) 0% 25%, transparent 0% 50%)
+    0 0 / 16px 16px;
   margin-bottom: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  max-height: 260px;
+  max-height: 480px;
   flex: 1; min-height: 0;
   padding: 0;
 }
 .compare-stage {
   position: relative;
   width: 100%;
-  max-height: 224px;
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: auto;
   --compare-pos: 0.5;
 }
-.compare-stage img { max-width: 100%; max-height: 224px; object-fit: contain; }
-.compare-clip {
+/* The frame hugs the image's natural size: previews render 1:1 with the
+   source and the stage pans (never shrinks) when it exceeds the card. */
+.compare-frame {
+  position: relative;
+  margin: auto;
+  flex: none;
+}
+.compare-frame img { display: block; max-width: none; max-height: none; }
+.compare-overlay {
   position: absolute;
-  top: 0; left: 0; bottom: 0;
-  width: calc(var(--compare-pos) * 100%);
-  overflow: hidden;
-  border-right: 2px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.35);
+  inset: 0;
   z-index: 2;
+  pointer-events: none;
+  clip-path: inset(0 calc((1 - var(--compare-pos)) * 100%) 0 0);
 }
-.compare-clip img {
-  width: calc(100% / var(--compare-pos));
-  height: 100%;
-  max-height: 224px;
-  object-fit: contain;
-  max-width: none;
+.compare-divider {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: calc(var(--compare-pos) * 100%);
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--brand-400);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+  z-index: 2;
+  pointer-events: none;
 }
+.compare-handle {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--compare-pos) * 100%);
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-bg-strong);
+  border: 1.5px solid var(--brand-400);
+  color: var(--brand-400);
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+}
+.compare-handle svg { width: 14px; height: 14px; }
 .compare-slider {
   position: absolute;
   inset: 0;
@@ -946,7 +945,7 @@ p { text-wrap: pretty; }
   max-width: 400px;
   padding: 24px;
 }
-.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.modal-wide { max-width: 520px; }
 .modal-title {
   font-family: var(--font-display);
   font-size: 17px;
@@ -966,8 +965,6 @@ p { text-wrap: pretty; }
 }
 .modal-close:hover { background: rgba(216, 180, 134, 0.18); color: var(--text-1); }
 
-.shortcut-row { display: flex; align-items: center; justify-content: space-between; font-size: 14px; margin-bottom: 12px; }
-.shortcut-row span { color: var(--text-2); }
 kbd {
   background: var(--surface-deep-strong);
   border: 1px solid rgba(216, 180, 134, 0.22);
@@ -1115,19 +1112,19 @@ kbd {
 }
 
 /* ------------------------------ Animations -------------------------- */
-/* A fast opacity-only settle — no translateY drift (the AI fade-up tell). */
+/* A fast opacity-only settle , no translateY drift (the AI fade-up tell). */
 .fade-in { animation: fadeIn 0.35s var(--ease-out-expo) both; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------------------------- Responsive ---------------------------- */
-/* Desktop: a comfortable, capped canvas (never a full-viewport stretch), a
-   left-aligned editorial hero, and a soft cinematic vignette. */
+/* Desktop: a comfortable, capped canvas (never a full-viewport stretch) and a
+   soft cinematic vignette. The hero stays center-aligned at every width. */
 @media (min-width: 901px) {
-  .dropzone { min-height: 320px; max-height: 480px; }
-  .hero { text-align: left; margin-bottom: 14px; }
-  .hero-title-row { justify-content: flex-start; }
-  .hero-note { padding-left: 0; }
-  .privacy-strip { justify-content: flex-start; }
+  .dropzone { min-height: 280px; max-height: 420px; }
+  /* Center the page vertically on tall screens; auto margins degrade
+     gracefully to top-aligned when the content is taller than the viewport. */
+  .main { margin-top: auto; margin-bottom: auto; }
+  .hero { margin-bottom: 14px; }
   body::after {
     content: '';
     position: fixed;
@@ -1145,7 +1142,7 @@ kbd {
 @media (max-width: 900px) {
   body { overflow-y: auto; }
   .main { padding: 16px; }
-  .grow { min-height: 340px; }
+  .grow { min-height: 300px; }
   /* The options bar stacks beneath the full-width work canvas. */
   .options-card { flex-direction: column; align-items: stretch; gap: 14px; }
   .divider-v { display: none; }
@@ -1178,20 +1175,20 @@ kbd {
   body { background-attachment: scroll; }
   .main { padding: 14px 12px 24px; }
   .hero { margin-bottom: 10px; }
-  .hero-title { font-size: 26px; }
-  .hero-sub { font-size: 13px; }
-  .hero-note { font-size: 11px; margin-top: 8px; }
+  /* Pills wrap into centered rows instead of a horizontal scroll strip. */
   .privacy-strip {
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 2px;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    justify-content: center;
     margin-bottom: 12px;
   }
-  .privacy-strip::-webkit-scrollbar { display: none; }
-  .pill { flex-shrink: 0; font-size: 10px; padding: 4px 9px; }
+  .pill {
+    font-size: 10px;
+    gap: 5px;
+    padding: 4px 9px;
+  }
+  .pill svg { width: 11px; height: 11px; }
+  /* Keyboard tips are irrelevant on touch screens. */
+  .idle-hint { display: none; }
   .card { padding: 16px; border-radius: 16px; }
   .stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
   .stat-value { font-size: 18px; }
@@ -1203,11 +1200,10 @@ kbd {
   .modal { max-width: none; width: calc(100% - 24px); }
   .source-badge { max-width: 100%; align-items: flex-start; }
   .badge-info { white-space: normal; text-align: right; }
-  .dropzone { min-height: 160px; }
+  .dropzone { min-height: 140px; }
   .dz-icon svg { width: 32px; height: 32px; }
-  .grow { min-height: 260px; }
-  .preview-box { max-height: 220px; }
-  .compare-stage img, .compare-clip img { max-height: 184px; }
+  .grow { min-height: 230px; }
+  .preview-box { max-height: 360px; }
   .compare-slider::-webkit-slider-thumb { width: 28px; }
   .compare-slider::-moz-range-thumb { width: 28px; }
 }
@@ -1219,7 +1215,7 @@ kbd {
 }
 
 /* --------------------------- Light scheme ---------------------------- */
-/* Warm bone paper + ink — never sterile white or cool slate. */
+/* Warm bone paper + ink , never sterile white or cool slate. */
 @media (prefers-color-scheme: light) {
   :root {
     --bg-0: #efe7d8;

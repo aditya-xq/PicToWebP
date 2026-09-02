@@ -3,11 +3,50 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="Bulk image to WebP converter — runs on your machine, nothing leaves your device.">
-  <meta name="theme-color" content="#0c0a09" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Bulk image to WebP converter , runs on your machine, nothing leaves your device.">
+  <meta name="theme-color" content="#070605" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#efe7d8" media="(prefers-color-scheme: light)">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f0b65a'/%3E%3Cstop offset='1' stop-color='%23e0794d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-style='italic' font-size='20' font-weight='700' fill='%23241a09' text-anchor='middle'%3EP%3C/text%3E%3C/svg%3E">
+  <!-- Render-blocking stylesheet in <head> (not JS-injected) so the page can
+       never paint unstyled , the JS-imported CSS caused a FOUC flash. -->
+  <link rel="stylesheet" href="./src/ui.css">
   <title>PicToWebP - Bulk Image to WebP Converter</title>
+
+  <!-- SEO / social -->
+  <link rel="canonical" href="https://aditya-xq.github.io/PicToWebP/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="PicToWebP">
+  <meta property="og:title" content="PicToWebP - Bulk Image to WebP Converter">
+  <meta property="og:description" content="Convert folders of images to smaller WebP files , 100% in your browser or local machine. No uploads, no tracking, EXIF & GPS stripped.">
+  <meta property="og:url" content="https://aditya-xq.github.io/PicToWebP/">
+  <meta property="og:image" content="https://aditya-xq.github.io/PicToWebP/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="675">
+  <meta property="og:image:alt" content="PicToWebP conversion stats , files converted to WebP, space saved, nothing uploaded">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="PicToWebP - Bulk Image to WebP Converter">
+  <meta name="twitter:description" content="Convert folders of images to smaller WebP files , 100% local. No uploads, no tracking, EXIF & GPS stripped.">
+  <meta name="twitter:image" content="https://aditya-xq.github.io/PicToWebP/og-image.png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "PicToWebP",
+    "url": "https://aditya-xq.github.io/PicToWebP/",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Any",
+    "description": "Bulk image to WebP converter that runs entirely in the browser or on a local machine. No uploads, no tracking, EXIF & GPS metadata stripped.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "featureList": [
+      "Bulk folder conversion to WebP",
+      "Single image conversion with before/after comparison",
+      "Runs 100% locally , no uploads",
+      "EXIF & GPS metadata stripped",
+      "ZIP download of converted files"
+    ]
+  }
+  </script>
 </head>
 <body>
   <div id="toast-container" role="status" aria-live="polite"></div>
@@ -15,14 +54,12 @@
   <div id="drag-overlay" class="drag-overlay hidden">
     <div class="drag-overlay-box">
       <div class="dz-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>
       </div>
       <div class="drag-overlay-title">Drop to convert</div>
-      <div class="dz-sub" id="drag-overlay-sub">Images and folders — nothing leaves your device</div>
+      <div class="dz-sub" id="drag-overlay-sub">Images and folders , nothing leaves your device</div>
     </div>
   </div>
-
-  <button id="shortcuts-btn" class="shortcut-fab" title="Keyboard shortcuts" aria-label="Keyboard shortcuts">?</button>
 
   <div class="main">
     <div class="hero fade-in">
@@ -30,25 +67,23 @@
         <h1 class="hero-title">Pic<span class="hero-word">To</span><em class="hero-accent">WebP</em></h1>
         <span class="badge" id="edition-badge">Browser Edition</span>
       </div>
-      <p class="hero-sub" id="hero-sub">Drag in a folder. Get every image as a smaller WebP. Nothing ever leaves your device.</p>
-      <p class="hero-note">WebP is typically 25–80% smaller than PNG or JPEG at the same quality.</p>
     </div>
 
     <div class="privacy-strip fade-in">
-      <span class="pill" title="Conversion runs entirely on your own machine — no remote service involved">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      <span class="pill" title="Conversion runs entirely on your own machine , no remote service involved">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
         Runs 100% on your machine
       </span>
       <span class="pill" title="Images are never uploaded anywhere">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M8.5 16.5a5.5 5.5 0 01-.31-10.98 7 7 0 0113.24 2.09A4.5 4.5 0 0119.5 16.5H8.5z"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M8.5 16.5a5.5 5.5 0 01-.31-10.98 7 7 0 0113.24 2.09A4.5 4.5 0 0119.5 16.5H8.5z"/></svg>
         No uploads, ever
       </span>
-      <span class="pill" title="Zero analytics, cookies, or third-party requests — enforced by a strict Content-Security-Policy">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+      <span class="pill" title="Zero analytics, cookies, or third-party requests , enforced by a strict Content-Security-Policy">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
         No tracking, no analytics
       </span>
       <span class="pill" title="EXIF/GPS metadata is stripped from every converted file">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path stroke-linecap="round" d="M8 11V7a4 4 0 018 0M12 15v2"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path stroke-linecap="round" d="M8 11V7a4 4 0 018 0M12 15v2"/></svg>
         EXIF &amp; GPS stripped by default
       </span>
     </div>
@@ -56,29 +91,29 @@
     <div class="work">
       <!-- Options (horizontal bar: quality | toggles + notes | convert) -->
       <div class="card fade-in options-card">
-        <div class="options-quality">
+        <div class="options-quality" id="options-quality">
           <div class="quality-head">
             <span class="label">Quality</span>
             <span class="quality-value"><span id="quality-value">80</span><small> / 100</small></span>
           </div>
-          <input type="range" id="quality-slider" class="slider" min="1" max="100" value="80" aria-label="Quality">
+          <input type="range" id="quality-slider" class="slider" min="1" max="100" value="80" aria-label="Quality" aria-valuetext="80 out of 100">
           <div class="slider-hints"><span>Smallest file</span><span>Best quality</span></div>
           <div class="chips">
-            <button class="chip preset-btn" data-preset="60">Web (60)</button>
-            <button class="chip preset-btn" data-preset="80">Balanced (80)</button>
-            <button class="chip preset-btn" data-preset="95">High (95)</button>
-            <button class="chip preset-btn" data-preset="100">Max (100)</button>
+            <button class="chip preset-btn" data-preset="60" aria-pressed="false">Web (60)</button>
+            <button class="chip preset-btn active" data-preset="80" aria-pressed="true">Balanced (80)</button>
+            <button class="chip preset-btn" data-preset="95" aria-pressed="false">High (95)</button>
+            <button class="chip preset-btn" data-preset="100" aria-pressed="false">Max (100)</button>
           </div>
         </div>
 
-        <div class="divider-v" aria-hidden="true"></div>
+        <div class="divider-v" id="options-divider" aria-hidden="true"></div>
 
-        <div class="options-mid">
+        <div class="options-mid" id="options-mid">
           <div class="stack" id="server-options">
             <div class="row">
               <div>
                 <div class="option-title">Lossless</div>
-                <div class="option-desc">Keep every pixel — no quality loss, larger files</div>
+                <div class="option-desc">Keep every pixel , no quality loss, larger files</div>
               </div>
               <div id="toggle-lossless" class="toggle" role="switch" aria-checked="false" tabindex="0"></div>
             </div>
@@ -91,10 +126,6 @@
             </div>
           </div>
 
-          <p class="note" id="browser-note">
-            Browser conversion always strips EXIF/GPS metadata — quality 100 is
-            the closest to lossless the browser encoder offers.
-          </p>
           <p class="note hidden" id="python-note">
             Same engine as the CLI: full lossless support and optional metadata
             preservation.
@@ -109,8 +140,8 @@
       <!-- Modes + drop zone / progress (full-width canvas) -->
       <div class="card fade-in work-card">
         <div class="tabs">
-          <button class="tab active mode-tab" data-mode="folder" id="tab-folder">Folder</button>
-          <button class="tab mode-tab" data-mode="single" id="tab-single">Single Image</button>
+          <button class="tab active mode-tab" data-mode="folder" id="tab-folder" aria-pressed="true">Folder</button>
+          <button class="tab mode-tab" data-mode="single" id="tab-single" aria-pressed="false">Single Image</button>
         </div>
 
         <!-- Folder mode -->
@@ -118,14 +149,14 @@
           <div id="state-idle" class="grow">
             <div id="drop-zone" class="dropzone" role="button" tabindex="0" aria-label="Select a folder to convert">
               <div class="dz-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
               </div>
               <div class="dz-title">Pick a folder to convert</div>
               <div class="dz-sub" id="drop-zone-sub">or drop a folder or images anywhere on this page</div>
             </div>
             <div id="source-badge" class="source-badge hidden">
               <span id="source-path" class="path"></span>
-              <span id="source-info" class="badge-info"></span>
+              <span id="source-info" class="badge-info" aria-live="polite"></span>
             </div>
             <p id="idle-hint" class="idle-hint">Tip: press <kbd>B</kbd> to pick a folder, <kbd>Enter</kbd> to convert.</p>
           </div>
@@ -146,7 +177,7 @@
               <div class="counter"><div id="running-total" class="value">0</div><div class="counter-label">Total</div></div>
               <div class="counter"><div id="running-eta" class="value">--</div><div class="counter-label">ETA</div></div>
             </div>
-            <div id="running-elapsed" class="running-elapsed" style="margin-bottom: 14px;"></div>
+            <div id="running-elapsed" class="running-elapsed"></div>
             <button id="cancel-btn" class="btn btn-danger btn-block mt-auto">Cancel</button>
           </div>
 
@@ -154,7 +185,7 @@
             <div class="complete-head">
               <div class="complete-icon">✓</div>
               <div>
-                <div class="complete-title">WebP Conversion <em>Complete</em></div>
+                <div id="complete-title" class="complete-title" tabindex="-1">WebP Conversion <em>Complete</em></div>
                 <div id="complete-time" class="complete-time"></div>
               </div>
             </div>
@@ -214,9 +245,9 @@
 
           <div id="state-error" class="hidden error-state">
             <div class="error-icon">⚠</div>
-            <div class="title">Conversion Failed</div>
+            <div id="error-title" class="title" tabindex="-1">Conversion Failed</div>
             <div id="error-message" class="message"></div>
-            <button id="try-again-btn" class="btn btn-secondary" style="flex: none; padding: 11px 22px;">Try Again</button>
+            <button id="try-again-btn" class="btn btn-secondary error-action">Try Again</button>
           </div>
         </div>
 
@@ -225,15 +256,15 @@
           <div id="single-upload" class="grow">
             <div id="single-drop-zone" class="dropzone" role="button" tabindex="0" aria-label="Select an image to convert">
               <div class="dz-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>
               </div>
               <div class="dz-title">Drop an image to convert</div>
               <div class="dz-sub">or click to browse</div>
             </div>
-            <input type="file" id="single-file-input" accept="image/*" class="hidden">
+            <input type="file" id="single-file-input" accept=".png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff" class="hidden">
             <input type="file" id="folder-fallback-input" class="hidden" multiple>
             <p class="upload-hint">
-              PNG, JPEG, BMP, GIF, WebP — converts instantly. You can also paste an image (Ctrl+V / Cmd+V).
+              PNG, JPEG, BMP, GIF, WebP , converts instantly.
             </p>
           </div>
 
@@ -252,16 +283,23 @@
             </div>
             <div class="preview-box">
               <div class="compare-stage" id="compare-stage">
-                <img id="single-preview-img" class="compare-img" alt="WebP preview">
-                <div class="compare-clip" id="compare-clip">
-                  <img id="cmp-orig" class="compare-img" alt="Original preview">
+                <div class="compare-frame">
+                  <img id="single-preview-img" class="compare-img" alt="WebP preview">
+                  <div class="compare-overlay">
+                    <img id="cmp-orig" class="compare-img" alt="Original preview">
+                  </div>
+                  <div class="compare-divider" aria-hidden="true"></div>
+                  <div class="compare-handle" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6l-6 6 6 6M15 6l6 6-6 6"/></svg>
+                  </div>
+                  <input type="range" id="compare-slider" class="compare-slider" min="0" max="100" value="50" aria-label="Drag to compare original and WebP">
                 </div>
-                <input type="range" id="compare-slider" class="compare-slider" min="0" max="100" value="50" aria-label="Drag to compare original and WebP">
               </div>
               <div class="compare-labels"><span>Original</span><span>WebP</span></div>
             </div>
             <div class="action-row">
               <a id="single-download-btn" class="btn btn-primary" href="#" download>Download WebP</a>
+              <button id="share-btn-single" class="btn btn-accent">Share Stats</button>
               <button id="convert-another-btn" class="btn btn-secondary">Convert Another</button>
             </div>
           </div>
@@ -278,13 +316,13 @@
   <!-- Browse modal (python backend) -->
   <div id="browse-modal" class="modal-overlay hidden">
     <div class="absolute-inset"></div>
-    <div class="modal browse-modal-body" role="dialog" aria-modal="true" aria-label="Select Folder" tabindex="-1" style="top: 50%; left: 50%; transform: translate(-50%, -50%); width: calc(100% - 32px); max-width: 520px;">
+    <div class="modal modal-centered modal-wide browse-modal-body" role="dialog" aria-modal="true" aria-label="Select Folder" tabindex="-1">
       <div class="history-head">
         <h3 class="modal-title">Select Folder</h3>
         <button id="browse-close-btn" class="modal-close">✕</button>
       </div>
       <div class="browse-path">
-        <button id="browse-up-btn" class="btn btn-ghost" title="Go up">
+        <button id="browse-up-btn" class="btn btn-ghost" title="Go up" aria-label="Go up one level">
           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
         </button>
         <div id="browse-current" class="browse-current"></div>
@@ -298,19 +336,6 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- Shortcuts modal -->
-  <div id="shortcuts-overlay" class="modal-overlay hidden"></div>
-  <div id="shortcuts-modal" class="modal modal-centered hidden" role="dialog" aria-modal="true" aria-label="Keyboard Shortcuts" tabindex="-1">
-    <div class="modal-header">
-      <h2 class="modal-title">Keyboard Shortcuts</h2>
-      <button id="shortcuts-close-btn" class="modal-close">✕</button>
-    </div>
-    <div class="shortcut-row"><span>Start conversion</span><kbd>Enter</kbd></div>
-    <div class="shortcut-row"><span>Cancel / close</span><kbd>Esc</kbd></div>
-    <div class="shortcut-row"><span>Pick folder</span><kbd>B</kbd></div>
-    <div class="shortcut-row"><span>Paste an image</span><kbd>Ctrl</kbd> + <kbd>V</kbd></div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

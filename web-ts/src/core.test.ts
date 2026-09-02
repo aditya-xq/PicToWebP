@@ -3,6 +3,7 @@ import {
   MAX_CANVAS_AREA,
   MAX_CANVAS_SIDE,
   clampToCanvasLimits,
+  cliOutputFolderName,
   estimateEtaSeconds,
   estimateWebpBytes,
   findCollisions,
@@ -159,5 +160,25 @@ describe('estimateWebpBytes', () => {
     const est = estimateWebpBytes(100_000_000, 80);
     expect(est).toBeGreaterThan(0);
     expect(est).toBeLessThan(100_000_000);
+  });
+});
+
+describe('cliOutputFolderName', () => {
+  const date = new Date(2026, 8, 2, 14, 5, 9, 123);
+
+  it('follows the CLI <source>_webp_<timestamp> contract', () => {
+    expect(cliOutputFolderName('vacation', date)).toBe('vacation_webp_20260902_140509_123000');
+  });
+
+  it('sanitizes characters that are unsafe in folder or zip names', () => {
+    expect(cliOutputFolderName('Dropped files', date)).toBe('Dropped_files_webp_20260902_140509_123000');
+    expect(cliOutputFolderName('a/b\\c:d*e?f"g<h>i|j', date)).toBe(
+      'a_b_c_d_e_f_g_h_i_j_webp_20260902_140509_123000',
+    );
+  });
+
+  it('falls back to a default stem for empty or punctuated labels', () => {
+    expect(cliOutputFolderName('', date)).toBe('images_webp_20260902_140509_123000');
+    expect(cliOutputFolderName('///', date)).toBe('images_webp_20260902_140509_123000');
   });
 });

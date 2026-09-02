@@ -1,9 +1,9 @@
 /**
  * ConversionBackend contract: one UI, two conversion engines.
  *
- * - `browser` — everything happens in the tab (OffscreenCanvas workers, File
+ * - `browser` , everything happens in the tab (OffscreenCanvas workers, File
  *   System Access, JSZip). Used by the static GitHub Pages build.
- * - `python` — a thin client over the local FastAPI server (fetch + SSE +
+ * - `python` , a thin client over the local FastAPI server (fetch + SSE +
  *   uploads + server-side ZIP/browse). Used by the `build:python` profile
  *   served by `pictowebp-web`.
  *
@@ -52,7 +52,7 @@ export interface ConversionResult {
   ok: boolean;
   cancelled: boolean;
   stats: ConversionStats;
-  /** Encoded files (browser) — empty for the python backend. */
+  /** Encoded files (browser) , empty for the python backend. */
   blobs: FileResult[];
   failures: { name: string; reason: string }[];
 }
@@ -131,8 +131,11 @@ export interface ConversionBackend {
 
   cancel(): Promise<void>;
 
-  /** Download a ZIP of the conversion output. */
-  downloadZip(result: ConversionResult): Promise<void>;
+  /**
+   * Download a ZIP of the conversion output. `fileName` names the archive
+   * consistently with the CLI's `<source>_webp_<timestamp>` output folder.
+   */
+  downloadZip(result: ConversionResult, fileName?: string): Promise<void>;
 
   /** Python: open the server-side output folder in the OS explorer. */
   openOutputFolder(result: ConversionResult): Promise<void>;

@@ -3,7 +3,6 @@
  * (GitHub Pages). Wraps the OffscreenCanvas worker pool, the File System
  * Access API and JSZip behind the ConversionBackend contract.
  */
-import JSZip from 'jszip';
 import { FileResult, findCollisions, formatBytes } from '../core';
 import {
   convertFile,
@@ -173,7 +172,7 @@ export class BrowserBackend implements ConversionBackend {
       stats: {
         totalFiles: total,
         convertedFiles: successful.length,
-        // Only attempted files (plus collision skips) count as failed —
+        // Only attempted files (plus collision skips) count as failed ,
         // files left unprocessed by a cancellation are reported separately.
         failedFiles: failedResults.length + collided.size,
         originalBytes,
@@ -192,12 +191,15 @@ export class BrowserBackend implements ConversionBackend {
     this.cancelRequested = true;
   }
 
-  async downloadZip(result: ConversionResult): Promise<void> {
+  async downloadZip(result: ConversionResult, fileName?: string): Promise<void> {
     const blobs = result.blobs.filter((r) => r.blob);
     if (blobs.length === 0) throw new Error('Nothing to download');
+    // Lazy-load JSZip only when a download actually happens , it never needs
+    // to be in the initial bundle.
+    const { default: JSZip } = await import('jszip');
     const zip = new JSZip();
     for (const entry of blobs) zip.file(entry.name, entry.blob!);
-    // WebP is already compressed — STORE avoids wasting CPU and memory on a
+    // WebP is already compressed , STORE avoids wasting CPU and memory on a
     // pointless DEFLATE pass, and streaming keeps peak memory low for large
     // batches.
     const blob = await zip.generateAsync({
@@ -205,7 +207,7 @@ export class BrowserBackend implements ConversionBackend {
       compression: 'STORE',
       streamFiles: true,
     });
-    triggerDownload(blob, 'converted-images.zip');
+    triggerDownload(blob, fileName ?? 'converted-images.zip');
   }
 
   async openOutputFolder(): Promise<void> {

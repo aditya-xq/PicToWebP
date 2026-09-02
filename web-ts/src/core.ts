@@ -1,4 +1,4 @@
-/** Pure helpers for the conversion pipeline — no DOM access, unit-testable. */
+/** Pure helpers for the conversion pipeline , no DOM access, unit-testable. */
 
 export interface ConversionOptions {
   quality: number;
@@ -138,7 +138,7 @@ export function webpQuality(quality: number): number {
 
 /**
  * Rough heuristic for how much a batch will shrink, used only for the pre-run
- * "≈ X output" estimate in the source badge — never for anything authoritative.
+ * "≈ X output" estimate in the source badge , never for anything authoritative.
  * Higher quality keeps more data; the ratios are tuned to typical photo mixes.
  */
 export function estimateWebpBytes(originalBytes: number, quality: number): number {
@@ -158,6 +158,27 @@ export function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
   const total = Math.floor(seconds);
   return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
+}
+
+/**
+ * Build a `<source>_webp_YYYYMMDD_HHMMSS_mmmuuu` run name, matching the CLI's
+ * unique output-folder contract , the browser edition borrows it so downloads
+ * are named consistently across editions.
+ */
+export function cliOutputFolderName(source: string, date = new Date()): string {
+  const safe =
+    source
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '') || 'images';
+  const pad = (n: number, len = 2): string => String(n).padStart(len, '0');
+  const ymd = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+  const hms = `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+  // The CLI stamps microseconds; we only have millisecond resolution, so the
+  // last three digits stay zero exactly like a same-ms CLI run would.
+  const micro = pad(date.getMilliseconds() * 1000, 6);
+  return `${safe}_webp_${ymd}_${hms}_${micro}`;
 }
 
 export function estimateEtaSeconds(elapsed: number, fraction: number): number | null {

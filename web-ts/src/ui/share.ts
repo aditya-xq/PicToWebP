@@ -10,12 +10,23 @@ export interface ShareStats {
   quality: number;
   original: string;
   webp: string;
-  /** Which engine produced the stats — the card copy adapts. */
+  /** Which engine produced the stats , the card copy adapts. */
   edition?: 'browser' | 'python';
 }
 
+// 16:9 (1200×675) , the sweet spot that renders uncropped on X/Twitter and
+// near-uncropped in Open Graph cards, with room for legible type in feeds.
 const W = 1200;
-const H = 630;
+const H = 675;
+const MARGIN = 64;
+
+const INK = '#f7f0e6';
+const MUTED = '#a89579';
+const SAVED = '#a6bb6b';
+const SAVED_SOFT = '#cfe0a8';
+const BRAND = '#eeb056';
+const BRAND_SOFT = '#f3c77e';
+const CARD = 'rgba(216, 180, 134, 0.09)';
 
 function drawRoundRect(
   ctx: CanvasRenderingContext2D,
@@ -34,86 +45,110 @@ function drawRoundRect(
   ctx.closePath();
 }
 
-function renderCanvas(stats: ShareStats): HTMLCanvasElement {
+/**
+ * Render the stats card onto a canvas. Exported so tooling (e.g. the static
+ * og-image asset) reuses the exact design the app shows.
+ */
+export function renderShareCanvas(stats: ShareStats): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
+  ctx.textBaseline = 'alphabetic';
 
-  // Card background + border + accent top strip.
-  ctx.fillStyle = '#12100c';
-  drawRoundRect(ctx, 0, 0, W, H, 28);
+  // Deep warm canvas + amber frame + accent top strip.
+  ctx.fillStyle = '#0d0a08';
+  drawRoundRect(ctx, 0, 0, W, H, 32);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(240, 182, 90, 0.35)';
+  ctx.strokeStyle = 'rgba(240, 182, 90, 0.4)';
   ctx.lineWidth = 2;
-  drawRoundRect(ctx, 1, 1, W - 2, H - 2, 28);
+  drawRoundRect(ctx, 1, 1, W - 2, H - 2, 32);
   ctx.stroke();
   const strip = ctx.createLinearGradient(0, 0, W, 0);
   strip.addColorStop(0, '#f0b65a');
   strip.addColorStop(0.55, '#eaa94f');
   strip.addColorStop(1, '#e0794d');
   ctx.fillStyle = strip;
-  drawRoundRect(ctx, 28, 0, W - 56, 6, 3);
+  drawRoundRect(ctx, MARGIN, 0, W - MARGIN * 2, 8, 4);
   ctx.fill();
 
-  // Brand mark.
-  const mark = ctx.createLinearGradient(56, 56, 120, 120);
+  // Brand mark + title.
+  const mark = ctx.createLinearGradient(MARGIN, MARGIN, MARGIN + 76, MARGIN + 76);
   mark.addColorStop(0, '#f0b65a');
   mark.addColorStop(1, '#e0794d');
   ctx.fillStyle = mark;
-  drawRoundRect(ctx, 56, 52, 64, 64, 18);
+  drawRoundRect(ctx, MARGIN, MARGIN, 76, 76, 20);
   ctx.fill();
   ctx.fillStyle = '#241a09';
-  ctx.font = 'italic 700 38px Georgia, serif';
+  ctx.font = 'italic 700 46px Georgia, serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('P', 88, 88);
+  ctx.fillText('P', MARGIN + 38, MARGIN + 40);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
 
-  ctx.fillStyle = '#f4ede3';
-  ctx.font = '700 40px Georgia, serif';
-  ctx.fillText('PicToWebP', 140, 84);
-  ctx.fillStyle = '#8d7b66';
-  ctx.font = '600 20px system-ui, sans-serif';
+  ctx.fillStyle = INK;
+  ctx.font = '700 44px Georgia, serif';
+  ctx.fillText('PicToWebP', MARGIN + 100, MARGIN + 40);
+  ctx.fillStyle = MUTED;
+  ctx.font = '600 21px system-ui, sans-serif';
   ctx.fillText(
     stats.edition === 'python'
-      ? 'Converted locally on this machine — nothing uploaded'
-      : 'Converted 100% in the browser — nothing uploaded',
-    140,
-    118,
+      ? '100% on your machine. No uploads, no accounts.'
+      : '100% in your browser. No uploads, no accounts.',
+    MARGIN + 100,
+    MARGIN + 72,
   );
 
-  // Hero stat: space saved.
-  ctx.fillStyle = '#8d7b66';
-  ctx.font = '700 18px system-ui, sans-serif';
-  ctx.fillText('S P A C E   S A V E D', 56, 196);
-  ctx.fillStyle = '#a6bb6b';
-  ctx.font = '800 96px system-ui, sans-serif';
-  ctx.fillText(stats.saved, 56, 288);
-  ctx.fillStyle = '#cfe0a8';
-  ctx.font = '700 30px system-ui, sans-serif';
-  ctx.fillText(`${stats.percent} smaller`, 56, 332);
-
-  // Secondary stats, right-aligned column.
-  const secondary: { label: string; value: string }[] = [
-    { label: 'FILES CONVERTED', value: stats.files },
-    { label: 'TIME', value: `${stats.elapsed} @ Q${stats.quality}` },
-  ];
-  secondary.forEach((s, i) => {
-    const y = 190 + i * 78;
-    ctx.fillStyle = '#8d7b66';
-    ctx.font = '700 16px system-ui, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(s.label, W - 56, y);
-    ctx.fillStyle = '#f4ede3';
-    ctx.font = '800 38px system-ui, sans-serif';
-    ctx.fillText(s.value, W - 56, y + 44);
-  });
+  // Edition badge, top-right.
+  const badge =
+    stats.edition === 'python' ? 'LOCAL SERVER' : 'BROWSER EDITION';
+  ctx.font = '700 19px system-ui, sans-serif';
+  const badgeW = ctx.measureText(badge).width + 44;
+  drawRoundRect(ctx, W - MARGIN - badgeW, MARGIN + 8, badgeW, 44, 22);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(240, 182, 90, 0.5)';
+  ctx.lineWidth = 1.5;
+  drawRoundRect(ctx, W - MARGIN - badgeW, MARGIN + 8, badgeW, 44, 22);
+  ctx.stroke();
+  ctx.fillStyle = BRAND_SOFT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(badge, W - MARGIN - badgeW / 2, MARGIN + 31);
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 
-  // Proportional size comparison bars.
+  // Hero stat: the percent IS the marketing number , relative savings land
+  // harder than absolute bytes , with a soft glow for depth.
+  const glow = ctx.createRadialGradient(320, 290, 40, 320, 290, 360);
+  glow.addColorStop(0, 'rgba(166, 187, 107, 0.13)');
+  glow.addColorStop(1, 'rgba(166, 187, 107, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(MARGIN - 60, 150, 760, 300);
+
+  ctx.fillStyle = MUTED;
+  ctx.font = '700 21px system-ui, sans-serif';
+  ctx.fillText('S P A C E   S A V E D', MARGIN, 204);
+  ctx.fillStyle = SAVED;
+  ctx.font = '800 150px system-ui, sans-serif';
+  ctx.fillText(`${stats.percent}%`, MARGIN - 6, 336);
+  const percentWidth = ctx.measureText(`${stats.percent}%`).width;
+  ctx.fillStyle = INK;
+  ctx.font = '700 46px system-ui, sans-serif';
+  ctx.fillText('smaller', MARGIN - 6 + percentWidth + 26, 336);
+
+  // One-line value summary: saved bytes, image count, speed.
+  const count = Number.parseInt(stats.files, 10) || 0;
+  ctx.fillStyle = BRAND;
+  ctx.font = '700 28px system-ui, sans-serif';
+  ctx.fillText(
+    `${stats.saved} saved · ${count} image${count === 1 ? '' : 's'} · ${stats.elapsed}`,
+    MARGIN,
+    390,
+  );
+
+  // Proportional size comparison bars , the visual proof.
   const parseBytes = (text: string): number => {
     const value = Number.parseFloat(text);
     if (Number.isNaN(value)) return 0;
@@ -125,13 +160,12 @@ function renderCanvas(stats: ShareStats): HTMLCanvasElement {
   const originalBytes = parseBytes(stats.original);
   const webpBytes = parseBytes(stats.webp);
   const barMax = Math.max(originalBytes, webpBytes, 1);
-  const barX = 56;
-  const barMaxWidth = W - 112;
+  const barMaxWidth = W - MARGIN * 2;
   const rows: { label: string; fraction: number; fill: string | CanvasGradient }[] = [
     {
       label: `Original · ${stats.original}`,
       fraction: originalBytes / barMax,
-      fill: 'rgba(216, 180, 134, 0.38)',
+      fill: 'rgba(216, 180, 134, 0.4)',
     },
     {
       label: `WebP · ${stats.webp}`,
@@ -140,31 +174,33 @@ function renderCanvas(stats: ShareStats): HTMLCanvasElement {
     },
   ];
   rows.forEach((row, i) => {
-    const y = 396 + i * 76;
-    ctx.fillStyle = '#8d7b66';
-    ctx.font = '600 18px system-ui, sans-serif';
-    ctx.fillText(row.label, barX, y - 10);
+    const labelY = 462 + i * 84;
+    const barY = labelY + 14;
+    ctx.fillStyle = MUTED;
+    ctx.font = '700 22px system-ui, sans-serif';
+    ctx.fillText(row.label, MARGIN, labelY);
     ctx.fillStyle = 'rgba(216, 180, 134, 0.1)';
-    drawRoundRect(ctx, barX, y, barMaxWidth, 30, 10);
+    drawRoundRect(ctx, MARGIN, barY, barMaxWidth, 34, 12);
     ctx.fill();
     ctx.fillStyle = row.fill;
-    drawRoundRect(ctx, barX, y, Math.max(barMaxWidth * row.fraction, 30), 30, 10);
+    drawRoundRect(ctx, MARGIN, barY, Math.max(barMaxWidth * row.fraction, 36), 34, 12);
     ctx.fill();
   });
 
-  // Footer.
+  // CTA footer: what to do next, and where.
   ctx.strokeStyle = 'rgba(216, 180, 134, 0.16)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(56, H - 74);
-  ctx.lineTo(W - 56, H - 74);
+  ctx.moveTo(MARGIN, H - 57);
+  ctx.lineTo(W - MARGIN, H - 57);
   ctx.stroke();
-  ctx.fillStyle = '#8d7b66';
-  ctx.font = '600 18px system-ui, sans-serif';
-  ctx.fillText('Runs offline · No uploads · EXIF & GPS stripped', 56, H - 36);
+  ctx.fillStyle = BRAND;
+  ctx.font = '800 26px system-ui, sans-serif';
+  ctx.fillText('Convert yours, free & private →', MARGIN, H - 21);
   ctx.textAlign = 'right';
-  ctx.fillStyle = '#f3c77e';
-  ctx.fillText('aditya-xq.github.io/PicToWebP', W - 56, H - 36);
+  ctx.fillStyle = BRAND_SOFT;
+  ctx.font = '700 22px system-ui, sans-serif';
+  ctx.fillText('aditya-xq.github.io/PicToWebP', W - MARGIN, H - 21);
   ctx.textAlign = 'left';
 
   return canvas;
@@ -179,31 +215,57 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
+/** Phones (and iPads masquerading as Macs) , the only reliable Web Share targets. */
+function isMobileShareTarget(): boolean {
+  return (
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+  );
+}
+
+/** Copy an image blob to the clipboard so it can be pasted into any app. */
+async function copyImageToClipboard(blob: Blob): Promise<boolean> {
+  try {
+    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) return false;
+    // Safari requires a live promise for the clipboard item value.
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': Promise.resolve(blob) })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Share the stats card: Web Share API where available (mobile share sheets),
- * falling back to a PNG download. The image itself contains no user data —
- * only aggregate sizes/counts.
+ * Deliver the stats card:
+ * - mobile: Web Share API → OS share sheet (with a real image preview);
+ * - desktop: copy the PNG to the clipboard , the share-sheet preview for
+ *   files is unreliable there (often renders blank), while pasting the image
+ *   straight into a post/DM always works;
+ * - fallback everywhere: PNG download.
  */
-export async function shareStats(stats: ShareStats): Promise<void> {
-  const btn = document.getElementById('share-btn');
+export async function shareStats(stats: ShareStats, buttonId = 'share-btn'): Promise<void> {
+  const btn = document.getElementById(buttonId);
   if (btn instanceof HTMLButtonElement) btn.disabled = true;
   try {
-    const canvas = renderCanvas(stats);
+    const canvas = renderShareCanvas(stats);
     const blob = await canvasToBlob(canvas);
-    const file = new File([blob], 'pictowebp-stats.png', { type: 'image/png' });
-    if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({
-          files: [file],
-          title: 'PicToWebP',
-          text: `Saved ${stats.saved} (${stats.percent} smaller) converting to WebP — locally, nothing uploaded.`,
-        });
-        showToast('Stats shared', 'success');
-        return;
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        // Fall through to download.
+    const shareText = `Saved ${stats.saved} (${stats.percent}% smaller) converting to WebP. Locally, nothing uploaded.`;
+    if (isMobileShareTarget() && typeof navigator.canShare === 'function') {
+      const file = new File([blob], 'pictowebp-stats.png', { type: 'image/png' });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'PicToWebP', text: shareText });
+          showToast('Stats shared', 'success');
+          return;
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          // Fall through to clipboard/download.
+        }
       }
+    }
+    if (await copyImageToClipboard(blob)) {
+      showToast('Stats image copied. Paste it anywhere', 'success');
+      return;
     }
     triggerDownload(blob, 'pictowebp-stats.png');
     showToast('Stats image downloaded', 'success');

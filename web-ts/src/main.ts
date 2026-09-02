@@ -1,7 +1,8 @@
 // Single UI for PicToWebP. The conversion engine behind it is chosen at build
 // time by the Vite profile: static build → in-browser workers, python build →
 // the local FastAPI server. All UI code talks to the ConversionBackend contract.
-import './ui.css';
+// (Stylesheet lives in index.html <head> , a <link> there is render-blocking
+// and prevents the unstyled flash that JS-injected CSS caused.)
 import { createBackend } from './backend';
 import type {
   ConversionBackend,
@@ -11,6 +12,7 @@ import type {
   SourceSelection,
 } from './backend';
 import {
+  cliOutputFolderName,
   estimateWebpBytes,
   formatBytes,
   formatDuration,
@@ -44,6 +46,8 @@ let lastSummary: {
 let previewUrl: string | null = null;
 let origUrl: string | null = null;
 let dragDepth = 0;
+/** CLI-style `<source>_webp_<timestamp>` base name for the run's ZIP download. */
+let zipBaseName: string | null = null;
 
 /* ------------------------------ Helpers ------------------------------ */
 
@@ -57,21 +61,70 @@ function showState(next: AppState): void {
     btn.disabled = false;
     btn.textContent = 'Cancel';
   }
+  // Move focus to the outcome heading so keyboard and screen-reader users are
+  // brought to the result instead of being left on a now-hidden button.
+  if (next === 'complete') ($('complete-title') as HTMLElement).focus();
+  else if (next === 'error') ($('error-title') as HTMLElement).focus();
 }
 
 function setMode(next: Mode): void {
   mode = next;
   for (const tab of document.querySelectorAll('.mode-tab')) {
-    tab.classList.toggle('active', (tab as HTMLElement).dataset.mode === next);
+    const active = (tab as HTMLElement).dataset.mode === next;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-pressed', String(active));
   }
   $('mode-folder').classList.toggle('hidden', next !== 'folder');
   $('mode-single').classList.toggle('hidden', next !== 'single');
+  // Single-image mode converts the instant a file lands, so the batch CTA
+  // would be a permanently-disabled decoy there , hide it instead.
+  $('convert-btn').classList.toggle('hidden', next === 'single');
 }
 
 function updateSliderFill(): void {
   const slider = $('quality-slider') as HTMLInputElement;
   const pct = ((Number(slider.value) - 1) / 99) * 100;
   slider.style.background = `linear-gradient(90deg, var(--brand-500) 0%, var(--brand-500) ${pct}%, var(--track-tail) ${pct}%, var(--track-tail) 100%)`;
+}
+
+/** True while lossless mode is on (python only) , quality is then ignored. */
+function losslessOn(): boolean {
+  return (
+    cap.lossless &&
+    document.getElementById('toggle-lossless')?.classList.contains('active') === true
+  );
+}
+
+/** Sync the preset chips' visual + aria state to the slider value. */
+function syncPresetChips(): void {
+  const value = ($('quality-slider') as HTMLInputElement).value;
+  document.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach((btn) => {
+    const active = btn.dataset.preset === value;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  });
+}
+
+/**
+ * Dim and lock the quality controls while lossless is on: the encoder ignores
+ * quality in that mode, so the UI must not pretend otherwise.
+ */
+function syncQualityLock(): void {
+  if (!cap.lossless) return;
+  const locked = losslessOn();
+  $('options-quality').classList.toggle('quality-dim', locked);
+  ($('quality-slider') as HTMLInputElement).setAttribute('aria-disabled', String(locked));
+}
+
+/** Single source of truth for a quality change (slider drag or preset click). */
+function applyQuality(value: string): void {
+  const slider = $('quality-slider') as HTMLInputElement;
+  slider.value = value;
+  $('quality-value').textContent = value;
+  slider.setAttribute('aria-valuetext', `${value} out of 100`);
+  updateSliderFill();
+  syncPresetChips();
+  renderSourceInfo();
 }
 
 function updateConvertButton(): void {
@@ -153,7 +206,7 @@ async function copyText(text: string): Promise<void> {
 /**
  * Freeze every control that could mutate the conversion settings or start a
  * second job while one is running. Options are captured when a conversion
- * starts, so changing them mid-run would silently do nothing — hiding the
+ * starts, so changing them mid-run would silently do nothing , hiding the
  * affordance is kinder than ignoring the input.
  */
 function setBusy(busy: boolean): void {
@@ -297,7 +350,7 @@ function renderProgress(p: ProgressSnapshot): void {
     nameEl.textContent = short;
     nameEl.title = p.currentFile;
   } else {
-    // No in-flight file (start of run / between chunks) — drop any stale name.
+    // No in-flight file (start of run / between chunks) , drop any stale name.
     nameEl.textContent = '';
     nameEl.title = '';
   }
@@ -313,11 +366,13 @@ async function startConversion(): Promise<void> {
   // Drop any in-memory blobs from a previous run before starting a new one.
   releaseBlobs();
   result = null;
+  // Stamp the run once, the way the CLI names its output folder, so the ZIP
+  // download carries the same identity.
+  zipBaseName = cliOutputFolderName(selection.label);
   isConverting = true;
   setBusy(true);
   updateConvertButton();
   showState('running');
-  updateConvertButton();
   showToast('Converting to WebP...', 'info');
 
   const options = getOptions();
@@ -337,7 +392,7 @@ async function startConversion(): Promise<void> {
       showComplete(done);
       showToast(
         done.cancelled
-          ? `Cancelled — ${done.stats.convertedFiles} converted file${done.stats.convertedFiles === 1 ? '' : 's'} kept`
+          ? `Cancelled: ${done.stats.convertedFiles} converted file${done.stats.convertedFiles === 1 ? '' : 's'} kept`
           : done.stats.bytesSaved > 0
             ? `Saved ${formatBytes(done.stats.bytesSaved)} (${done.stats.reductionPercent.toFixed(1)}% smaller)`
             : 'WebP conversion complete!',
@@ -495,7 +550,11 @@ async function downloadZip(): Promise<void> {
   btn.textContent = 'Preparing ZIP…';
   showToast('Preparing ZIP...', 'info');
   try {
-    await backend.downloadZip(result);
+    // Prefer the real output folder's name (python edition); the browser
+    // edition falls back to the CLI-style run name stamped at start.
+    const folder = result.stats.outputFolder;
+    const base = folder ? (folder.split(/[\\/]/).pop() as string) : (zipBaseName ?? 'converted-images');
+    await backend.downloadZip(result, `${base}.zip`);
     showToast('ZIP downloaded', 'success');
     if (cap.kind === 'browser') releaseBlobs();
   } catch (err) {
@@ -544,6 +603,7 @@ function handleSingleFile(file: File): void {
   if (mode !== 'single') setMode('single');
   isConverting = true;
   setBusy(true);
+  const startedAt = Date.now();
   $('single-upload').classList.add('hidden');
   $('single-converting').classList.remove('hidden');
 
@@ -562,9 +622,24 @@ function handleSingleFile(file: File): void {
       const download = $('single-download-btn') as HTMLAnchorElement;
       download.href = previewUrl;
       download.download = r.name;
-      const savedPct = Math.max(0, (1 - r.convertedSize / r.originalSize) * 100).toFixed(0);
+      // Honest verdict: tiny or already-optimized images can convert larger.
+      const delta = 1 - r.convertedSize / r.originalSize;
+      const savedPct = Math.max(0, delta * 100).toFixed(0);
+      const verdict = delta > 0.0005 ? `(${savedPct}% smaller)` : '(no size savings)';
       $('single-result-info').textContent =
-        `${formatBytes(r.originalSize)} → ${formatBytes(r.convertedSize)} (${savedPct}% smaller)`;
+        `${formatBytes(r.originalSize)} → ${formatBytes(r.convertedSize)} ${verdict}`;
+      // Single conversions share the same stats card as batch runs.
+      const savedBytes = Math.max(0, r.originalSize - r.convertedSize);
+      lastStats = {
+        saved: formatBytes(savedBytes),
+        percent: Math.max(0, delta * 100).toFixed(1),
+        files: '1 / 1',
+        elapsed: formatDuration((Date.now() - startedAt) / 1000),
+        quality: options.quality,
+        original: formatBytes(r.originalSize),
+        webp: formatBytes(r.convertedSize),
+        edition: cap.kind,
+      };
       $('single-converting').classList.add('hidden');
       $('single-result').classList.remove('hidden');
     })
@@ -603,7 +678,7 @@ function openBrowse(): void {
   $('browse-selected').textContent = 'Navigate to a folder';
   ($('browse-select-btn') as HTMLButtonElement).disabled = true;
   setFocusTrap(modal, true);
-  // The overlay itself isn't focusable — land focus on the dialog body.
+  // The overlay itself isn't focusable , land focus on the dialog body.
   (modal.querySelector('.browse-modal-body') as HTMLElement | null)?.focus();
   void browseTo(selection?.folderPath ?? '');
 }
@@ -622,7 +697,7 @@ async function browseTo(path: string): Promise<void> {
     const list = $('browse-list');
     list.textContent = '';
 
-    // `drives` is only present on the initial "This PC" listing — normalize
+    // `drives` is only present on the initial "This PC" listing , normalize
     // so ordinary directory listings (no drives key) don't crash the modal.
     const drives = d.drives ?? [];
 
@@ -714,16 +789,6 @@ async function handleDrop(e: DragEvent): Promise<void> {
   }
 }
 
-/* ------------------------------ Shortcuts ------------------------------ */
-
-function showShortcuts(visible: boolean): void {
-  $('shortcuts-modal').classList.toggle('hidden', !visible);
-  $('shortcuts-overlay').classList.toggle('hidden', !visible);
-  const modal = $('shortcuts-modal');
-  setFocusTrap(modal, visible);
-  if (visible) modal.focus();
-}
-
 /* -------------------------------- Init -------------------------------- */
 
 function wireZoneKeyboard(zone: HTMLElement, activate: () => void): void {
@@ -740,39 +805,45 @@ function initUI(): void {
   const kind = cap.kind;
   ($('edition-badge') as HTMLElement).textContent = kind === 'python' ? 'Local Server' : 'Browser Edition';
   if (kind === 'python') {
-    $('hero-sub').textContent = 'Pick a folder on this machine. Convert to WebP locally.';
     $('drop-zone-sub').textContent = 'click to browse folders on this machine';
-    $('drag-overlay-sub').textContent = 'Drop an image to convert — one at a time on the server';
-    $('browser-note').classList.add('hidden');
+    $('drag-overlay-sub').textContent = 'Drop an image to convert, one at a time on the server';
     $('python-note').classList.remove('hidden');
-  } else {
-    $('python-note').classList.add('hidden');
   }
   if (!cap.metadataControl) {
+    // Browser edition: no toggles, no note , collapse the middle column so the
+    // options bar is just quality | convert.
     $('server-options').classList.add('hidden');
-    $('browser-note').classList.remove('hidden');
+    $('options-mid').classList.add('hidden');
+    $('options-divider').classList.add('hidden');
   }
 
   // Quality
   const slider = $('quality-slider') as HTMLInputElement;
   slider.addEventListener('input', () => {
-    $('quality-value').textContent = slider.value;
-    slider.setAttribute('aria-valuetext', `${slider.value} out of 100`);
-    updateSliderFill();
-    renderSourceInfo();
+    // Quality is meaningless while lossless is on , pin the thumb to the last
+    // effective value instead of letting it drift while dimmed.
+    if (losslessOn()) {
+      slider.value = $('quality-value').textContent ?? slider.value;
+      updateSliderFill();
+      return;
+    }
+    applyQuality(slider.value);
   });
-  updateSliderFill();
+  applyQuality(slider.value);
   document.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      slider.value = btn.dataset.preset!;
-      $('quality-value').textContent = slider.value;
-      updateSliderFill();
-      renderSourceInfo();
+      if (losslessOn()) return;
+      applyQuality(btn.dataset.preset!);
     });
   });
 
   // Toggles
-  if (cap.lossless) bindToggle($('toggle-lossless'), () => renderSourceInfo());
+  if (cap.lossless) {
+    bindToggle($('toggle-lossless'), () => {
+      syncQualityLock();
+      renderSourceInfo();
+    });
+  }
   if (cap.metadataControl) bindToggle($('toggle-metadata'));
 
   // Mode tabs
@@ -825,11 +896,11 @@ function initUI(): void {
   fallbackInput.webkitdirectory = true;
   fallbackInput.addEventListener('change', pickViaFallbackInput);
 
-  // iOS Safari cannot pick whole folders — never promise it in the copy.
+  // iOS Safari cannot pick whole folders , never promise it in the copy.
   if (!('webkitdirectory' in fallbackInput)) {
     const title = dropZone.querySelector('.dz-title');
     if (title) title.textContent = 'Select images';
-    $('drop-zone-sub').textContent = 'or drag images here — everything stays local';
+    $('drop-zone-sub').textContent = 'or drag images here, everything stays local';
   }
 
   // Single-image original-vs-WebP compare slider.
@@ -884,6 +955,9 @@ function initUI(): void {
   $('share-btn').addEventListener('click', () => {
     if (lastStats) void shareStats(lastStats);
   });
+  $('share-btn-single').addEventListener('click', () => {
+    if (lastStats) void shareStats(lastStats, 'share-btn-single');
+  });
   $('convert-another-btn').addEventListener('click', convertAnotherSingle);
   $('copy-path-btn').addEventListener('click', () =>
     void copyText($('stat-output-path').textContent ?? ''),
@@ -905,35 +979,28 @@ function initUI(): void {
     document.querySelector('#browse-modal .absolute-inset')?.addEventListener('click', closeBrowse);
   }
 
-  // Shortcuts modal
-  $('shortcuts-btn').addEventListener('click', () => showShortcuts(true));
-  $('shortcuts-close-btn').addEventListener('click', () => showShortcuts(false));
-  $('shortcuts-overlay').addEventListener('click', () => showShortcuts(false));
-
+  // Keyboard: Enter converts, B picks a folder , nothing else. Escape only
+  // closes the browse dialog (focus is trapped inside it).
   document.addEventListener('keydown', (e) => {
     const target = e.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-    const onActivatable = target instanceof Element && !!target.closest('button, a');
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      if (onActivatable) return;
-      e.preventDefault();
-      void startConversion();
-    } else if (e.key === 'Enter') {
-      // Let focused buttons/links handle their own Enter — the global
-      // shortcut would double-fire the action.
-      if (onActivatable) return;
-      e.preventDefault();
-      void startConversion();
-    } else if (e.key === 'Escape') {
+    if (e.key === 'Escape') {
       if (!$('browse-modal').classList.contains('hidden')) closeBrowse();
-      else if (!$('shortcuts-modal').classList.contains('hidden')) showShortcuts(false);
-      else if (isConverting && mode === 'folder') void cancelConversion();
-    } else if (e.key === 'b' || e.key === 'B') void selectFolder();
-    else if (e.key === '?') showShortcuts(true);
+      return;
+    }
+    // Don't fire through an open browse modal or steal focused buttons' keys.
+    if (!$('browse-modal').classList.contains('hidden')) return;
+    if (e.key === 'Enter') {
+      if (target instanceof Element && !!target.closest('button, a')) return;
+      e.preventDefault();
+      void startConversion();
+    } else if (e.key === 'b' || e.key === 'B') {
+      void selectFolder();
+    }
   });
 
   document.addEventListener('paste', (e) => {
-    // A paste must not yank the UI to single mode while a batch is running —
+    // A paste must not yank the UI to single mode while a batch is running ,
     // the running state lives in the folder pane and the tabs are busy-locked.
     if (isConverting) return;
     const item = Array.from(e.clipboardData?.items ?? []).find((i) =>

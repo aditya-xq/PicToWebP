@@ -217,18 +217,18 @@ export class PythonBackend implements ConversionBackend {
   }
 
   async cancel(): Promise<void> {
-    // A 400 means the conversion already finished — not a failure to cancel.
+    // A 400 means the conversion already finished , not a failure to cancel.
     const res = await fetch('/convert/cancel', { method: 'POST' });
     if (res.status !== 400 && !res.ok) throw new Error('Failed to cancel');
   }
 
-  async downloadZip(): Promise<void> {
+  async downloadZip(_result: ConversionResult, fileName?: string): Promise<void> {
     const res = await fetch('/api/download-zip');
     if (!res.ok) {
       const body = await readJson(res);
       throw new Error(body?.detail ?? 'Failed to create ZIP');
     }
-    triggerDownload(await res.blob(), 'converted-images.zip');
+    triggerDownload(await res.blob(), fileName ?? 'converted-images.zip');
   }
 
   async openOutputFolder(result: ConversionResult): Promise<void> {
