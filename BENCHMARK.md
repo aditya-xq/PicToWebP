@@ -6,7 +6,7 @@ PicToWebP comes in three flavors — a Python CLI 🐍, a Rust CLI 🦀, and a
 zero-install browser edition 🌐. They all shrink images into svelte WebP files,
 and they all get the same results. The only real question is **how fast**.
 
-So we locked them in a room with **500 real photos (64.85 MB)** and let them
+So we locked them in a room with **500 real photos (64.9 MiB)** and let them
 fight it out.
 
 ## The contenders 🤼
@@ -34,17 +34,17 @@ To keep it fair and honest:
 
 | Tool | Time | Throughput | Space saved |
 | --- | --- | --- | --- |
-| **Python** 🐍 | 24.30s | 20.6 img/s · 2.67 MiB/s | 60.8% smaller |
-| **Rust** 🦀 | 13.33s | 37.5 img/s · 4.87 MiB/s | 60.7% smaller |
+| **Python** 🐍 | 22.25s | 22.47 img/s · 2.91 MiB/s | 60.8% smaller |
+| **Rust** 🦀 | 12.56s | 39.80 img/s · 5.16 MiB/s | 60.7% smaller |
 
-So what did those **500 photos (64.85 MB)** turn into? **25.45 MB** of WebP.
+So what did those **500 photos (64.9 MiB)** turn into? **~25.4 MiB** of WebP.
 That's a ~60% diet, whether Python or Rust does the cooking.
 
 ## What the numbers say 🎙️
 
-**Rust is roughly 1.8× faster.** Same job, same settings, same output quality —
+**Rust is roughly 1.77× faster.** Same job, same settings, same output quality —
 Rust just chews through pixels with fewer calories. That's the whole pitch of
-the Rust edition: if you convert thousands of images every day, a 1.8× speedup
+the Rust edition: if you convert thousands of images every day, a 1.77× speedup
 stops being trivia and starts being *time*.
 
 **The outputs are twins.** 60.8% vs 60.7% reduction. Different engines, same
@@ -53,7 +53,7 @@ difference — and that's a great problem to have.
 
 **Your mileage may vary.** These runs happened on a Windows machine; faster
 CPUs help both equally, and thread count scales both (try `-t` with your core
-count). The ratio — Rust winning by ~1.8× — holds across machines because it's
+count). The ratio — Rust winning by ~1.77× — holds across machines because it's
 about how the engines work, not which one got the better laptop.
 
 ## The browser cameo 🌐
@@ -79,7 +79,7 @@ saves the full history to `tests/e2e/perf-results.json`.
 
 - **Same results, every edition** — ~60% smaller files, pixel-faithful, no
   visible loss. The WebP diet works.
-- **Rust if you're converting a mountain** — 1.8× the throughput for the same
+- **Rust if you're converting a mountain** — 1.77× the throughput for the same
   output.
 - **Python if you want to read and tweak** — the whole engine is a few hundred
   readable lines.
