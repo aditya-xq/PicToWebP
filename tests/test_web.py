@@ -43,16 +43,21 @@ def test_index_serves_built_spa(client: TestClient):
     assert "PicToWebP" in response.text
     assert "Content-Security-Policy" in response.text
     # No external *assets* — the UI must work fully offline. Scan every
-    # src/href for a scheme-qualified URL: anything external must be the
-    # single outbound author hyperlink (user-initiated navigation, never
-    # fetched by the page). The real no-network guarantee is enforced at
-    # runtime by the strict CSP and the e2e smoke suite.
+    # src/href for a scheme-qualified URL: self-referencing metadata (the
+    # site's own canonical/OG origin) and the single outbound author
+    # hyperlink (user-initiated navigation, never fetched by the page) are
+    # fine; anything else is an external asset. The real no-network
+    # guarantee is enforced at runtime by the strict CSP and the e2e smoke
+    # suite.
+    site_origin = "https://aditya-xq.github.io/PicToWebP/"
+    allowed = {"https://x.com/xq_is_here"}
     external = sorted(
         url
         for url in re.findall(r'\b(?:src|href)=["\']([^"\']+)["\']', response.text)
         if url.startswith(("http://", "https://"))
+        and not url.startswith(site_origin)
     )
-    assert external == ["https://x.com/xq_is_here"], external
+    assert set(external) <= allowed, external
 
 
 def test_index_returns_setup_help_without_build(client: TestClient):
