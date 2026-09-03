@@ -832,22 +832,31 @@ p { text-wrap: pretty; }
   flex: 1;
   min-height: 0;
   display: flex;
-  overflow: auto;
+  overflow: hidden;
   --compare-pos: 0.5;
 }
-/* The frame hugs the image's natural size: previews render 1:1 with the
-   source and the stage pans (never shrinks) when it exceeds the card. */
+/* The frame fills the stage; images render at their native size when they
+   fit and scale down (never up) to fit otherwise, so every image is fully
+   visible with no scrollbars, centered on the checkerboard. */
 .compare-frame {
   position: relative;
-  margin: auto;
-  flex: none;
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.compare-frame img { display: block; max-width: none; max-height: none; }
+.compare-frame img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
 .compare-overlay {
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   clip-path: inset(0 calc((1 - var(--compare-pos)) * 100%) 0 0);
 }
 .compare-divider {
