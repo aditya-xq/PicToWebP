@@ -143,6 +143,9 @@ fn walk_files(dir: &Path) -> Vec<PathBuf> {
 #[test]
 fn realistic_dataset_converts_and_reports_performance() {
     const EXPECTED: usize = 500;
+    // The dataset may hold many thousands of files; the live test caps the
+    // copy to a deterministic subset so runtime stays flat as the set grows.
+    const MAX_FILES: usize = 200;
     if real_image_count() < EXPECTED {
         // On-demand, rate-limited download through the shared Python script.
         let status = Command::new("uv")
@@ -170,8 +173,17 @@ fn realistic_dataset_converts_and_reports_performance() {
         RUN.fetch_add(1, Ordering::SeqCst)
     ));
     let source = root.join("source");
-    copy_dir(&real_images_dir(), &source);
-    let n = real_image_count();
+    let real_dir = real_images_dir();
+    let mut files = walk_files(&real_dir);
+    files.sort();
+    files.truncate(MAX_FILES);
+    for file in &files {
+        let relative = file.strip_prefix(&real_dir).unwrap();
+        let target = source.join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::copy(file, &target).unwrap();
+    }
+    let n = files.len();
 
     let started = Instant::now();
     let status = run_cli(&source);
@@ -202,6 +214,82 @@ fn realistic_dataset_converts_and_reports_performance() {
     );
 
     fs::remove_dir_all(&root).ok();
+}
+
+/// Generate the shared photo fixture (gradient JPG with Make + GPS EXIF) via
+/// the deterministic Python helper, mirroring the Python suite's input.
+fn make_photo_fixture(target: &Path) -> bool {
+    Command::new("uv")
+        .args([
+            "run",
+            "python",
+            "tests/e2e/make_photo_fixture.py",
+            &target.to_string_lossy(),
+        ])
+        .current_dir(repo_root())
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+}
+
+#[test]
+fn photo_fidelity_preserves_dimensions_and_never_grows() {
+    let root = env::temp_dir().join(format!(
+        "pw-e2e-rust-fidelity-{}-{}",
+        std::process::id(),
+        RUN.fetch_add(1, Ordering::SeqCst)
+    ));
+    let source = root.join("source");
+    fs::create_dir_all(&source).unwrap();
+
+    let mut originals: Vec<(PathBuf, u64, (u32, u32))> = Vec::new();
+    for index in 0..5 {
+        let path = source.join(format!("photo_{index}.jpg"));
+        if !make_photo_fixture(&path) {
+            eprintln!("skipping: could not generate the photo fixture (uv/python unavailable)");
+            fs::remove_dir_all(&root).ok();
+            return;
+        }
+        let dims = image::ImageReader::open(&path)
+            .unwrap()
+            .with_guessed_format()
+            .unwrap()
+            .into_dimensions()
+            .unwrap();
+        originals.push((path.clone(), fs::metadata(&path).unwrap().len(), dims));
+    }
+
+    assert_eq!(run_cli(&source).code(), Some(0));
+    let output = output_folder(&source);
+
+    for (path, original_len, original_dims) in &originals {
+        let webp = output
+            .join(path.file_name().unwrap())
+            .with_extension("webp");
+        assert!(webp.exists(), "{} must convert", path.display());
+        let webp_len = fs::metadata(&webp).unwrap().len();
+        assert!(
+            webp_len <= *original_len,
+            "{} must not grow ({} -> {} bytes)",
+            path.display(),
+            original_len,
+            webp_len
+        );
+        let webp_dims = image::ImageReader::open(&webp)
+            .unwrap()
+            .with_guessed_format()
+            .unwrap()
+            .into_dimensions()
+            .unwrap();
+        assert_eq!(
+            webp_dims,
+            *original_dims,
+            "{} must keep its dimensions",
+            path.display()
+        );
+    }
+
+    cleanup(&source);
 }
 
 #[test]

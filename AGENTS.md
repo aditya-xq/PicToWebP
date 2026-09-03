@@ -39,15 +39,17 @@ cd web-ts && npm run test:e2e                   # static Playwright smoke (chrom
 cd web-ts && npm run test:e2e:python            # python-backend Playwright smoke
 ```
 
-All suites are expected green before committing (currently 94 pytest, 42 cargo
-test, 21 vitest, 10 Playwright e2e).
+All suites are expected green before committing (currently 96 pytest, 43 cargo
+test, 24 vitest, 10 Playwright e2e).
 
 Every tool is covered by a **live e2e regression suite** that runs the real
 artifact against a copy of the shared fixture corpus (`tests/e2e/fixtures`,
 regenerated via `uv run python tests/e2e/gen_fixtures.py`):
 - `tests/e2e/test_cli_e2e.py` spawns `python -m pictowebp` as a subprocess
   (exit codes, output-folder contract, collision/hidden/corrupt handling,
-  EXIF keep/strip, lossless, interactive prompts, empty/no-op folders);
+  EXIF keep/strip incl. the GPS IFD, lossless, interactive prompts,
+  empty/no-op folders, photo fidelity: dimensions preserved and output never
+  grows);
 - `src_rust/tests/cli_e2e.rs` spawns the compiled binary via
   `CARGO_BIN_EXE_pictowebp` and mirrors the same behaviors; both clean up
   their temp folders afterwards;
@@ -58,15 +60,18 @@ regenerated via `uv run python tests/e2e/gen_fixtures.py`):
 The corpus mixes happy paths (every format, nested dirs) with sad paths
 (corrupt file), a hidden dir and a same-stem collision pair.
 
-For realistic large-scale runs there is also an optional **500-photo dataset**
-(`tests/e2e/real_images/`, gitignored) downloaded on demand , rate-limited,
-idempotent and never deleted , by `tests/e2e/download_real_dataset.py`. The
-gated realistic tests exercise it automatically and capture **performance
-metrics** into `tests/e2e/perf-results.json` (gitignored); a dedicated
-Python-vs-Rust benchmark lives at `tests/e2e/run_realistic_bench.py`. Suites
-run the CLIs with `--no-log` inside disposable temp dirs, so a green run leaves
-no `pictowebp.log`, temp corpora, or output folders behind , only the
-gitignored perf JSON.
+For realistic large-scale runs there is also an optional **photo dataset**
+(`tests/e2e/real_images/`, gitignored, up to 10,000 files) downloaded on
+demand , rate-limited, idempotent and never deleted , by
+`tests/e2e/download_real_dataset.py`. The gated realistic tests convert a
+capped 200-file subset automatically and capture **performance metrics** into
+`tests/e2e/perf-results.json` (gitignored); a dedicated Python-vs-Rust
+benchmark lives at `tests/e2e/run_realistic_bench.py` with `--corpus
+photos|phone|camera`, `--threads`, `--max-files` and `--ladder` options
+reproducing every published benchmark dimension. Suites run the CLIs with
+`--no-log` inside disposable temp dirs, so a green run leaves no
+`pictowebp.log`, temp corpora, or output folders behind , only the gitignored
+perf JSON.
 
 ## Non-negotiable privacy guarantees
 

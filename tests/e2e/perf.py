@@ -94,6 +94,22 @@ def write_bench(aggregates: dict) -> None:
     REPORT.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
+def write_bench_merge(aggregates: dict) -> None:
+    """Merge benchmark aggregates under ``bench`` without clobbering other keys."""
+    report = _load()
+    report.setdefault("bench", {}).update(aggregates)
+    REPORT.parent.mkdir(parents=True, exist_ok=True)
+    REPORT.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+
+def write_ladder(corpus: str, ladder: dict) -> None:
+    """Store a quality-ladder result under ``ladder/<corpus>`` (see run_realistic_bench.py)."""
+    report = _load()
+    report.setdefault("ladder", {})[corpus] = ladder
+    REPORT.parent.mkdir(parents=True, exist_ok=True)
+    REPORT.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+
 def format_line(tool: str, metrics: dict) -> str:
     """One readable table row for console output."""
     return (

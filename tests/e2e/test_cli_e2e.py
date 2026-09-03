@@ -45,7 +45,11 @@ perf = _load_perf()
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 REAL_IMAGES = Path(__file__).resolve().parent / "real_images"
 DOWNLOAD_SCRIPT = Path(__file__).resolve().parent / "download_real_dataset.py"
+BENCH_SCRIPT = Path(__file__).resolve().parent / "run_realistic_bench.py"
 REAL_COUNT = 500
+# The dataset may hold many thousands of files; the live realistic test caps
+# the copy to a deterministic subset so runtime stays flat as the set grows.
+MAX_REALISTIC_FILES = 200
 
 ARGS = ["-q", "80", "-t", "2", "--no-progress", "--no-log"]
 
@@ -275,18 +279,29 @@ def ensure_real_images(count: int = REAL_COUNT) -> bool:
 
 
 def test_realistic_dataset_converts_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-    """A full realistic photo set converts end to end with matching output
-    counts, and the run's performance metrics are captured for benchmarking."""
+    """A capped, deterministic subset of the realistic photo set converts end to
+    end with matching output counts, and the run's performance metrics are
+    captured for benchmarking."""
     if not ensure_real_images():
         pytest.skip(
             "realistic dataset unavailable (set PICTOWEBP_SKIP_REAL_DOWNLOAD=1 "
             "to force-skip without downloading)"
         )
-    n = count_real_images()
+    all_files = sorted(
+        p
+        for p in REAL_IMAGES.rglob("*")
+        if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+    )
+    subset = all_files[:MAX_REALISTIC_FILES]
+    n = len(subset)
+    assert n > 0, "dataset folder exists but holds no convertible images"
 
     # Work on a copy so the original dataset is never touched or cleaned up.
     source = tmp_path / "real"
-    shutil.copytree(REAL_IMAGES, source)
+    for path in subset:
+        target = source / path.relative_to(REAL_IMAGES)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, target)
 
     started = perf_counter()
     proc = run_cli(source, cwd=tmp_path)
@@ -300,3 +315,74 @@ def test_realistic_dataset_converts_end_to_end(tmp_path: Path, capsys: pytest.Ca
     metrics = perf.measure(source, output, elapsed, proc.stdout)
     perf.record("python-cli", metrics)
     print(perf.format_line("python-cli", metrics))
+
+
+def test_photo_fidelity_dimensions_exif_and_never_grows(tmp_path: Path):
+    """End-to-end fidelity contract on photo-like input, verified through the
+    real CLI: dimensions are preserved (no resize), photo JPGs never grow, and
+    EXIF including the GPS IFD is stripped by default."""
+    fixture_script = Path(__file__).resolve().parent / "make_photo_fixture.py"
+    source = tmp_path / "source"
+    source.mkdir(parents=True)
+    for index in range(5):
+        proc = subprocess.run(
+            [sys.executable, str(fixture_script), str(source / f"photo_{index}.jpg")],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    originals = {path.name: path.stat().st_size for path in source.glob("*.jpg")}
+    original_sizes = {}
+    for name in originals:
+        with Image.open(source / name) as img:
+            original_sizes[name] = img.size
+
+    proc = run_cli(source, cwd=tmp_path)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    output = output_folder(source)
+
+    for name in original_sizes:
+        webp = output / name.replace(".jpg", ".webp")
+        assert webp.exists(), f"{name} must convert"
+        assert webp.stat().st_size <= originals[name], f"{name} must not grow"
+        with Image.open(webp) as img:
+            assert img.format == "WEBP"
+            assert img.size == original_sizes[name], f"{name} must keep its dimensions"
+
+    # Default strip removes EXIF entirely, GPS IFD included.
+    with Image.open(output / "photo_0.webp") as img:
+        assert not img.getexif(), "EXIF must be stripped by default"
+
+    # `--keep-metadata` preserves Make and the GPS IFD.
+    proc = run_cli(source, "--keep-metadata", cwd=tmp_path)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    with Image.open(latest_output_folder(source) / "photo_0.webp") as img:
+        exif = img.getexif()
+        assert exif.get(0x010F) == "PicToWebP Fixture"
+        assert exif.get_ifd(0x8825).get(1) == "N", "GPS IFD must survive keep-mode"
+
+
+def test_bench_script_smoke_run(tmp_path: Path):
+    """The reproducible benchmark script runs end to end on a capped copy and
+    records its aggregates without clobbering other bench keys."""
+    if count_real_images() < 50:
+        pytest.skip("realistic dataset unavailable")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(BENCH_SCRIPT),
+            "--runs",
+            "1",
+            "--max-files",
+            "20",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=900,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "python-cli-t2-20f" in proc.stdout
+    assert "rust-cli-t2-20f" in proc.stdout

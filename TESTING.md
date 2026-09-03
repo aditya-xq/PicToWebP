@@ -26,9 +26,8 @@ npm test
 npm run test:e2e            # static / browser-backend build
 npm run test:e2e:python     # python-backend build served by FastAPI
 ```
-
-All suites are expected green before committing , currently **97 pytest,
-44 cargo, 23 vitest, 10 Playwright e2e**.
+All suites are expected green before committing , currently
+**96 pytest, 43 cargo, 24 vitest, 10 Playwright e2e**.
 
 ## The shared fixture corpus 🗂️
 
@@ -56,12 +55,13 @@ output behind.
 
 ## Realistic dataset + performance 🏎️
 
-The tiny corpus proves correctness; a **500-photo set of real photographs**
-(`tests/e2e/real_images/`, gitignored) proves it at scale and doubles as a
-performance benchmark.
+The tiny corpus proves correctness; a **photo set of real photographs**
+(`tests/e2e/real_images/`, gitignored, grown to 10,000 files) proves it at
+scale and doubles as a performance benchmark.
 
 ```bash
-uv run python tests/e2e/download_real_dataset.py   # 500 photos (~60-150 MB)
+uv run python tests/e2e/download_real_dataset.py             # default 500
+uv run python tests/e2e/download_real_dataset.py --count 10000  # full set
 ```
 
 - Fetched from Lorem Picsum (real Unsplash-sourced photos), with a fraction
@@ -78,10 +78,12 @@ uv run python tests/e2e/download_real_dataset.py   # 500 photos (~60-150 MB)
   folders behind (see the golden rules below). See
   [BENCHMARK.md](BENCHMARK.md) for the readable version of the numbers.
 
-The realistic tests (present in **all four** suites) run a full set through
-each CLI and a 40-photo subset through both web editions, asserting every
-photo converts with no failures , and while doing so they capture
-**performance metrics** relevant to a bulk image→WebP converter:
+The realistic tests (present in **all four** suites) run a **capped, deterministic
+subset** (first 200 files) of the photo set through each CLI and a 40-photo
+subset through both web editions, asserting every photo converts with no
+failures , and while doing so they capture **performance metrics** relevant to
+a bulk image→WebP converter. The cap keeps runtime flat as the dataset grows;
+use the bench script for full-scale runs. Captured metrics:
 
 | Metric | Meaning |
 | --- | --- |
@@ -100,7 +102,7 @@ uv run python tests/e2e/run_realistic_bench.py --runs 3
 ```
 
 This builds the Rust CLI in release mode if needed, runs each CLI `--runs`
-times on temp copies (cleaned up), prints a summary table and writes the
+times on temp copies (cleaned up), prints a summary table and merges the
 `bench` section of `perf-results.json`. Example output:
 
 ```
@@ -108,9 +110,23 @@ times on temp copies (cleaned up), prints a summary table and writes the
   rust-cli    500 img | 14.44s | 34.62 img/s | 4.49 MiB/s | 60.7% smaller
 ```
 
+Every published benchmark dimension is reproducible through the same script:
+
+```bash
+--corpus photos|phone|camera   # which dataset (phone/camera are gitignored
+                               # personal folders; skipped when missing)
+--threads 8                    # worker threads (16 gives the SMT numbers)
+--max-files 200                # cap the copy for quick runs (keyed in results)
+--ladder 50                    # quality ladder q60/75/80/90 + lossless
+```
+
+Results merge into `perf-results.json` keyed by tool, thread count and cap
+(e.g. `python-cli-t8`), so reruns after a change never clobber earlier
+numbers.
+
 ## Suite deep-dives
 
-### Python , `pytest` (94 = 93 passed, 1 gated skip)
+### Python , `pytest` (96 = 95 passed, 1 gated skip)
 
 | File | Kind | What it covers |
 | --- | --- | --- |
@@ -118,9 +134,9 @@ times on temp copies (cleaned up), prints a summary table and writes the
 | `tests/test_converter.py` | unit | the conversion engine: collisions, EXIF embedding, atomic writes, cancellation, error report |
 | `tests/test_discovery.py` `test_paths.py` `test_progress.py` `test_style.py` `test_utils.py` | unit | image discovery, output-folder allocation, thread-safe progress, ANSI styling, disk/format helpers |
 | `tests/test_web.py` | integration | FastAPI endpoints (convert/cancel/progress-SSE/validate/browse/single-upload/zip), SPA serving. One test is gated on `web-ts/dist-python` being built |
-| `tests/e2e/test_cli_e2e.py` | **live subprocess e2e** | spawns the real `python -m pictowebp`: exit codes, `<source>_webp_<timestamp>` contract, collision/hidden/corrupt handling, crash-safe output, EXIF keep/strip, lossless, interactive prompts via stdin, empty/no-op folders, and the gated **realistic-dataset** run with perf capture |
+| `tests/e2e/test_cli_e2e.py` | **live subprocess e2e** | spawns the real `python -m pictowebp`: exit codes, `<source>_webp_<timestamp>` contract, collision/hidden/corrupt handling, crash-safe output, EXIF keep/strip, lossless, interactive prompts via stdin, empty/no-op folders, **photo fidelity** (dimensions preserved, output never grows, GPS IFD stripped by default and preserved with `--keep-metadata`), the capped **realistic-dataset** run with perf capture, and a **bench-script smoke run** |
 
-### Rust , `cargo test` (42 = 32 unit + 10 live-binary)
+### Rust , `cargo test` (43 = 32 unit + 11 live-binary)
 
 - **Unit** (inline `#[cfg(test)]` in `convert.rs`, `discovery.rs`, `paths.rs`,
   `settings.rs`, `style.rs`, `ui.rs`, `main.rs`): mirrors the Python unit
@@ -129,10 +145,12 @@ times on temp copies (cleaned up), prints a summary table and writes the
 - **`tests/cli_e2e.rs`** (**live e2e**): spawns the **compiled binary** via
   `CARGO_BIN_EXE_pictowebp` against the shared corpus and asserts the same
   behaviours as the Python subprocess suite , interactive prompt flow via
-  piped stdin, and the gated **realistic-dataset** run reporting elapsed
-  time and throughput.
+  piped stdin, **photo fidelity** (dimensions preserved, output never grows,
+  from the same shared fixture the Python suite uses), and the gated
+  **realistic-dataset** run (capped to 200 files) reporting elapsed time and
+  throughput.
 
-### Web UI , vitest (18)
+### Web UI , vitest (24)
 
 `web-ts/src/core.test.ts` covers the pure logic shared by both backends:
 collision detection, canvas-limit clamping, output-name handling, and
