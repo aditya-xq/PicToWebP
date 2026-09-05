@@ -25,7 +25,7 @@ PicToWebP is private by architecture, not by policy:
 
 No install? No problem, use it right now:
 
-**https://aditya-xq.github.io/PicToWebP/**
+**https://xqbuilds.com/pictowebp**
 
 ## Features 🚀
 
@@ -42,7 +42,7 @@ And tons of optimizations, edge cases handled, and performance tweaks to give th
 
 ### Browser Edition: zero install 🌐
 
-The fastest way in: open **https://aditya-xq.github.io/PicToWebP/** and you're converting.
+The fastest way in: open **https://xqbuilds.com/pictowebp** and you're converting.
 
 - **Bulk:** click to select a folder (or drag one in) and the whole tree is converted with structure preserved. Save results back to any folder or download a ZIP.
 - **Single:** drop an image, paste one with `Ctrl+V`, or click to browse. You get an instant 1:1 preview with a before/after comparison slider.

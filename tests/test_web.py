@@ -44,13 +44,17 @@ def test_index_serves_built_spa(client: TestClient):
     assert "Content-Security-Policy" in response.text
     # No external *assets* — the UI must work fully offline. Scan every
     # src/href for a scheme-qualified URL: self-referencing metadata (the
-    # site's own canonical/OG origin) and the single outbound author
-    # hyperlink (user-initiated navigation, never fetched by the page) are
+    # site's own canonical/OG origin) and the outbound author/repo
+    # hyperlinks (user-initiated navigation, never fetched by the page) are
     # fine; anything else is an external asset. The real no-network
     # guarantee is enforced at runtime by the strict CSP and the e2e smoke
     # suite.
-    site_origin = "https://aditya-xq.github.io/PicToWebP/"
-    allowed = {"https://x.com/xq_is_here"}
+    site_origin = "https://xqbuilds.com/pictowebp/"
+    allowed = {
+        "https://github.com/aditya-xq/PicToWebP",
+        "https://xqbuilds.com",
+        "https://x.com/xq_is_here",
+    }
     external = sorted(
         url
         for url in re.findall(r'\b(?:src|href)=["\']([^"\']+)["\']', response.text)

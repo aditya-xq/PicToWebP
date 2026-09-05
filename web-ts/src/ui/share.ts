@@ -200,7 +200,7 @@ export function renderShareCanvas(stats: ShareStats): HTMLCanvasElement {
   ctx.textAlign = 'right';
   ctx.fillStyle = BRAND_SOFT;
   ctx.font = '700 22px system-ui, sans-serif';
-  ctx.fillText('aditya-xq.github.io/PicToWebP', W - MARGIN, H - 21);
+  ctx.fillText('xqbuilds.com/pictowebp', W - MARGIN, H - 21);
   ctx.textAlign = 'left';
 
   return canvas;
