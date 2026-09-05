@@ -288,6 +288,7 @@ p { text-wrap: pretty; }
   color: var(--text-3);
   flex-shrink: 0;
 }
+.site-footer .footer-sep { color: var(--text-3); margin: 0 2px; }
 .site-footer a {
   color: var(--brand-300);
   font-weight: 700;
