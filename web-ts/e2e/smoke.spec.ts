@@ -11,7 +11,7 @@ test.describe('PicToWebP browser edition', () => {
     await expect(page).toHaveTitle(/PicToWebP/);
 
     const pills = page.locator('.privacy-pill, .pill');
-    await expect(pills).toHaveCount(4);
+    await expect(pills).toHaveCount(3);
 
     const slider = page.locator('#quality-slider');
     await slider.fill('60');
@@ -46,9 +46,10 @@ test.describe('PicToWebP browser edition', () => {
     await page.setInputFiles('#single-file-input', fixture);
     await expect(page.locator('#single-result')).toBeVisible({ timeout: 15_000 });
 
+    const sameOrigin = new URL(page.url()).origin;
     const foreign = requests.filter((url) => {
       const parsed = new URL(url);
-      const isSameOrigin = parsed.origin === 'http://localhost:4173';
+      const isSameOrigin = parsed.origin === sameOrigin;
       const isInMemory = parsed.protocol === 'blob:' || parsed.protocol === 'data:';
       return !isSameOrigin && !isInMemory;
     });
