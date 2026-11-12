@@ -11,8 +11,9 @@ keywords = ["webp", "image", "converter", "batch", "optimization"]
 categories = ["command-line-utilities", "multimedia::images"]
 exclude = ["fuzz/"]
 
-# `cargo binstall pictowebp` downloads the prebuilt release binary instead of
-# compiling from source.
+# Until the crate is published on crates.io, point binstall at the manifest:
+#   cargo binstall pictowebp@0.3.0 --manifest-path src_rust/Cargo.toml
+# Once published, plain `cargo binstall pictowebp` uses the same metadata.
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/rust-v{ version }/pictowebp-{ version }-{ target }{ binary-ext }"
 pkg-fmt = "bin"
