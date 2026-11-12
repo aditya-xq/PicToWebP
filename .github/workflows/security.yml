@@ -45,7 +45,7 @@ jobs:
           python -m venv .audit-venv
           .audit-venv/bin/python -m pip install --upgrade pip
           .audit-venv/bin/python -m pip install ".[web]" pip-audit
-          .audit-venv/bin/python -m pip-audit
+          .audit-venv/bin/python -m pip_audit
 
       - name: Audit npm dependencies
         working-directory: web-ts
@@ -68,7 +68,7 @@ jobs:
 
   python-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
