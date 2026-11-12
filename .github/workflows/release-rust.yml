@@ -238,11 +238,12 @@ jobs:
         run: |
           set -euo pipefail
           TAG="rust-v$VERSION"
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "Rust CLI v$VERSION" --latest=false \
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Rust CLI v$VERSION" --latest=false \
               --notes "Prebuilt PicToWebP Rust CLI for v$VERSION."
           fi
-          gh release upload "$TAG" dist/* --clobber
+          gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Update rolling latest release
         env:
@@ -251,12 +252,13 @@ jobs:
           set -euo pipefail
           # A dedicated tag keeps /releases/latest (shared with other products)
           # untouched while giving agents one stable download URL.
-          if ! gh release view rust-latest >/dev/null 2>&1; then
-            gh release create rust-latest --prerelease \
+          if ! gh release view rust-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create rust-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --prerelease \
               --title "Rust CLI (latest)" \
               --notes "Rolling release pointing at the newest stable Rust CLI."
           fi
-          gh release upload rust-latest dist/* --clobber
+          gh release upload rust-latest dist/* --repo "$GITHUB_REPOSITORY" --clobber
 
   verify:
     name: Verify published assets
