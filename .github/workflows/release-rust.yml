@@ -34,6 +34,11 @@ jobs:
             binary: pictowebp.exe
             ext: .exe
             rustflags: '-C target-feature=+crt-static'
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            binary: pictowebp.exe
+            ext: .exe
+            rustflags: '-C target-feature=+crt-static'
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             binary: pictowebp

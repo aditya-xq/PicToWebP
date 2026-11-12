@@ -26,7 +26,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            attestation: true
+          - os: windows-latest
+            attestation: true
+          - os: windows-11-arm
+            attestation: false
+          - os: macos-latest
+            attestation: true
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -48,8 +56,11 @@ jobs:
         shell: pwsh
         run: |
           $install = Join-Path $env:RUNNER_TEMP "pictowebp"
-          ./agent/pictowebp/scripts/install.ps1 -Version $env:VERSION `
-            -InstallDir $install -RequireAttestation -Json
+          $installArgs = @("-Version", $env:VERSION, "-InstallDir", $install, "-Json")
+          if ("${{ matrix.attestation }}" -eq "true") {
+            $installArgs += "-RequireAttestation"
+          }
+          ./agent/pictowebp/scripts/install.ps1 @installArgs
           & "$install\pictowebp.exe" --info --json
           & "$install\pictowebp.exe" --version
 
@@ -69,8 +80,12 @@ jobs:
         shell: bash
         run: |
           install_dir="$RUNNER_TEMP/pictowebp"
+          attestation=""
+          if [ "${{ matrix.attestation }}" = "true" ]; then
+            attestation="--require-attestation"
+          fi
           sh agent/pictowebp/scripts/install.sh --version "$VERSION" \
-            --install-dir "$install_dir" --require-attestation --json
+            --install-dir "$install_dir" $attestation --json
           "$install_dir/pictowebp" --info --json
           "$install_dir/pictowebp" --version
 
