@@ -125,16 +125,41 @@ fn components(path: &Path) -> Vec<String> {
 }
 
 fn absolute(path: &Path) -> PathBuf {
-    let resolved = path
-        .canonicalize()
-        .or_else(|_| std::path::absolute(path))
-        .unwrap_or_else(|_| path.to_path_buf());
-    // `canonicalize` returns the Windows verbatim form (``\\?\C:\...``) while
-    // `absolute` does not; strip it so both sides compare consistently.
-    let text = resolved.to_string_lossy();
+    if let Ok(resolved) = path.canonicalize() {
+        return strip_verbatim(resolved);
+    }
+    // A non-existent destination can sit under an existing ancestor whose
+    // short (8.3) spelling differs from its canonical long spelling. Resolve
+    // the longest existing ancestor and append the remaining components.
+    let mut current = path.to_path_buf();
+    let mut suffix: Vec<std::ffi::OsString> = Vec::new();
+    while let Some(name) = current.file_name().map(|name| name.to_os_string()) {
+        suffix.push(name);
+        let Some(parent) = current.parent() else {
+            break;
+        };
+        if parent.as_os_str().is_empty() {
+            break;
+        }
+        if let Ok(resolved) = parent.canonicalize() {
+            let mut base = strip_verbatim(resolved);
+            for part in suffix.iter().rev() {
+                base.push(part);
+            }
+            return base;
+        }
+        current = parent.to_path_buf();
+    }
+    strip_verbatim(std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()))
+}
+
+/// `canonicalize` returns the Windows verbatim form (``\\?\C:\...``) while
+/// `absolute` does not; strip it so both sides compare consistently.
+fn strip_verbatim(path: PathBuf) -> PathBuf {
+    let text = path.to_string_lossy();
     match text.strip_prefix(r"\\?\") {
         Some(stripped) => PathBuf::from(stripped),
-        None => resolved,
+        None => path,
     }
 }
 
