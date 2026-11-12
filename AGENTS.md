@@ -172,8 +172,14 @@ Features shared across editions , keep them consistent when changing one:
   and the dependency lockfiles current. `.github/workflows/security.yml` runs
   `cargo audit`, `pip-audit`, `npm audit`, SBOM generation, a scheduled decoder
   fuzz run, and the Python test suite weekly and on relevant pull requests.
-- Protect `rust-v*` tags with a repository ruleset so only maintainers can
-  create release tags.
+- `.github/workflows/tests.yml` runs the full Python (ruff, pyright, pytest),
+  Rust (fmt, clippy, tests) and web (vitest, both builds, CSP, Playwright) suite
+  on every PR and push to `main`.
+- `.github/workflows/release-smoke.yml` installs each published release on
+  Windows, Linux and macOS with `--require-attestation`, converts a fixture,
+  and uninstalls.
+- `rust-v*` tags are protected by the "Protect Rust release tags" ruleset
+  (creation/update/deletion restricted; repository admins bypass).
 
 ## More info
 
