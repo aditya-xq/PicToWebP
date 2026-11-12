@@ -105,9 +105,17 @@ pub fn check_disk_space(path: &Path) -> DiskSpace {
 
 #[cfg(unix)]
 fn free_space_bytes(path: &Path) -> Option<u64> {
-    use std::os::unix::fs::MetadataExt;
-    let metadata = std::fs::metadata(path).ok()?;
-    Some(metadata.blocks_available() * metadata.fr_size())
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    // SAFETY: `c_path` is a valid NUL-terminated C string and `statvfs` writes
+    // a complete struct without retaining the pointer.
+    let mut stats: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c_path.as_ptr(), &mut stats) } != 0 {
+        return None;
+    }
+    Some((stats.f_bavail as u64).saturating_mul(stats.f_frsize as u64))
 }
 
 #[cfg(windows)]
@@ -161,6 +169,13 @@ mod tests {
         // least confirm the call returns a structured value.
         let info = check_disk_space(Path::new("."));
         assert!(matches!(info.low, true | false));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_free_space_probe_returns_bytes() {
+        let info = check_disk_space(Path::new("."));
+        assert!(info.free_bytes.is_some());
     }
 
     #[test]

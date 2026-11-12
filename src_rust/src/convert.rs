@@ -776,12 +776,9 @@ mod tests {
             .unwrap();
         let contents = fs::read_to_string(&report).unwrap();
         assert!(!contents.contains(r"\\?\"));
-        // Windows renders the path with backslashes; Unix with forward slashes.
-        let needle = if cfg!(windows) {
-            r"C:\photos\broken.jpg"
-        } else {
-            "C:/photos/broken.jpg"
-        };
+        // The simulated Windows path keeps its literal backslashes after the
+        // verbatim prefix is stripped, on every platform.
+        let needle = r"C:\photos\broken.jpg";
         assert!(
             contents.contains(needle),
             "expected to find {needle:?} in {contents:?}"

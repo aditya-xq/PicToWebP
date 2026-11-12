@@ -509,6 +509,7 @@ dependencies = [
  "ctrlc",
  "image",
  "indicatif",
+ "libc",
  "libwebp-sys",
  "rayon",
  "serde",
