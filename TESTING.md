@@ -125,6 +125,16 @@ Results merge into `perf-results.json` keyed by tool, thread count and cap
 (e.g. `python-cli-t8`), so reruns after a change never clobber earlier
 numbers.
 
+## CI gates
+
+`tests.yml` runs the Python, Rust and web suites (plus native Windows ARM64) on
+every PR and push to `main`. `release-smoke.yml` installs a published release on
+Ubuntu, Windows x64, Windows ARM64 and macOS, converts a fixture, and
+uninstalls. `security.yml` runs audits, SBOM generation and the scheduled
+decoder fuzz job. `release-rust.yml` builds six targets, attests every asset,
+publishes the versioned release plus `rust-latest`, and calls the smoke
+workflow.
+
 ## Suite deep-dives
 
 ### Python , `pytest` (140 = 138 passed, 2 gated skips)

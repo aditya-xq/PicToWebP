@@ -28,15 +28,18 @@ a minimal reproduction. Do not open a public issue for an exploitable problem.
   `install.json`, so a path typo cannot delete unrelated data.
 - `install.json` is a local marker, not a signature; do not treat it as proof
   of binary integrity.
-- Configure a repository ruleset so only maintainers can create `rust-v*`
-  tags. The release workflow additionally refuses tags whose commit is not
-  reachable from `main`.
+- The `rust-v*` tag ruleset restricts creation, update, and deletion to
+  repository admins. The release workflow additionally refuses tags whose
+  commit is not reachable from `main`.
+- Attestation verification needs `gh` 2.49 or newer; without it the installer
+  still verifies the SHA-256 from `latest.json`.
 
 ## Installer network access
 
-The **installer** downloads a release from GitHub once. The **converter**
-never touches the network. `pictowebp --info` is local-only and safe to run in
-an offline or privacy-sensitive environment.
+The **installer** downloads a release from GitHub once. The **converter** and
+the stdio MCP server (`pictowebp --mcp`) never touch the network.
+`pictowebp --info` is local-only and safe to run in an offline or
+privacy-sensitive environment.
 
 ## Resource limits
 

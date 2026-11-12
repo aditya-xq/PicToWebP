@@ -131,7 +131,8 @@ Features shared across editions , keep them consistent when changing one:
 - `--json` writes exactly one object to stdout. Human output goes through
   `pictowebp/output.py` (Python) or `ui::emit_line` (Rust) to stderr.
 - `--mcp` (Rust) runs a local stdio MCP server exposing `info` and `convert`;
-  it shares the JSON payloads and never touches the network.
+  it shares the JSON payloads, ships machine-readable schemas under
+  `agent/pictowebp/schemas/`, and never touches the network.
 - Parse arguments before printing the banner so `--help`/`--version` stay
   machine-clean.
 - Runs never prompt when stdio is not a terminal; `--interactive` restores the
@@ -156,10 +157,12 @@ Features shared across editions , keep them consistent when changing one:
 
 ## Deployment
 
-- Pushing to `main` with changes under `web-ts/**` (or the workflow file)
-  triggers `.github/workflows/deploy-web-ts.yml`: npm ci → test → build → CSP
-  verification → GitHub Pages publish at `https://aditya-xq.github.io/PicToWebP/`.
-  The static profile (`npm run build`) is the deploy artifact.
+- Pushing to `main` with changes under `web-ts/**`, `agent/**`, or the workflow
+  file triggers `.github/workflows/deploy-web-ts.yml`: npm ci → test → build →
+  CSP verification → GitHub Pages publish at
+  `https://aditya-xq.github.io/PicToWebP/`. The static profile
+  (`npm run build`) is the deploy artifact; the agent catalog and `llms.txt` are
+  copied into it.
 - The workflow requires repo Actions permissions set to *Allow all actions*
   (not `local_only`) and Pages source *GitHub Actions*; the `github-pages`
   environment has a branch policy for `main`.
@@ -167,19 +170,20 @@ Features shared across editions , keep them consistent when changing one:
   remove it, the site breaks on Pages without it. The `python` profile uses
   `base: '/'` and is served by `pictowebp-web` from `web-ts/dist-python`.
 - Rust releases use `.github/workflows/release-rust.yml` (`rust-vX.Y.Z` plus a
-  rolling `rust-latest`). The workflow refuses tags not reachable from `main`
-  and publishes `SHA256SUMS`, `latest.json`, and Sigstore attestations for the
-  archives, raw binaries, manifest, and installer scripts.
+  rolling `rust-latest`). The workflow refuses tags not reachable from `main`,
+  builds six targets (Windows x64/ARM64, Linux x64/ARM64 musl, macOS
+  x64/ARM64), and publishes `SHA256SUMS`, `latest.json`, and Sigstore
+  attestations for the archives, raw binaries, manifest, and installer scripts.
 - All actions are pinned to commit SHAs; `.github/dependabot.yml` keeps them
   and the dependency lockfiles current. `.github/workflows/security.yml` runs
   `cargo audit`, `pip-audit`, `npm audit`, SBOM generation, a scheduled decoder
   fuzz run, and the Python test suite weekly and on relevant pull requests.
 - `.github/workflows/tests.yml` runs the full Python (ruff, pyright, pytest),
-  Rust (fmt, clippy, tests) and web (vitest, both builds, CSP, Playwright) suite
-  on every PR and push to `main`.
+  Rust (fmt, clippy, tests, native Windows ARM64) and web (vitest, both builds,
+  CSP, Playwright) suite on every PR and push to `main`.
 - `.github/workflows/release-smoke.yml` installs each published release on
-  Windows, Linux and macOS with `--require-attestation`, converts a fixture,
-  and uninstalls.
+  Windows x64/ARM64, Linux and macOS (attestations where available), converts a
+  fixture, and uninstalls.
 - `rust-v*` tags are protected by the "Protect Rust release tags" ruleset
   (creation/update/deletion restricted; repository admins bypass).
 

@@ -76,7 +76,8 @@ uv sync
 uv run pictowebp path/to/images -q 85
 ```
 
-Or with pip (CLI only; install `.[web]` if you also want the local web UI):
+Or with pip (from this checkout; the Python package is not published on PyPI;
+install `.[web]` if you also want the local web UI):
 
 ```bash
 pip install .
@@ -115,6 +116,10 @@ The Rust CLI exposes the same flags and behaviour as the Python one (`-q`, `-t`,
 `--lossless`, `--keep-metadata`, ...). Run
 `pictowebp --help` for the full list.
 
+Prebuilt releases for Windows (x64/ARM64), Linux (x64/ARM64 musl), and macOS
+(x64/ARM64) are on the [Releases](https://github.com/aditya-xq/PicToWebP/releases)
+page; the [agent installers](agent/) verify SHA-256 and Sigstore attestations.
+
 Input formats are JPEG, PNG, and WebP (Python also reads BMP/TIFF/GIF).
 HEIC/HEIF, DNG/ProRAW, AVIF, and JPEG XL are not supported; export those as
 JPEG or PNG first.
@@ -142,7 +147,9 @@ Runs never prompt when stdio is not a terminal, so a scripted call cannot hang.
 
 - Point your agent at **[`agent/`](agent/)** — a self-contained skill with
   installers, flag reference, machine-readable schemas, and guardrails.
-- [`llms.txt`](llms.txt) is a compact entry point for crawlers and assistants.
+- [`llms.txt`](llms.txt) is a compact entry point for crawlers and assistants;
+  schemas are indexed at
+  [`agent/pictowebp/schemas/index.json`](agent/pictowebp/schemas/index.json).
 - opencode users can add the hosted catalog in one line:
   `"skills": ["https://aditya-xq.github.io/PicToWebP/agent/"]`
 - The normative contract lives in

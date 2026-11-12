@@ -95,6 +95,14 @@ The Rust edition reads `jpg`, `jpeg`, `png`, `webp` only. Python also reads
 Check that you passed `--json`. Human output goes to stderr in JSON mode, so
 redirecting stderr to `/dev/null` should still leave one object on stdout.
 
+## MCP server does not start or respond
+
+`pictowebp --mcp` requires Rust 0.4.0+; confirm `pictowebp --info --json` lists
+`mcp` in `capabilities`. The transport is stdio, so stdout must be reserved for
+protocol messages; do not wrap it in a shell that prints to stdout. Call
+`convert` with an explicit `output_dir` and inspect `counts` and `failures` in
+the returned payload.
+
 ## Cancelled (`130`)
 
 The first Ctrl+C (or SIGINT) stops after in-flight files finish and still

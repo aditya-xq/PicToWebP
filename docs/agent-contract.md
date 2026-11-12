@@ -1,9 +1,9 @@
 # PicToWebP agent contract
 
 This file is **normative**. The Rust CLI, the Python CLI, the installers, the
-skill in `agent/`, and any future MCP server must implement what is described
-here. When the contract changes, bump the schema string and update every
-surface in the same change.
+skill in `agent/`, and the stdio MCP server (`--mcp`) must implement what is
+described here. When the contract changes, bump the schema string and update
+every surface in the same change.
 
 ## Why this exists
 
@@ -107,6 +107,9 @@ local MCP clients:
 `capabilities`, never by comparing version numbers. `exe` may be `null` when
 the running executable cannot be determined.
 
+Machine-readable draft 2020-12 schemas for the `info`, `result`, `error`,
+`install`, and `release` payloads ship in `agent/pictowebp/schemas/`.
+
 ## `pictowebp.result/v1`
 
 ```json
@@ -178,8 +181,9 @@ Defaults:
 | Windows | `%LOCALAPPDATA%\Programs\pictowebp` | `pictowebp.exe` |
 | macOS/Linux | `~/.local/bin` | `pictowebp` |
 
-ARM64 Windows has no native asset yet; the installer installs the x64 binary
-under emulation and warns. Linux ARM64 uses the static musl asset.
+On ARM64 Windows a native asset is published; releases without one fall back
+to the x64 binary under emulation, with a warning. Linux ARM64 uses the static
+musl asset.
 
 `--uninstall` only removes a directory that contains `install.json`, and
 refuses drive roots and the home directory.

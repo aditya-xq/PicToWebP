@@ -54,6 +54,14 @@ attestation was actually checked. An explicit `--asset-url` (or a
 `--from-file` binary) without `--sha256` still installs, but prints a warning
 and records `"verified": false`; treat that as an unverified install.
 
+### Trust without gh
+
+`latest.json` is fetched over HTTPS and the archive's SHA-256 is checked against
+it. The manifest itself is only authenticated when the Sigstore verification
+runs. For an independent trust anchor, pass `--sha256` from a trusted channel
+or install a `--from-file` binary you already verified. `install.json` is a
+local marker, not a signature.
+
 ## Offline / air-gapped
 
 1. Download the archive and `SHA256SUMS` on a connected machine.

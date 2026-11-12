@@ -32,13 +32,15 @@ from a pull request.
 │       ├── settings.rs       # clap argument definitions and prompt fallbacks
 │       ├── ui.rs             # banner, progress bar, summary
 │       ├── report.rs         # JSON result/info/error payloads
+│       ├── mcp.rs            # stdio MCP server (`--mcp`)
 │       ├── style.rs          # ANSI styling + disk-space helpers
 │       ├── convert.rs        # rayon-based conversion engine
 │       ├── discovery.rs      # recursive file walker
 │       └── paths.rs          # unique output-folder allocation
 ├── agent/                    # installable skill + verified installers
 │   ├── index.json            # opencode HTTP skill catalog
-│   └── pictowebp/            # SKILL.md, references/, scripts/
+│   └── pictowebp/            # SKILL.md, references/, schemas/, scripts/
+├── llms.txt                  # compact crawler/assistant entry point
 ├── docs/agent-contract.md    # normative CLI/JSON/install contract
 └── web-ts/                   # The single web UI (Vite + TypeScript, two backends)
     ├── index.html            # one merged markup for both editions
@@ -128,12 +130,27 @@ All test suites are expected to be green before submitting changes:
 
 Dependencies are declared in `pyproject.toml` (locked via `uv.lock`), `src_rust/Cargo.toml` (locked via `Cargo.lock`), and `web-ts/package.json` (locked via `package-lock.json`).
 
+## CI and releases
+
+- `.github/workflows/tests.yml` runs Python (ruff, pyright, pytest), Rust (fmt,
+  clippy, tests, native Windows ARM64) and web (vitest, builds, Playwright) on
+  every PR and push to `main`.
+- `.github/workflows/release-rust.yml` builds six targets (Windows x64/ARM64,
+  Linux x64/ARM64 musl, macOS x64/ARM64), attests them, publishes the versioned
+  release plus `rust-latest`, and calls the installer smoke workflow.
+- `.github/workflows/release-smoke.yml` installs a published release on Ubuntu,
+  Windows x64, Windows ARM64 and macOS, verifies attestations where available,
+  converts a fixture, and uninstalls.
+- `.github/workflows/security.yml` runs dependency audits, SBOM generation and
+  the scheduled decoder fuzz job. `rust-v*` tags are protected by a ruleset.
+
 ## Deploying the Browser Edition
 
 Deployment to GitHub Pages is automatic: `.github/workflows/deploy-web-ts.yml`
-builds and tests `web-ts/` on every push to `main` that touches `web-ts/**` (or
-the workflow itself), verifies the Content-Security-Policy is present in the
-build output, and publishes via `actions/deploy-pages`.
+builds and tests `web-ts/` on every push to `main` that touches `web-ts/**`,
+`agent/**`, or the workflow itself. It verifies the Content-Security-Policy in
+the build output, copies the agent catalog and `llms.txt`, and publishes via
+`actions/deploy-pages`.
 
 Two things the workflow needs from repository settings:
 

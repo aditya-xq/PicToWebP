@@ -1,7 +1,11 @@
 # JSON schemas
 
 `--json` writes exactly one object to stdout and nothing else. Human output,
-warnings, and the progress bar go to stderr.
+warnings, and the progress bar go to stderr. The stdio MCP server returns the
+same payloads as `structuredContent`.
+
+Machine-readable draft 2020-12 schemas live in `schemas/`; `schemas/index.json`
+maps each payload to its file.
 
 ## `pictowebp.info/v1`
 
