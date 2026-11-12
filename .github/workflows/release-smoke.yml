@@ -8,7 +8,13 @@ on:
       tag:
         description: Release tag to install and test
         required: true
-        default: rust-v0.3.0
+        default: rust-v0.4.0
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to install and test
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -56,9 +62,13 @@ jobs:
         shell: pwsh
         run: |
           $install = Join-Path $env:RUNNER_TEMP "pictowebp"
-          $installArgs = @("-Version", $env:VERSION, "-InstallDir", $install, "-Json")
+          $installArgs = @{
+            Version = $env:VERSION
+            InstallDir = $install
+            Json = $true
+          }
           if ("${{ matrix.attestation }}" -eq "true") {
-            $installArgs += "-RequireAttestation"
+            $installArgs.RequireAttestation = $true
           }
           ./agent/pictowebp/scripts/install.ps1 @installArgs
           & "$install\pictowebp.exe" --info --json
