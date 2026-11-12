@@ -1,0 +1,4 @@
+# Shell scripts must keep LF so they run under sh/Git Bash on Windows;
+# PowerShell scripts are edited more comfortably with CRLF.
+*.sh text eol=lf
+*.ps1 text eol=crlf

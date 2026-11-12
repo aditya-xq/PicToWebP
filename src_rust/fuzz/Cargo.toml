@@ -1,0 +1,19 @@
+[package]
+name = "pictowebp-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+
+[[bin]]
+name = "decode"
+path = "fuzz_targets/decode.rs"
+test = false
+doc = false
+bench = false

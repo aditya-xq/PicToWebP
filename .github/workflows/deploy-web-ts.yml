@@ -5,13 +5,12 @@ on:
     branches: [main]
     paths:
       - 'web-ts/**'
+      - 'agent/**'
       - '.github/workflows/deploy-web-ts.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -19,11 +18,15 @@ concurrency:
 
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 20
           cache: npm
@@ -57,16 +60,24 @@ jobs:
           test -f dist/index.html
           grep -q 'Content-Security-Policy' dist/index.html
 
-      - uses: actions/upload-pages-artifact@v5
+      - name: Publish agent catalog
+        run: |
+          mkdir -p web-ts/dist/agent
+          cp -r agent/. web-ts/dist/agent/
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: web-ts/dist
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

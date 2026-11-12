@@ -1,0 +1,282 @@
+name: Release Rust CLI
+
+on:
+  push:
+    tags:
+      - 'rust-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (must match src_rust/Cargo.toml)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-rust
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: pictowebp.exe
+            ext: .exe
+            rustflags: '-C target-feature=+crt-static'
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary: pictowebp
+            ext: ''
+            rustflags: ''
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            binary: pictowebp
+            ext: ''
+            rustflags: ''
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: pictowebp
+            ext: ''
+            rustflags: ''
+          - os: macos-15
+            target: aarch64-apple-darwin
+            binary: pictowebp
+            ext: ''
+            rustflags: ''
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Ensure the tag is on main
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Refusing to release a commit that is not on main" >&2
+            exit 1
+          fi
+
+      - name: Resolve and verify version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#rust-v}"
+          fi
+          case "$VERSION" in
+            ""|*[!0-9.]*) echo "Invalid version: $VERSION" >&2; exit 1 ;;
+          esac
+          CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' src_rust/Cargo.toml | head -1)
+          if [ "$VERSION" != "$CARGO_VERSION" ]; then
+            echo "Tag version $VERSION does not match Cargo.toml $CARGO_VERSION" >&2
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        working-directory: src_rust
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          CC_aarch64_unknown_linux_musl: musl-gcc
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Test (musl)
+        if: contains(matrix.target, 'musl')
+        working-directory: src_rust
+        run: cargo test --locked --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="src_rust/target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          STAGE="dist/pictowebp-$VERSION-${{ matrix.target }}"
+          mkdir -p "$STAGE"
+          cp "$BIN" "$STAGE/"
+          cp LICENSE README.md "$STAGE/"
+          tar -czf "dist/pictowebp-$VERSION-${{ matrix.target }}.tar.gz" -C dist "pictowebp-$VERSION-${{ matrix.target }}"
+          # Raw binary for `cargo binstall` (no archive extraction needed).
+          cp "$BIN" "dist/pictowebp-$VERSION-${{ matrix.target }}${{ matrix.ext }}"
+          # Versioned installer scripts so agents can pin an immutable URL.
+          # Only one matrix leg publishes them to avoid duplicate artifacts.
+          if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
+            cp agent/pictowebp/scripts/install.sh dist/install.sh
+            cp agent/pictowebp/scripts/install.ps1 dist/install.ps1
+          fi
+          rm -rf "$STAGE"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          # Both the archives and the raw binaries (used by cargo-binstall and
+          # by `gh attestation verify pictowebp`) are subjects.
+          subject-path: dist/*
+
+      - name: Smoke test the artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke
+          tar -xzf "dist/pictowebp-$VERSION-${{ matrix.target }}.tar.gz" -C smoke
+          BIN=$(find smoke -name '${{ matrix.binary }}' -type f | head -1)
+          chmod +x "$BIN"
+          "$BIN" --info --json
+          "$BIN" --version
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pictowebp-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Resolve version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#rust-v}"
+          fi
+          case "$VERSION" in
+            ""|*[!0-9.]*) echo "Invalid version: $VERSION" >&2; exit 1 ;;
+          esac
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum *.tar.gz install.sh install.ps1 > SHA256SUMS
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+
+          version = os.environ["VERSION"]
+          repo = "aditya-xq/PicToWebP"
+          assets = {}
+          for name in sorted(os.listdir(".")):
+              if not name.endswith(".tar.gz"):
+                  continue
+              prefix = f"pictowebp-{version}-"
+              target = name[len(prefix) : -len(".tar.gz")]
+              digest = hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()
+              assets[target] = {
+                  "url": f"https://github.com/{repo}/releases/download/rust-v{version}/{name}",
+                  "sha256": digest,
+              }
+          manifest = {
+              "schema": "pictowebp.release/v1",
+              "version": version,
+              "assets": assets,
+          }
+          pathlib.Path("latest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          cat latest.json
+
+      - name: Attest release manifest
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            dist/latest.json
+            dist/SHA256SUMS
+
+      - name: Publish versioned release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="rust-v$VERSION"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Rust CLI v$VERSION" --latest=false \
+              --notes "Prebuilt PicToWebP Rust CLI for v$VERSION."
+          fi
+          gh release upload "$TAG" dist/* --clobber
+
+      - name: Update rolling latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # A dedicated tag keeps /releases/latest (shared with other products)
+          # untouched while giving agents one stable download URL.
+          if ! gh release view rust-latest >/dev/null 2>&1; then
+            gh release create rust-latest --prerelease \
+              --title "Rust CLI (latest)" \
+              --notes "Rolling release pointing at the newest stable Rust CLI."
+          fi
+          gh release upload rust-latest dist/* --clobber
+
+  verify:
+    name: Verify published assets
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check manifest and binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/aditya-xq/PicToWebP/releases/download/rust-latest"
+          curl -fsSL "$BASE/latest.json" -o latest.json
+          TARGET=$(python3 -c 'import json;print(json.load(open("latest.json"))["assets"]["x86_64-unknown-linux-musl"]["url"])')
+          curl -fsSL "$TARGET" -o pictowebp.tar.gz
+          EXPECTED=$(python3 -c 'import json;print(json.load(open("latest.json"))["assets"]["x86_64-unknown-linux-musl"]["sha256"])')
+          ACTUAL=$(sha256sum pictowebp.tar.gz | awk '{print $1}')
+          test "$EXPECTED" = "$ACTUAL"
+          tar -xzf pictowebp.tar.gz
+          BIN=$(find . -name pictowebp -type f | head -1)
+          chmod +x "$BIN"
+          "$BIN" --info --json
+          ldd "$BIN" 2>&1 | grep -q "not a dynamic executable" \
+            || echo "warning: binary links against system libraries"

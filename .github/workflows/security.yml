@@ -1,0 +1,103 @@
+name: Security audit
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src_rust/**'
+      - 'src_py/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'web-ts/package.json'
+      - 'web-ts/package-lock.json'
+      - '.github/workflows/security.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-audit
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - name: Audit Rust dependencies
+        run: |
+          cargo install cargo-audit --locked
+          cd src_rust
+          cargo audit
+
+      - name: Audit Python dependencies
+        run: |
+          python -m venv .audit-venv
+          .audit-venv/bin/python -m pip install --upgrade pip
+          .audit-venv/bin/python -m pip install ".[web]" pip-audit
+          .audit-venv/bin/python -m pip-audit
+
+      - name: Audit npm dependencies
+        working-directory: web-ts
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: pictowebp.spdx.json
+          upload-artifact: false
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pictowebp-sbom
+          path: pictowebp.spdx.json
+          if-no-files-found: error
+
+  python-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+
+      - name: Run tests
+        run: |
+          uv sync --frozen --extra web
+          uv run pytest -q
+
+  fuzz:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Fuzz the image decoder
+        working-directory: src_rust/fuzz
+        run: cargo fuzz run decode -- -max_total_time=60 -rss_limit_mb=4096

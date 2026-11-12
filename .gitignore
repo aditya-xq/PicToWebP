@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 .venv/
 dist/
+dist-python/
+node_modules/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
@@ -12,6 +14,10 @@ dist/
 
 # Rust
 target/
+
+# cargo-fuzz
+src_rust/fuzz/corpus/
+src_rust/fuzz/artifacts/
 
 # Realistic photo set for large-scale E2E runs (downloaded on demand, never committed)
 tests/e2e/real_images/
