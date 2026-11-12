@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: security-audit
+  group: security-audit-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
