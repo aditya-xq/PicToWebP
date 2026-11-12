@@ -697,7 +697,11 @@ fn out_dir_receives_the_converted_files() {
     assert_eq!(output.status.code(), Some(0));
     assert!(destination.join("a.webp").is_file());
     let value = json_stdout(&output);
-    assert_eq!(value["output"], destination.display().to_string());
+    // The JSON reports the canonical path; TEMP can be an 8.3 short name.
+    let canonical = fs::canonicalize(&destination).unwrap_or_else(|_| destination.clone());
+    let canonical = canonical.to_string_lossy();
+    let expected = canonical.strip_prefix(r"\\?\").unwrap_or(&canonical);
+    assert_eq!(value["output"], expected);
     cleanup(&source);
 }
 
