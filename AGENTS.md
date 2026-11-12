@@ -39,7 +39,7 @@ cd web-ts && npm run test:e2e                   # static Playwright smoke (chrom
 cd web-ts && npm run test:e2e:python            # python-backend Playwright smoke
 ```
 
-All suites are expected green before committing (currently 139 pytest, 77 cargo
+All suites are expected green before committing (currently 140 pytest, 77 cargo
 test, 24 vitest, 10 Playwright e2e).
 
 Every tool is covered by a **live e2e regression suite** that runs the real

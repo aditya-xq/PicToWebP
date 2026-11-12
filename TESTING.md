@@ -127,7 +127,7 @@ numbers.
 
 ## Suite deep-dives
 
-### Python , `pytest` (139 = 137 passed, 2 gated skips)
+### Python , `pytest` (140 = 138 passed, 2 gated skips)
 
 | File | Kind | What it covers |
 | --- | --- | --- |

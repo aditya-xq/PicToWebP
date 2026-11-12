@@ -15,6 +15,7 @@
         "schemas/error-v1.json",
         "schemas/install-v1.json",
         "schemas/release-v1.json",
+        "schemas/index.json",
         "scripts/install.ps1",
         "scripts/install.sh"
       ]

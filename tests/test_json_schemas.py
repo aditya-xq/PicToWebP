@@ -132,3 +132,10 @@ def test_catalog_ships_every_schema():
     schemas = {f"schemas/{path.name}" for path in SCHEMAS.glob("*.json")}
     assert schemas
     assert schemas <= files
+
+
+def test_schema_index_lists_every_schema():
+    index = json.loads((SCHEMAS / "index.json").read_text(encoding="utf-8"))
+    listed = set(index["schemas"].values())
+    actual = {path.name for path in SCHEMAS.glob("*-v1.json")}
+    assert listed == actual

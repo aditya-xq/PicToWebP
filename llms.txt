@@ -9,7 +9,7 @@
 - Skill catalog: https://aditya-xq.github.io/PicToWebP/agent/index.json
 - Skill: https://aditya-xq.github.io/PicToWebP/agent/pictowebp/SKILL.md
 - CLI reference: https://aditya-xq.github.io/PicToWebP/agent/pictowebp/references/cli.md
-- JSON schemas: https://aditya-xq.github.io/PicToWebP/agent/pictowebp/schemas/
+- JSON schemas: https://aditya-xq.github.io/PicToWebP/agent/pictowebp/schemas/index.json
 - Normative contract: https://github.com/aditya-xq/PicToWebP/blob/main/docs/agent-contract.md
 - Releases: https://github.com/aditya-xq/PicToWebP/releases
 

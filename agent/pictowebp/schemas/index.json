@@ -1,0 +1,10 @@
+{
+  "schema": "pictowebp.schemas/v1",
+  "schemas": {
+    "info": "info-v1.json",
+    "result": "result-v1.json",
+    "error": "error-v1.json",
+    "install": "install-v1.json",
+    "release": "release-v1.json"
+  }
+}
