@@ -20,7 +20,7 @@ pub const MAX_JSON_FAILURES: usize = 100;
 
 /// Features an agent can rely on. Skills branch on this list instead of
 /// comparing version numbers, so older releases degrade gracefully.
-pub const CAPABILITIES: [&str; 11] = [
+pub const CAPABILITIES: [&str; 12] = [
     "json",
     "info",
     "non_interactive",
@@ -32,6 +32,7 @@ pub const CAPABILITIES: [&str; 11] = [
     "fail_on_empty",
     "lossless",
     "keep_metadata",
+    "mcp",
 ];
 
 #[derive(Serialize)]

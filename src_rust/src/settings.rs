@@ -115,6 +115,10 @@ pub struct Cli {
     /// Exit non-zero when no convertible images are found
     #[arg(long)]
     pub fail_on_empty: bool,
+
+    /// Run as a local stdio MCP server (JSON-RPC) instead of converting
+    #[arg(long)]
+    pub mcp: bool,
 }
 
 /// True when both stdin and stdout are attached to a terminal.
@@ -341,6 +345,7 @@ mod tests {
             dry_run: false,
             fail_on_error: false,
             fail_on_empty: false,
+            mcp: false,
         }
     }
 
@@ -442,6 +447,7 @@ mod tests {
             "--fail-on-empty",
             "--allow-report-outside",
             "--max-pixels",
+            "--mcp",
         ] {
             assert!(help.contains(flag), "{flag} missing from --help");
         }

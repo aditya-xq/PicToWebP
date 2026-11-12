@@ -11,7 +11,7 @@
 
 use std::env;
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -473,6 +473,116 @@ fn json_stdout(output: &std::process::Output) -> serde_json::Value {
         "stdout must hold exactly one JSON object, got: {text:?}"
     );
     serde_json::from_str(text.trim()).expect("stdout is not valid JSON")
+}
+
+#[test]
+fn mcp_serves_info_and_convert() {
+    let source = copy_corpus();
+    let output_dir = source.parent().unwrap().join("mcp-out");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg("--mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+
+    let init = mcp_call(
+        &mut stdin,
+        &mut stdout,
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": { "name": "test", "version": "1" }
+            }
+        }),
+    );
+    assert_eq!(init["result"]["serverInfo"]["name"], "pictowebp");
+
+    let tools = mcp_call(
+        &mut stdin,
+        &mut stdout,
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list"
+        }),
+    );
+    let names: Vec<&str> = tools["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect();
+    assert!(names.contains(&"info"));
+    assert!(names.contains(&"convert"));
+
+    let info = mcp_call(
+        &mut stdin,
+        &mut stdout,
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": { "name": "info", "arguments": {} }
+        }),
+    );
+    assert_eq!(
+        info["result"]["structuredContent"]["schema"],
+        "pictowebp.info/v1"
+    );
+
+    let converted = mcp_call(
+        &mut stdin,
+        &mut stdout,
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "convert",
+                "arguments": {
+                    "source": source.to_str().unwrap(),
+                    "output_dir": output_dir.to_str().unwrap(),
+                    "threads": 1
+                }
+            }
+        }),
+    );
+    assert_eq!(converted["result"]["isError"], false);
+    assert_eq!(
+        converted["result"]["structuredContent"]["schema"],
+        "pictowebp.result/v1"
+    );
+    assert!(
+        converted["result"]["structuredContent"]["counts"]["converted"]
+            .as_u64()
+            .unwrap()
+            >= 1
+    );
+    assert!(output_dir.join("a.webp").is_file());
+
+    drop(stdin);
+    child.wait().unwrap();
+    cleanup(&source);
+}
+
+fn mcp_call(
+    stdin: &mut std::process::ChildStdin,
+    stdout: &mut BufReader<std::process::ChildStdout>,
+    request: serde_json::Value,
+) -> serde_json::Value {
+    writeln!(stdin, "{}", request).unwrap();
+    stdin.flush().unwrap();
+    let mut line = String::new();
+    stdout.read_line(&mut line).unwrap();
+    serde_json::from_str(&line).expect("MCP response is valid JSON")
 }
 
 #[test]

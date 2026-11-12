@@ -2,6 +2,7 @@
 
 mod convert;
 mod discovery;
+mod mcp;
 mod paths;
 mod report;
 mod settings;
@@ -41,6 +42,13 @@ fn main() -> ExitCode {
         }
     };
     let json = cli.json;
+    if cli.mcp {
+        if let Err(error) = mcp::serve() {
+            eprintln!("Error: {error:#}");
+            return ExitCode::FAILURE;
+        }
+        return ExitCode::SUCCESS;
+    }
     match run(cli) {
         Ok(code) => code,
         Err(error) => {
