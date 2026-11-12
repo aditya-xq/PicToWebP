@@ -69,7 +69,7 @@ Honest limitations of doing everything in the browser:
 
 ### Python 🐍
 
-Requires Python 3.10+. Using [uv](https://docs.astral.sh/uv/) (recommended):
+Requires Python 3.11+ (3.10 is end-of-life and cannot run the patched Pillow 13). Using [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
 uv sync
@@ -115,9 +115,55 @@ The Rust CLI exposes the same flags and behaviour as the Python one (`-q`, `-t`,
 `--lossless`, `--keep-metadata`, ...). Run
 `pictowebp --help` for the full list.
 
+Input formats are JPEG, PNG, and WebP (Python also reads BMP/TIFF/GIF).
+HEIC/HEIF, DNG/ProRAW, AVIF, and JPEG XL are not supported; export those as
+JPEG or PNG first.
+
 In one real-world run it delivered an **85.79% reduction** across 2,598 images
 in 46 seconds. Failures are grouped by reason, listed on screen, and saved to
 `conversion-errors.txt` so nothing fails silently.
+
+### For AI agents and coding assistants 🤖
+
+PicToWebP ships an agent-facing contract and a installable skill, so an
+assistant can install it, run it, and read the result without scraping terminal
+output:
+
+```bash
+pictowebp ./public/images --json --no-progress -q 82
+pictowebp ./hero.png --json          # single image
+pictowebp . --json --dry-run         # plan only, writes nothing
+pictowebp --info --json              # edition, version, capabilities
+```
+
+`--json` keeps stdout to exactly one object and routes human output to stderr.
+Runs never prompt when stdio is not a terminal, so a scripted call cannot hang.
+
+- Point your agent at **[`agent/`](agent/)** — a self-contained skill with
+  installers, flag reference, JSON schemas, and guardrails.
+- opencode users can add the hosted catalog in one line:
+  `"skills": ["https://aditya-xq.github.io/PicToWebP/agent/"]`
+- The normative contract lives in
+  [`docs/agent-contract.md`](docs/agent-contract.md).
+- The converter itself stays offline; only the installer downloads a release,
+  and it verifies SHA-256 and, when `gh` is available, a Sigstore attestation
+  before installing.
+
+### Agent quick reference
+
+| Goal | Command |
+|------|---------|
+| Install (Windows) | `powershell -ExecutionPolicy Bypass -File agent/pictowebp/scripts/install.ps1 -Json` |
+| Install (macOS/Linux) | `sh agent/pictowebp/scripts/install.sh --json` |
+| Version + features | `pictowebp --info --json` |
+| Bulk convert | `pictowebp DIR --json -q 82` |
+| Plan first | `pictowebp DIR --json --dry-run` |
+| Deterministic output | `pictowebp DIR --json --out DIR-webp` |
+| Strict CI signal | `pictowebp DIR --json --fail-on-error` |
+
+Exit codes: `0` ok, `2` bad arguments/path, `3` nothing converted, `4`
+failures with `--fail-on-error`, `5` empty with `--fail-on-empty`, `130`
+cancelled.
 
 ## Final Words 🎤
 

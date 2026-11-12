@@ -39,7 +39,7 @@ cd web-ts && npm run test:e2e                   # static Playwright smoke (chrom
 cd web-ts && npm run test:e2e:python            # python-backend Playwright smoke
 ```
 
-All suites are expected green before committing (currently 96 pytest, 43 cargo
+All suites are expected green before committing (currently 130 pytest, 76 cargo
 test, 24 vitest, 10 Playwright e2e).
 
 Every tool is covered by a **live e2e regression suite** that runs the real
@@ -56,7 +56,9 @@ regenerated via `uv run python tests/e2e/gen_fixtures.py`):
 - `web-ts/e2e/batch.spec.ts` drives the browser edition in Chromium (multi-file
   drop → batch conversion → ZIP download, corrupt-input failure surfacing);
 - `web-ts/e2e-python/batch.spec.ts` drives the real UI against the FastAPI
-  server (browse modal → folder conversion via SSE → ZIP download).
+  server (browse modal → folder conversion via SSE → ZIP download);
+- `tests/e2e/install_guard.sh` asserts `--uninstall` refuses `$HOME/`,
+  drive roots, and directories without `install.json` (run with `sh`).
 The corpus mixes happy paths (every format, nested dirs) with sad paths
 (corrupt file), a hidden dir and a same-stem collision pair.
 
@@ -68,10 +70,10 @@ capped 200-file subset automatically and capture **performance metrics** into
 `tests/e2e/perf-results.json` (gitignored); a dedicated Python-vs-Rust
 benchmark lives at `tests/e2e/run_realistic_bench.py` with `--corpus
 photos|phone|camera`, `--threads`, `--max-files` and `--ladder` options
-reproducing every published benchmark dimension. Suites run the CLIs with
-`--no-log` inside disposable temp dirs, so a green run leaves no
-`pictowebp.log`, temp corpora, or output folders behind , only the gitignored
-perf JSON.
+reproducing every published benchmark dimension. Suites run the Python CLI
+with `--no-log` inside disposable temp dirs (the Rust edition writes no log
+file), so a green run leaves no `pictowebp.log`, temp corpora, or output
+folders behind , only the gitignored perf JSON.
 
 ## Non-negotiable privacy guarantees
 
@@ -119,6 +121,26 @@ Features shared across editions , keep them consistent when changing one:
   a fallback , keep both working. Canvas-limit clamping lives in `core.ts`
   because the worker imports it.
 
+## Agent interface (both CLIs)
+
+`docs/agent-contract.md` is normative; `agent/` is the installable skill.
+
+- `--json`, `--info`, `--yes`, `--out`, `--dry-run`, `--fail-on-error`, and
+  `--fail-on-empty` must behave identically in both editions. Update both in
+  the same change and keep the parity tests green.
+- `--json` writes exactly one object to stdout. Human output goes through
+  `pictowebp/output.py` (Python) or `ui::emit_line` (Rust) to stderr.
+- Parse arguments before printing the banner so `--help`/`--version` stay
+  machine-clean.
+- Runs never prompt when stdio is not a terminal; `--interactive` restores the
+  prompt flow for tests and unusual shells.
+- JSON schemas are additive within a version. Removing or renaming a field
+  requires a new `.../v2` schema string.
+- Keep the commands in `agent/pictowebp/SKILL.md` executable: run
+  `sh tests/e2e/agent_quickstart.sh <binary>` after changing the CLI.
+- Rust releases use `rust-vX.Y.Z` tags plus a rolling `rust-latest` tag. Do not
+  rely on `/releases/latest`, because the repository hosts several products.
+
 ## Conventions
 
 - Tone: fun and emoji-friendly in user-facing copy and docs; plain and minimal
@@ -142,6 +164,16 @@ Features shared across editions , keep them consistent when changing one:
 - `vite.config.ts` sets `base: '/PicToWebP/'` for the static profile , don't
   remove it, the site breaks on Pages without it. The `python` profile uses
   `base: '/'` and is served by `pictowebp-web` from `web-ts/dist-python`.
+- Rust releases use `.github/workflows/release-rust.yml` (`rust-vX.Y.Z` plus a
+  rolling `rust-latest`). The workflow refuses tags not reachable from `main`
+  and publishes `SHA256SUMS`, `latest.json`, and Sigstore attestations for the
+  archives, raw binaries, manifest, and installer scripts.
+- All actions are pinned to commit SHAs; `.github/dependabot.yml` keeps them
+  and the dependency lockfiles current. `.github/workflows/security.yml` runs
+  `cargo audit`, `pip-audit`, `npm audit`, SBOM generation, a scheduled decoder
+  fuzz run, and the Python test suite weekly and on relevant pull requests.
+- Protect `rust-v*` tags with a repository ruleset so only maintainers can
+  create release tags.
 
 ## More info
 

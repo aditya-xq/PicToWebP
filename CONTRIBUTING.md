@@ -11,6 +11,8 @@ from a pull request.
 │   ├── __main__.py           # `python -m pictowebp` entry point
 │   ├── cli.py                # argparse CLI: argument parsing, prompts, `main()`
 │   ├── ui.py                 # terminal output: banners, settings, summary (↔ Rust ui.rs)
+│   ├── output.py             # stdout/stderr routing for --json mode
+│   ├── report.py             # pictowebp.result/v1 and pictowebp.info/v1 payloads
 │   ├── converter.py          # conversion engine: batch pool + per-file encoding (↔ Rust convert.rs)
 │   ├── discovery.py          # recursive image discovery (↔ Rust discovery.rs)
 │   ├── enums.py              # input/output image format definitions
@@ -29,10 +31,15 @@ from a pull request.
 │       ├── main.rs           # entry point, Ctrl+C handling, exit codes
 │       ├── settings.rs       # clap argument definitions and prompt fallbacks
 │       ├── ui.rs             # banner, progress bar, summary
+│       ├── report.rs         # JSON result/info/error payloads
 │       ├── style.rs          # ANSI styling + disk-space helpers
 │       ├── convert.rs        # rayon-based conversion engine
 │       ├── discovery.rs      # recursive file walker
 │       └── paths.rs          # unique output-folder allocation
+├── agent/                    # installable skill + verified installers
+│   ├── index.json            # opencode HTTP skill catalog
+│   └── pictowebp/            # SKILL.md, references/, scripts/
+├── docs/agent-contract.md    # normative CLI/JSON/install contract
 └── web-ts/                   # The single web UI (Vite + TypeScript, two backends)
     ├── index.html            # one merged markup for both editions
     ├── src/
@@ -112,9 +119,9 @@ npm run test:e2e:python    # python build served by FastAPI
 
 All test suites are expected to be green before submitting changes:
 
-- `python -m pytest` , **96 tests** (95 passed, 1 gated skip on the built SPA) covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, SPA serving, and end-to-end flows , **including 14 live subprocess tests** that run the real `python -m pictowebp` against the shared fixture corpus (exit codes, output-folder contract, collision/hidden/corrupt handling, EXIF keep/strip incl. the GPS IFD, lossless, interactive prompts, empty/no-op folders, photo fidelity: dimensions preserved and output never grows) plus a capped realistic-dataset run with performance capture and a bench-script smoke run.
-- `uv run pyright` , **0 errors, 0 warnings** under `[tool.pyright]` config (standard mode, Python 3.10).
-- `cargo test` , **43 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), EXIF embedding, atomic file writes, error report persistence, CLI argument validation , **including 11 live-binary tests** that spawn the compiled executable against the same shared fixture corpus (mirroring the Python subprocess suite, incl. the photo-fidelity checks, and a capped realistic-dataset run).
+- `python -m pytest` , **132 tests** (130 passed, 2 platform/build-gated skips) covering the CLI, conversion engine, progress tracker, image utilities, ANSI styling, FastAPI endpoints, SPA serving, and end-to-end flows , **including 15 live subprocess tests** that run the real `python -m pictowebp` against the shared fixture corpus (exit codes, output-folder contract, collision/hidden/corrupt handling, EXIF keep/strip incl. the GPS IFD, lossless, interactive prompts, empty/no-op folders, photo fidelity: dimensions preserved and output never grows) plus a capped realistic-dataset run with performance capture and a bench-script smoke run.
+- `uv run pyright` , **0 errors, 0 warnings** under `[tool.pyright]` config (standard mode, Python 3.11).
+- `cargo test` , **76 tests** covering the conversion engine end-to-end (successes, failures, collisions, cancellation), EXIF embedding, atomic file writes, error report persistence, CLI argument validation , **including 25 live-binary tests** that spawn the compiled executable against the same shared fixture corpus (mirroring the Python subprocess suite, incl. the photo-fidelity checks, and a capped realistic-dataset run).
 - `npm test` (in `web-ts/`) , **24 tests** covering collision detection, canvas-limit clamping, output-name handling, and formatting helpers.
 - `npm run test:e2e` (in `web-ts/`) , **6 Playwright tests** driving the static build in real Chromium (UI load, single-image conversion, a runtime proof that the conversion makes zero external network requests, a multi-file drop → batch conversion → ZIP download flow, its corrupt-input failure path, and a gated realistic 40-photo batch logging UI-reported throughput).
 - `npm run test:e2e:python` (in `web-ts/`) , **4 Playwright tests** driving the python build served by FastAPI (server edition, single-image upload, a full batch conversion: browse modal → folder convert via SSE → ZIP download inspected in the browser with sad-path results surfaced in the UI, and a gated realistic 40-photo server batch).

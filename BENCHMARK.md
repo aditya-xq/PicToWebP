@@ -63,11 +63,19 @@ files *larger*, which is why the app doesn't do that by default.
 ## Try it yourself
 
 ```bash
-uv run python tests/e2e/run_realistic_bench.py --runs 3
+uv run python tests/e2e/run_realistic_bench.py --max-files 500 --runs 3
 ```
 
-This runs both apps on a set of photos, prints the results, and saves the full
-history to `tests/e2e/perf-results.json`.
+This runs both apps on 500 photos, prints the results, and saves the full
+history to `tests/e2e/perf-results.json`. Drop `--max-files 500` to benchmark
+the whole 10,000-photo set.
+
+The tables above were measured on the original 500-photo snapshot (64.85 MiB)
+with two threads. The shared dataset has since grown to 10,000 photos, so
+`--max-files 500` now selects a slightly different mix and the compression
+percentage shifts a little. On the same photos the result is deterministic;
+raw timings also depend on the CPU's boost and thermal state, so compare the
+relative speed rather than absolute seconds.
 
 ## Which should you pick?
 

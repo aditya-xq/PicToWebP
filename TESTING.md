@@ -98,12 +98,13 @@ editions log their UI-reported elapsed time (`[perf] ...`). For a dedicated,
 multi-run Python-vs-Rust comparison:
 
 ```bash
-uv run python tests/e2e/run_realistic_bench.py --runs 3
+uv run python tests/e2e/run_realistic_bench.py --max-files 500 --runs 3
 ```
 
 This builds the Rust CLI in release mode if needed, runs each CLI `--runs`
 times on temp copies (cleaned up), prints a summary table and merges the
-`bench` section of `perf-results.json`. Example output:
+`bench` section of `perf-results.json`. Omit `--max-files` to run the full
+10,000-photo set. Example output:
 
 ```
   python-cli  500 img | 28.37s | 17.63 img/s | 2.29 MiB/s | 60.8% smaller
@@ -126,7 +127,7 @@ numbers.
 
 ## Suite deep-dives
 
-### Python , `pytest` (96 = 95 passed, 1 gated skip)
+### Python , `pytest` (132 = 130 passed, 2 gated skips)
 
 | File | Kind | What it covers |
 | --- | --- | --- |
@@ -136,7 +137,7 @@ numbers.
 | `tests/test_web.py` | integration | FastAPI endpoints (convert/cancel/progress-SSE/validate/browse/single-upload/zip), SPA serving. One test is gated on `web-ts/dist-python` being built |
 | `tests/e2e/test_cli_e2e.py` | **live subprocess e2e** | spawns the real `python -m pictowebp`: exit codes, `<source>_webp_<timestamp>` contract, collision/hidden/corrupt handling, crash-safe output, EXIF keep/strip, lossless, interactive prompts via stdin, empty/no-op folders, **photo fidelity** (dimensions preserved, output never grows, GPS IFD stripped by default and preserved with `--keep-metadata`), the capped **realistic-dataset** run with perf capture, and a **bench-script smoke run** |
 
-### Rust , `cargo test` (43 = 32 unit + 11 live-binary)
+### Rust , `cargo test` (76 = 51 unit + 25 live-binary)
 
 - **Unit** (inline `#[cfg(test)]` in `convert.rs`, `discovery.rs`, `paths.rs`,
   `settings.rs`, `style.rs`, `ui.rs`, `main.rs`): mirrors the Python unit
