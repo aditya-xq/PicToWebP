@@ -126,6 +126,9 @@ jobs:
           cp "$BIN" "$STAGE/"
           cp LICENSE README.md "$STAGE/"
           tar -czf "dist/pictowebp-$VERSION-${{ matrix.target }}.tar.gz" -C dist "pictowebp-$VERSION-${{ matrix.target }}"
+          # Drop the staging tree first: on Unix the raw binary name has no
+          # extension and would otherwise collide with this directory.
+          rm -rf "$STAGE"
           # Raw binary for `cargo binstall` (no archive extraction needed).
           cp "$BIN" "dist/pictowebp-$VERSION-${{ matrix.target }}${{ matrix.ext }}"
           # Versioned installer scripts so agents can pin an immutable URL.
@@ -134,7 +137,6 @@ jobs:
             cp agent/pictowebp/scripts/install.sh dist/install.sh
             cp agent/pictowebp/scripts/install.ps1 dist/install.ps1
           fi
-          rm -rf "$STAGE"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
@@ -194,7 +196,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          sha256sum *.tar.gz install.sh install.ps1 > SHA256SUMS
+          sha256sum * > SHA256SUMS
           python3 - <<'PY'
           import hashlib
           import json
