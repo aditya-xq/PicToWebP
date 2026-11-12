@@ -130,13 +130,16 @@ if [ "$REQUIRE_ATTESTATION" = "1" ]; then
     [ "$SKIP_ATTESTATION" = "0" ] \
         || fail "--require-attestation conflicts with --skip-attestation"
     command -v gh >/dev/null 2>&1 \
-        || fail "gh is required for --require-attestation"
+        && gh attestation verify --help >/dev/null 2>&1 \
+        || fail "gh with attestation support (2.49+) is required for --require-attestation"
     gh auth token >/dev/null 2>&1 \
         || fail "gh must be authenticated for --require-attestation"
 fi
 
 gh_ready() {
-    command -v gh >/dev/null 2>&1 && gh auth token >/dev/null 2>&1
+    command -v gh >/dev/null 2>&1 \
+        && gh attestation verify --help >/dev/null 2>&1 \
+        && gh auth token >/dev/null 2>&1
 }
 
 if [ "$UNINSTALL" = "1" ]; then
@@ -253,7 +256,7 @@ else
             gh attestation verify "$MANIFEST" --repo "$REPO" >/dev/null \
                 || fail "latest.json attestation verification failed"
         elif [ "$SKIP_ATTESTATION" = "0" ]; then
-            echo "warning: gh is not authenticated; skipping manifest attestation" >&2
+            echo "warning: gh is unavailable, unauthenticated, or too old; skipping manifest attestation" >&2
         fi
         FOUND_SCHEMA=$(manifest_value "$MANIFEST" "schema") \
             || fail "Could not parse latest.json"
@@ -282,7 +285,7 @@ else
             || fail "Sigstore attestation verification failed"
         VERIFIED=1
     elif [ "$SKIP_ATTESTATION" = "0" ]; then
-        echo "warning: gh is unavailable or unauthenticated; skipping archive attestation" >&2
+        echo "warning: gh is unavailable, unauthenticated, or too old; skipping archive attestation" >&2
     fi
     if [ "$VERIFIED" = "0" ]; then
         echo "warning: installing without checksum or attestation verification" >&2

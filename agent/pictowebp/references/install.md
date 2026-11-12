@@ -32,7 +32,7 @@ Both scripts accept the same options.
 | `--uninstall` | Remove the install directory. |
 | `--json` | One JSON object on stdout. |
 | `--skip-attestation` | Do not call `gh attestation verify`. |
-| `--require-attestation` | Fail unless `gh` verifies the manifest and archive. |
+| `--require-attestation` | Fail unless `gh` verifies the manifest and archive. Requires `gh` 2.49 or newer. |
 
 ## Verify
 

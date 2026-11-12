@@ -51,6 +51,9 @@ function Test-InstalledOnPath {
 function Test-GhReady {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { return $false }
     & gh auth token 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    # Older gh versions authenticate but have no `gh attestation` command.
+    & gh attestation verify --help 2>$null | Out-Null
     return $LASTEXITCODE -eq 0
 }
 
@@ -84,7 +87,7 @@ if ($emulated) {
 if ($RequireAttestation) {
     if ($SkipAttestation) { throw "-RequireAttestation conflicts with -SkipAttestation" }
     if (-not (Test-GhReady)) {
-        throw "gh must be installed and authenticated for -RequireAttestation"
+        throw "gh with attestation support (2.49+) must be installed and authenticated for -RequireAttestation"
     }
 }
 if (-not $InstallDir) { $InstallDir = Get-DefaultInstallDir }
@@ -161,7 +164,7 @@ try {
                 if ($LASTEXITCODE -ne 0) { throw "latest.json attestation verification failed" }
             }
             elseif (-not $SkipAttestation) {
-                Write-Warning "gh is unavailable or unauthenticated; skipping manifest attestation."
+                Write-Warning "gh is unavailable, unauthenticated, or too old; skipping manifest attestation."
             }
             $manifest = Get-Content -Path $manifestFile -Raw | ConvertFrom-Json
             if ($manifest.schema -ne $ManifestSchema) { throw "Unexpected manifest schema: $($manifest.schema)" }
@@ -189,7 +192,7 @@ try {
             $verified = $true
         }
         elseif (-not $SkipAttestation) {
-            Write-Warning "gh is unavailable or unauthenticated; skipping archive attestation."
+            Write-Warning "gh is unavailable, unauthenticated, or too old; skipping archive attestation."
         }
         if (-not $verified) {
             Write-Warning "Installing without checksum or attestation verification."
