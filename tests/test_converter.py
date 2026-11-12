@@ -1,12 +1,20 @@
 """End-to-end tests for the conversion engine (batch + per-file)."""
 
+import os
+import stat
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from conftest import FixedDatetime
-from pictowebp.converter import ConversionError, ProcessedFile, convert_folder, process_file
+from pictowebp.converter import (
+    ConversionError,
+    ProcessedFile,
+    check_pixel_limit,
+    convert_folder,
+    process_file,
+)
 from pictowebp.enums import OutputImageFormat
 
 
@@ -84,7 +92,8 @@ def test_convert_folder_reports_colliding_inputs(image_factory, source_dir):
     progress = convert_folder(source_dir, threads=2, show_progress_bar=False)
 
     assert progress.converted_files == 0
-    assert progress.failed_files == 2
+    assert progress.failed_files == 0
+    assert progress.collision_files == 2
     reasons = [reason for _path, reason in progress.failure_details()]
     assert any("map to the same output" in reason for reason in reasons)
     folders = _output_dirs(source_dir)
@@ -120,6 +129,7 @@ def test_convert_folder_writes_report_to_custom_path(image_factory, source_dir, 
         threads=1,
         show_progress_bar=False,
         report_path=custom,
+        allow_report_outside=True,
     )
 
     assert progress.failed_files == 1
@@ -137,6 +147,7 @@ def test_convert_folder_does_not_write_report_when_no_failures(image_factory, so
         threads=1,
         show_progress_bar=False,
         report_path=source_dir / "should-not-exist.txt",
+        allow_report_outside=True,
     )
 
     assert progress.failed_files == 0
@@ -215,15 +226,19 @@ def test_process_file_converts_palette_mode_to_rgba(source_dir):
         assert converted.mode == "RGBA"
 
 
-def test_process_file_survives_decompression_bomb(image_factory, source_dir, monkeypatch):
+def test_process_file_survives_decompression_bomb(image_factory, source_dir):
     """A Pillow DecompressionBombError must be a per-file skip, not a crash."""
     image_factory("bomb.png")
     output_root = source_dir.parent / "out"
     output_root.mkdir()
-    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 16)
 
     result = process_file(
-        source_dir / "bomb.png", source_dir, output_root, 80, OutputImageFormat.WEBP
+        source_dir / "bomb.png",
+        source_dir,
+        output_root,
+        80,
+        OutputImageFormat.WEBP,
+        max_pixels=16,
     )
 
     assert isinstance(result, ConversionError)
@@ -330,3 +345,111 @@ def test_process_file_handles_same_stem_in_subdirectories(source_dir):
     assert isinstance(r2, ProcessedFile)
     assert (output_root / "a" / "photo.webp").is_file()
     assert (output_root / "b" / "photo.webp").is_file()
+
+
+def test_pixel_limit_rejects_oversized_images(monkeypatch):
+    monkeypatch.setenv("PICTOWEBP_MAX_PIXELS", "1000000")
+    check_pixel_limit(1000, 1000)
+    with pytest.raises(ValueError, match="too large"):
+        check_pixel_limit(1001, 1000)
+
+
+def test_converted_files_use_umask_permissions(image_factory, source_dir):
+    if os.name == "nt":
+        pytest.skip("POSIX permission check")
+    image_factory("one.png")
+
+    convert_folder(source_dir, threads=1, show_progress_bar=False)
+
+    output = _output_dirs(source_dir)[0] / "one.webp"
+    current = os.umask(0)
+    os.umask(current)
+    assert stat.S_IMODE(output.stat().st_mode) == 0o666 & ~current
+
+
+@pytest.mark.filterwarnings("ignore::PIL.Image.DecompressionBombWarning")
+def test_process_file_rejects_oversized_images(image_factory, source_dir):
+    image_factory("one.png")
+    output_root = source_dir.parent / "out"
+    output_root.mkdir()
+
+    result = process_file(
+        source_dir / "one.png",
+        source_dir,
+        output_root,
+        80,
+        OutputImageFormat.WEBP,
+        max_pixels=575,
+    )
+
+    assert isinstance(result, ConversionError)
+    assert "too large" in result.reason
+    assert not (output_root / "one.webp").exists()
+
+
+def test_large_image_threshold_matches_breakpoints():
+    from pictowebp.converter import _is_large_dimensions
+
+    assert not _is_large_dimensions(10_000, 10_000)  # exactly 100 MP
+    assert _is_large_dimensions(11_648, 8_736)  # 102 MP medium format
+    assert _is_large_dimensions(14_204, 10_652)  # 151 MP digital back
+    assert _is_large_dimensions(23_200, 17_400)  # 400 MP multi-shot
+
+
+def test_process_file_applies_exif_orientation(source_dir):
+    path = source_dir / "portrait.jpg"
+    image = Image.new("RGB", (40, 20), (10, 120, 200))
+    exif = Image.Exif()
+    exif[274] = 6  # rotate 90 CW on display
+    image.save(path, exif=exif)
+    output_root = source_dir.parent / "out"
+    output_root.mkdir()
+
+    process_file(path, source_dir, output_root, 80, OutputImageFormat.WEBP)
+
+    with Image.open(output_root / "portrait.webp") as converted:
+        assert converted.size == (20, 40)
+        assert converted.getexif().get(274) in (None, 1)
+
+
+def test_process_file_keeps_exif_but_not_stale_orientation(source_dir):
+    path = source_dir / "portrait-keep.jpg"
+    image = Image.new("RGB", (40, 20), (10, 120, 200))
+    exif = Image.Exif()
+    exif[274] = 6
+    image.save(path, exif=exif)
+    output_root = source_dir.parent / "out-keep"
+    output_root.mkdir()
+
+    process_file(path, source_dir, output_root, 80, OutputImageFormat.WEBP, strip_metadata=False)
+
+    with Image.open(output_root / "portrait-keep.webp") as converted:
+        assert converted.size == (20, 40)
+        assert converted.getexif().get(274) in (None, 1)
+
+
+def test_process_file_preserves_icc_profile(source_dir):
+    from PIL import ImageCms
+
+    profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    path = source_dir / "wide-gamut.jpg"
+    Image.new("RGB", (16, 16), (200, 40, 90)).save(path, icc_profile=profile)
+    output_root = source_dir.parent / "out-icc"
+    output_root.mkdir()
+
+    process_file(path, source_dir, output_root, 80, OutputImageFormat.WEBP)
+
+    with Image.open(output_root / "wide-gamut.webp") as converted:
+        assert converted.info.get("icc_profile")
+
+
+def test_process_file_reports_unsupported_phone_formats(source_dir):
+    path = source_dir / "phone.heic"
+    path.write_bytes(b"not really heic")
+    output_root = source_dir.parent / "out-unsupported"
+    output_root.mkdir()
+
+    result = process_file(path, source_dir, output_root, 80, OutputImageFormat.WEBP)
+
+    assert isinstance(result, ConversionError)
+    assert "unsupported input format" in result.reason

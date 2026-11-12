@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import argparse
 import contextlib
-import sys
 from collections import OrderedDict
 from pathlib import Path
 
-from pictowebp.constants import ERROR_REPORT_NAME
+from pictowebp.output import emit, is_json_mode
 from pictowebp.progress import ConversionProgress
 from pictowebp.style import (
     BOLD_CYAN,
@@ -19,6 +17,7 @@ from pictowebp.style import (
     RED,
     YELLOW,
     paint,
+    sanitize,
     truncate_reason,
 )
 from pictowebp.utils import categorize_conversion_error, open_folder
@@ -26,52 +25,61 @@ from pictowebp.utils import categorize_conversion_error, open_folder
 
 def section(title: object, style: str = BOLD_CYAN) -> None:
     """Print a section header framed by separator lines."""
-    print(f"  {paint(LINE, DIM)}")
-    print(f"   {paint(title, style)}")
-    print(f"  {paint(LINE, DIM)}")
+    emit(f"  {paint(LINE, DIM)}")
+    emit(f"   {paint(title, style)}")
+    emit(f"  {paint(LINE, DIM)}")
 
 
 def field(label: str, value: object, *, style: str = CYAN) -> None:
     """Print an aligned ``Label: value`` pair."""
-    print(f"  {paint(label, style)} {value}")
+    emit(f"  {paint(label, style)} {sanitize(value)}")
 
 
 def print_banner() -> None:
     """Print the welcome banner."""
-    print()
-    print(f"  {paint('PicToWebP', BOLD_CYAN)}")
-    print(f"  {paint('Bulk Image to WebP Converter', DIM)}")
-    print()
+    emit()
+    emit(f"  {paint('PicToWebP', BOLD_CYAN)}")
+    emit(f"  {paint('Bulk Image to WebP Converter', DIM)}")
+    emit()
 
 
 def print_no_files_found(source: Path) -> None:
     """Print the 'no files found' message."""
-    print()
+    emit()
     section("No convertible images found", YELLOW)
-    print()
+    emit()
     field("Source:", source)
 
 
 def print_settings(
     source: Path,
-    output: Path,
+    output: Path | None,
     quality: int,
     threads: int,
     *,
     lossless: bool,
     strip_metadata: bool,
+    dry_run: bool = False,
+    max_pixels: int = 500_000_000,
 ) -> None:
     """Print the settings banner before conversion starts."""
-    print()
+    emit()
     section("Configuration", BOLD_CYAN)
-    print()
+    emit()
     field("Source:", source)
-    field("Output:", output)
+    if output is None:
+        label = "would be created next to the source" if dry_run else "created next to the source"
+    elif str(output) in ("", "."):
+        label = "current folder"
+    else:
+        label = output
+    field("Output:", label)
     field("Quality:", f"{quality}{' (lossless)' if lossless else ''}")
     field("Threads:", threads)
+    field("Max pixels:", f"{max_pixels:,}")
     field("Mode:", "lossless" if lossless else f"lossy q={quality}")
     field("Metadata:", "strip" if strip_metadata else "keep")
-    print()
+    emit()
 
 
 def _summarize_failures(details: list[tuple[str, str]]) -> None:
@@ -79,9 +87,9 @@ def _summarize_failures(details: list[tuple[str, str]]) -> None:
     if not details:
         return
 
-    print()
+    emit()
     section(f"Files Not Converted ({len(details)})", RED)
-    print()
+    emit()
 
     groups: OrderedDict[str, list[str]] = OrderedDict()
     for file_path, reason in details:
@@ -93,13 +101,13 @@ def _summarize_failures(details: list[tuple[str, str]]) -> None:
         category = categorize_conversion_error(reason)
         display_reason = truncate_reason(reason)
         if len(paths) == 1:
-            print(f"  {paint(category + ':', YELLOW)} {display_reason}")
-            print(f"    {paint(paths[0], DIM)}")
+            emit(f"  {paint(category + ':', YELLOW)} {display_reason}")
+            emit(f"    {paint(paths[0], DIM)}")
         else:
-            print(f"  {paint(category + ':', YELLOW)} {display_reason} ({len(paths)})")
+            emit(f"  {paint(category + ':', YELLOW)} {display_reason} ({len(paths)})")
             for path in paths:
-                print(f"    {paint(path, DIM)}")
-        print()
+                emit(f"    {paint(path, DIM)}")
+        emit()
 
 
 def format_duration(seconds: float) -> str:
@@ -110,9 +118,18 @@ def format_duration(seconds: float) -> str:
     return f"{minutes}m {secs:02d}s"
 
 
-def _maybe_open_output_folder(output_path: Path, converted: int) -> None:
+def _maybe_open_output_folder(
+    output_path: Path, converted: int, *, allow_prompt: bool = True
+) -> None:
     """Ask whether to open the output folder; interactive terminals only."""
-    if converted == 0 or not (sys.stdin.isatty() and sys.stdout.isatty()):
+    import sys
+
+    if (
+        not allow_prompt
+        or is_json_mode()
+        or converted == 0
+        or not (sys.stdin.isatty() and sys.stdout.isatty())
+    ):
         return
     try:
         answer = input("  Open the output folder? [Y/n] ").strip().lower()
@@ -126,26 +143,45 @@ def _maybe_open_output_folder(output_path: Path, converted: int) -> None:
 
 def render_final_summary(
     progress: ConversionProgress,
-    args: argparse.Namespace,
     source_folder: Path,
-) -> int:
-    """Print the run summary and return the process exit code."""
+    *,
+    report: Path | None = None,
+    dry_run: bool = False,
+    discovered: int | None = None,
+    allow_prompt: bool = True,
+) -> None:
+    """Print the run summary (the caller decides the exit code)."""
     snap = progress.snapshot()
-    if snap["total_files"] == 0:
+    failed = snap["failed_files"]
+    collisions = snap["collision_files"]
+    converted = snap["converted_files"]
+    total = snap["total_files"]
+
+    if dry_run:
+        emit()
+        section("Dry run (nothing written)", YELLOW)
+        emit()
+        field("Images found:", f"{discovered if discovered is not None else total:,}")
+        field("Would convert:", f"{converted:,}")
+        field("Would skip:", f"{failed + collisions:,}")
+        field("Time taken:", format_duration(snap["elapsed_seconds"]))
+        _summarize_failures(progress.failure_details())
+        emit(f"  {paint(LINE, DIM)}")
+        emit()
+        return
+
+    if total == 0:
         print_no_files_found(source_folder)
-        return 0
+        return
 
     output_folder = snap["output_folder"]
     output_path = Path(output_folder) if output_folder else None
-    failed = snap["failed_files"]
-    total = snap["total_files"]
-    converted = snap["converted_files"]
 
-    if failed == 0:
+    if failed == 0 and collisions == 0:
         section("✓ Conversion Complete", GREEN)
     else:
         section("Conversion Complete (with errors)", YELLOW)
-    print()
+    emit()
     if output_path:
         field("Output folder:", output_path)
     field("Images converted:", f"{converted:,}/{total:,}")
@@ -159,20 +195,13 @@ def render_final_summary(
     details = progress.failure_details()
     _summarize_failures(details)
 
-    if details:
-        report = args.report or (output_path / ERROR_REPORT_NAME if output_path else None)
-        if report and report.exists():
+    if details and report is not None:
+        if report.exists():
             field("Error report:", report)
-        elif report:
-            print(f"  {paint('Warning:', YELLOW)} Could not write {report}")
+        else:
+            emit(f"  {paint('Warning:', YELLOW)} Could not write {report}")
 
-    print(f"  {paint(LINE, DIM)}")
-    print()
+    emit(f"  {paint(LINE, DIM)}")
+    emit()
     if output_path:
-        _maybe_open_output_folder(output_path, converted)
-    # Exit non-zero only when nothing converted (a hard failure). Partial
-    # failures are reported in the summary and the error report, but do
-    # not warrant a non-zero exit code.
-    if failed and converted == 0:
-        return 3
-    return 0
+        _maybe_open_output_folder(output_path, converted, allow_prompt=allow_prompt)

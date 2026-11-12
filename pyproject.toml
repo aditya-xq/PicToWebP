@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pictowebp"
-version = "1.0.0"
+version = "1.1.0"
 description = "Blazingly fast bulk image-to-WebP converter with a CLI and a web UI."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Aditya XQ" }]
 keywords = ["webp", "image", "converter", "batch", "optimization"]
@@ -18,7 +18,6 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -26,7 +25,9 @@ classifiers = [
     "Topic :: Multimedia :: Graphics :: Graphics Conversion",
 ]
 dependencies = [
-    "pillow>=12.3",
+    # 13.0.0 fixes the 40 advisories affecting 12.3.0. It requires Python 3.11+,
+    # which is why the package no longer supports the EOL 3.10 runtime.
+    "pillow>=13.0",
     "tqdm>=4.70",
 ]
 
@@ -56,12 +57,20 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src_py/pictowebp"]
 
+# The Python sdist is not the distribution channel for the Rust crate or the
+# Vite UI; including their build trees would pull in node_modules and binaries.
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "web-ts",
+    "src_rust",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
 
 [tool.pyright]
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 include = ["src_py", "tests"]
 typeCheckingMode = "standard"
 

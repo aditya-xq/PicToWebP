@@ -233,7 +233,7 @@ def test_interactive_prompt_flow(tmp_path: Path):
     still completes a full conversion."""
     source = copy_corpus(tmp_path)
     proc = subprocess.run(
-        [sys.executable, "-m", "pictowebp", "--no-progress"],
+        [sys.executable, "-m", "pictowebp", "--no-progress", "--interactive"],
         input=f"{source}\n\n\n",  # directory, quality (default), threads (default)
         cwd=tmp_path,
         capture_output=True,
@@ -386,3 +386,29 @@ def test_bench_script_smoke_run(tmp_path: Path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "python-cli-t2-20f" in proc.stdout
     assert "rust-cli-t2-20f" in proc.stdout
+
+
+def test_agent_json_contract_over_the_process_boundary(source: Path):
+    """--json produces one parseable object on stdout and never prompts."""
+    import json
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "pictowebp", str(source), "--json"],
+        cwd=source.parent,
+        capture_output=True,
+        text=True,
+        timeout=240,
+        stdin=subprocess.DEVNULL,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["schema"] == "pictowebp.result/v1"
+    assert payload["tool"]["edition"] == "python"
+    assert payload["counts"]["converted"] == 7
+    assert payload["counts"]["collisions"] == 2
+    assert payload["counts"]["failed"] == 1
+    assert Path(payload["output"]).is_dir()
+    # Human output must not pollute stdout, and must still exist on stderr.
+    assert "Configuration" not in proc.stdout
+    assert "Configuration" in proc.stderr

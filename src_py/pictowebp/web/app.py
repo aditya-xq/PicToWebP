@@ -31,13 +31,15 @@ import uvicorn
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from PIL import Image
+from PIL import Image, ImageOps
 
 from pictowebp import __version__
 from pictowebp.console import force_utf8_stdio
 from pictowebp.converter import (
     build_save_kwargs,
+    check_pixel_limit,
     convert_folder,
+    pixel_limit_from_env,
     prepare_image,
     request_cancellation,
 )
@@ -423,7 +425,26 @@ def create_app() -> FastAPI:
             )
         try:
             contents = await file.read()
-            img = Image.open(io.BytesIO(contents))
+            limit = pixel_limit_from_env()
+            # Match the CLI: honour the decoded-pixel cap and raise the bomb
+            # guard to it so current 100-200 MP phone photos are accepted.
+            Image.MAX_IMAGE_PIXELS = limit
+            with Image.open(io.BytesIO(contents)) as opened:
+                check_pixel_limit(opened.width, opened.height, limit)
+                # Phone photos are often stored in sensor orientation. The CLI
+                # transposes before encoding; do the same here so a portrait
+                # upload is not returned sideways.
+                img = ImageOps.exif_transpose(opened)
+        except (Image.DecompressionBombError, ValueError) as exc:
+            if "too large" in str(exc) or "exceeds limit" in str(exc):
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="Image is too large to convert",
+                ) from None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not read the uploaded image",
+            ) from None
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

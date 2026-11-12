@@ -65,3 +65,19 @@ def test_concurrent_records_are_not_lost():
     snap = progress.snapshot()
     assert snap["original_bytes"] == 8000
     assert snap["converted_files"] == 800
+
+
+def test_collisions_are_counted_separately_from_failures():
+    progress = ConversionProgress()
+    progress.start(total_files=3)
+    progress.record(original_bytes=100, converted_bytes=50)
+    progress.record_failure(file_path="broken.png", reason="invalid data")
+    progress.record_collision(file_path="dup.png", reason="same output")
+
+    snap = progress.snapshot()
+
+    assert snap["converted_files"] == 1
+    assert snap["failed_files"] == 1
+    assert snap["collision_files"] == 1
+    assert snap["processed_files"] == 3
+    assert len(progress.failure_details()) == 2

@@ -32,6 +32,14 @@ def categorize_conversion_error(reason: str) -> str:
     normalized = reason.lower()
     if "permission denied" in normalized or "access is denied" in normalized:
         return "Permission denied"
+    if "too large" in normalized or "exceeds limit" in normalized:
+        return "Image too large"
+    if "unsupported input format" in normalized:
+        return "Unsupported format"
+    if "map to the same output" in normalized:
+        return "Output name collision"
+    if "refusing to overwrite" in normalized:
+        return "Output file already exists"
     if any(token in normalized for token in _CORRUPT_TOKENS):
         return "Corrupt or mislabeled image"
     if any(token in normalized for token in _UNREADABLE_TOKENS):

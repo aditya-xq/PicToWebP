@@ -8,9 +8,10 @@ MIN_QUALITY = 1
 MAX_QUALITY = 100
 DEFAULT_QUALITY = 80
 
-DEFAULT_THREADS = os.cpu_count() or 4
 MIN_THREADS = 1
 MAX_THREADS = 256
+# Never exceed the documented cap, even on machines with more logical CPUs.
+DEFAULT_THREADS = min(os.cpu_count() or 4, MAX_THREADS)
 
 # Number of jobs submitted to the process pool per drain cycle. A larger
 # number keeps workers busier but increases memory pressure from pending futures.

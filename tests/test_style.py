@@ -9,6 +9,7 @@ from pictowebp.style import (
     RED,
     YELLOW,
     paint,
+    sanitize,
     supports_color,
     truncate_reason,
 )
@@ -66,3 +67,8 @@ def test_truncate_reason_long_is_truncated():
 def test_color_constants_are_unique():
     constants = {BOLD_CYAN, CYAN, DIM, GREEN, YELLOW, RED}
     assert len(constants) == 6
+
+
+def test_sanitize_replaces_control_characters():
+    assert sanitize("a\x1b[31mb") == "a?[31mb"
+    assert sanitize("plain") == "plain"

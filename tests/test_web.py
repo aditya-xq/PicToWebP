@@ -1,5 +1,6 @@
 """Tests for the FastAPI application."""
 
+import io
 import json
 import re
 from collections.abc import Iterator
@@ -8,6 +9,7 @@ from threading import Lock
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 import pictowebp.web.app as web_app_module
 from pictowebp.progress import TERMINAL_STATUSES
@@ -25,6 +27,14 @@ def client() -> Iterator[TestClient]:
     # so the test client must present one too (default is "testserver").
     with TestClient(app, base_url="http://127.0.0.1") as test_client:
         yield test_client
+
+
+@pytest.fixture(autouse=True)
+def _restore_pixel_limit() -> Iterator[None]:
+    """Single-upload handling raises Pillow's global bomb threshold."""
+    original = Image.MAX_IMAGE_PIXELS
+    yield
+    Image.MAX_IMAGE_PIXELS = original
 
 
 @pytest.fixture()
@@ -58,8 +68,7 @@ def test_index_serves_built_spa(client: TestClient):
     external = sorted(
         url
         for url in re.findall(r'\b(?:src|href)=["\']([^"\']+)["\']', response.text)
-        if url.startswith(("http://", "https://"))
-        and not url.startswith(site_origin)
+        if url.startswith(("http://", "https://")) and not url.startswith(site_origin)
     )
     assert set(external) <= allowed, external
 
@@ -232,3 +241,41 @@ def test_convert_single_runs_off_event_loop(client: TestClient, image_factory, s
     )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("image/webp")
+
+
+def test_convert_single_applies_exif_orientation(client: TestClient):
+    """A portrait phone upload must come back upright, like the CLI output."""
+    buffer = io.BytesIO()
+    image = Image.new("RGB", (40, 20), (10, 20, 30))
+    exif = Image.Exif()
+    exif[274] = 6  # rotate 90 CW on display
+    image.save(buffer, format="JPEG", exif=exif)
+
+    response = client.post(
+        "/api/convert-single",
+        files={"file": ("portrait.jpg", buffer.getvalue(), "image/jpeg")},
+    )
+
+    assert response.status_code == 200
+    with Image.open(io.BytesIO(response.content)) as converted:
+        assert converted.size == (20, 40)
+        assert converted.getexif().get(274) in (None, 1)
+
+
+@pytest.mark.filterwarnings("ignore::PIL.Image.DecompressionBombWarning")
+def test_convert_single_enforces_the_pixel_limit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    limit = 255
+    monkeypatch.setattr(web_app_module, "pixel_limit_from_env", lambda: limit)
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (16, 16)).save(buffer, format="PNG")  # 256 pixels
+
+    response = client.post(
+        "/api/convert-single",
+        files={"file": ("big.png", buffer.getvalue(), "image/png")},
+    )
+
+    assert response.status_code == 413
+    assert "too large" in response.json()["detail"]

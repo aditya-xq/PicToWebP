@@ -7,6 +7,7 @@ from pictowebp.paths import resolve_output_folder
 
 def test_resolve_output_folder_creates_sibling(source_dir):
     output = resolve_output_folder(source_dir, OutputImageFormat.WEBP)
+    assert output is not None
     assert output.parent == source_dir.parent
     assert output.name.startswith(f"{source_dir.name}_webp_")
     assert output.is_dir()
@@ -15,6 +16,8 @@ def test_resolve_output_folder_creates_sibling(source_dir):
 def test_resolve_output_folder_creates_unique_folders(source_dir):
     first = resolve_output_folder(source_dir, OutputImageFormat.WEBP)
     second = resolve_output_folder(source_dir, OutputImageFormat.WEBP)
+    assert first is not None
+    assert second is not None
     assert first.is_dir()
     assert second.is_dir()
     assert first != second
@@ -26,5 +29,6 @@ def test_resolve_output_folder_collision_suffixed(monkeypatch, source_dir):
     base.mkdir()
 
     output = resolve_output_folder(source_dir, OutputImageFormat.WEBP)
+    assert output is not None
     assert output != base
     assert output.is_dir()

@@ -8,7 +8,6 @@ real terminal and the :envvar:`NO_COLOR` convention is not set.
 from __future__ import annotations
 
 import os
-import sys
 
 from pictowebp.constants import MAX_REASON_DISPLAY_LENGTH
 
@@ -24,15 +23,25 @@ RED = "\033[31m"
 
 
 def supports_color() -> bool:
-    """Return True if ANSI colors should be emitted on stdout."""
+    """Return True if ANSI colors should be emitted on the active stream."""
     if os.environ.get("NO_COLOR"):
         return False
-    return sys.stdout.isatty()
+    from pictowebp import output
+
+    return output.active_stream().isatty()
+
+
+def sanitize(value: object) -> str:
+    """Replace control characters so hostile names cannot inject ANSI codes."""
+    return "".join(
+        "?" if (ord(character) < 32 or ord(character) == 127) else character
+        for character in str(value)
+    )
 
 
 def paint(value: object, style: str) -> str:
     """Wrap ``value`` in ``style`` if the terminal supports color."""
-    text = str(value)
+    text = sanitize(value)
     if supports_color():
         return f"{style}{text}{RESET}"
     return text
@@ -40,6 +49,7 @@ def paint(value: object, style: str) -> str:
 
 def truncate_reason(reason: str) -> str:
     """Trim a long error message to a readable terminal length."""
+    reason = sanitize(reason)
     if len(reason) <= MAX_REASON_DISPLAY_LENGTH:
         return reason
     return reason[: MAX_REASON_DISPLAY_LENGTH - 1] + "…"

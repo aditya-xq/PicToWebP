@@ -160,6 +160,7 @@ def test_main_report_path_override(tmp_path: Path):
             "--no-progress",
             "--report",
             str(custom_report),
+            "--allow-report-outside",
         ]
     )
     assert exit_code == 3
@@ -283,3 +284,40 @@ def test_format_duration_helper():
     assert format_duration(46.11) == "46.1s"
     assert format_duration(65.0) == "1m 05s"
     assert format_duration(186.0) == "3m 06s"
+
+
+def test_default_threads_never_exceeds_the_cap():
+    from pictowebp.constants import DEFAULT_THREADS, MAX_THREADS
+
+    assert 1 <= DEFAULT_THREADS <= MAX_THREADS
+
+
+def test_allow_prompt_false_never_reads_stdin(monkeypatch, tmp_path: Path):
+    """``--yes`` must not ask to open the output folder, even on a TTY."""
+    import builtins
+    import sys
+
+    from pictowebp import output, ui
+
+    output.set_json_mode(False)
+
+    class _Tty:
+        def isatty(self) -> bool:
+            return True
+
+    calls: list[str] = []
+
+    def fake_input(prompt: str = "") -> str:
+        calls.append(prompt)
+        return "n"
+
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    monkeypatch.setattr(sys, "stdout", _Tty())
+    monkeypatch.setattr(builtins, "input", fake_input)
+
+    ui._maybe_open_output_folder(tmp_path, 1, allow_prompt=False)
+    assert calls == []
+
+    # Positive control: the same call does prompt when allowed.
+    ui._maybe_open_output_folder(tmp_path, 1, allow_prompt=True)
+    assert len(calls) == 1

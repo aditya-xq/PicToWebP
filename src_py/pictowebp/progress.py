@@ -23,6 +23,7 @@ class ConversionProgress:
         self._processed_files = 0
         self._converted_files = 0
         self._failed_files = 0
+        self._collision_files = 0
         self._original_bytes = 0
         self._converted_bytes = 0
         self._elapsed_seconds = 0.0
@@ -42,6 +43,7 @@ class ConversionProgress:
             self._processed_files = 0
             self._converted_files = 0
             self._failed_files = 0
+            self._collision_files = 0
             self._original_bytes = 0
             self._converted_bytes = 0
             self._elapsed_seconds = 0.0
@@ -68,6 +70,17 @@ class ConversionProgress:
         """Return a stable copy of every failed file and its reason."""
         with self._lock:
             return list(self._failure_details)
+
+    def record_collision(self, file_path: str, reason: str) -> None:
+        """Record an input skipped because two inputs map to one output name.
+
+        Collisions are tracked separately from conversion failures so callers
+        can distinguish "corrupt file" from "same-stem collision".
+        """
+        with self._lock:
+            self._processed_files += 1
+            self._collision_files += 1
+            self._failure_details.append((file_path, reason))
 
     def finish(
         self,
@@ -132,6 +145,11 @@ class ConversionProgress:
             return self._failed_files
 
     @property
+    def collision_files(self) -> int:
+        with self._lock:
+            return self._collision_files
+
+    @property
     def bytes_saved(self) -> int:
         with self._lock:
             return max(0, self._original_bytes - self._converted_bytes)
@@ -174,6 +192,7 @@ class ConversionProgress:
                 "processed_files": self._processed_files,
                 "converted_files": self._converted_files,
                 "failed_files": self._failed_files,
+                "collision_files": self._collision_files,
                 "original_bytes": self._original_bytes,
                 "converted_bytes": self._converted_bytes,
                 "bytes_saved": saved,
