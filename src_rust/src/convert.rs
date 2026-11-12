@@ -20,6 +20,38 @@ const OUTPUT_EXTENSION: &str = "webp";
 const CHUNK_SIZE: usize = 64;
 static TEMPORARY_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+/// Default cap on decoded image dimensions. Kept in settings so the CLI,
+/// environment, and converters share one value.
+fn check_pixel_limit(width: u32, height: u32, limit: u64) -> Result<()> {
+    let pixels = u64::from(width) * u64::from(height);
+    if pixels > limit {
+        anyhow::bail!(
+            "image is too large: {width}x{height} ({pixels} pixels); limit is {limit}. \
+             Set PICTOWEBP_MAX_PIXELS or pass --max-pixels to override."
+        );
+    }
+    Ok(())
+}
+
+fn is_large_dimensions(width: u32, height: u32) -> bool {
+    u64::from(width) * u64::from(height) > crate::settings::LARGE_IMAGE_PIXELS
+}
+
+/// Read only the header dimensions; corrupt/unsupported files are left to the
+/// normal conversion path where they are reported as failures.
+fn is_large_image(path: &Path) -> bool {
+    let Ok(reader) = image::ImageReader::open(path) else {
+        return false;
+    };
+    let Ok(reader) = reader.with_guessed_format() else {
+        return false;
+    };
+    let Ok((width, height)) = reader.into_dimensions() else {
+        return false;
+    };
+    is_large_dimensions(width, height)
+}
+
 /// Tracks whether the user requested cancellation via Ctrl+C. Shared
 /// between :func:`crate::main::run` and :func:`convert_all`.
 pub static CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -43,7 +75,12 @@ pub struct FileError {
 #[derive(Debug, Default, Clone)]
 pub struct Summary {
     pub converted_files: u64,
+    /// Files that failed to convert (decode/write errors).
     pub failed_files: usize,
+    /// Inputs skipped because two inputs map to the same output name. Kept
+    /// separate from conversion failures so callers can tell "corrupt file"
+    /// apart from "same-stem collision".
+    pub collision_files: usize,
     pub original_bytes: u64,
     pub converted_bytes: u64,
 }
@@ -62,9 +99,38 @@ impl Summary {
 }
 
 /// The result of a conversion run, including per-file errors.
+#[derive(Default)]
 pub struct ConvertResult {
     pub summary: Summary,
     pub file_errors: Vec<FileError>,
+}
+
+/// Compute what a run would do without decoding or writing anything.
+///
+/// Used by `--dry-run`: detects same-stem collisions and counts convertible
+/// files so an agent can plan before touching the filesystem.
+pub fn preview(files: &[PathBuf], source_root: &Path, single_file: bool) -> ConvertResult {
+    let collisions = output_collisions(files, source_root, single_file);
+    let mut summary = Summary::default();
+    let mut file_errors = Vec::new();
+
+    for file in files {
+        if let Some(message) = collisions.get(file) {
+            summary.collision_files += 1;
+            file_errors.push(FileError {
+                path: file.clone(),
+                category: "Output name collision",
+                message: message.clone(),
+            });
+        } else {
+            summary.converted_files += 1;
+        }
+    }
+
+    ConvertResult {
+        summary,
+        file_errors,
+    }
 }
 
 /// Convert every file into `output_root`, mirroring the directory structure.
@@ -89,29 +155,55 @@ pub fn convert_all(
         .build()
         .expect("thread pool construction should succeed");
 
-    let collisions = output_collisions(files, &settings.source_folder);
+    let collisions = output_collisions(files, &settings.source_root, settings.single_file);
     let convertible_files: Vec<&PathBuf> = files
         .iter()
         .filter(|file| !collisions.contains_key(*file))
         .collect();
     let mut results: Vec<(PathBuf, Result<FileOutcome>)> = Vec::new();
-    for chunk_start in (0..convertible_files.len()).step_by(CHUNK_SIZE) {
+
+    // Giant images are decoded one at a time: with four bytes per pixel, a
+    // 400 MP image is ~1.6 GB, so running several in parallel would multiply
+    // peak memory by the worker count. Everything else stays pooled.
+    let (large, normal): (Vec<&PathBuf>, Vec<&PathBuf>) = convertible_files
+        .into_iter()
+        .partition(|file| is_large_image(file));
+
+    for file in large {
         if CANCEL_REQUESTED.load(Ordering::SeqCst) {
             break;
         }
-        let end = (chunk_start + CHUNK_SIZE).min(convertible_files.len());
+        let result = process_file(
+            file,
+            &settings.source_root,
+            output_root,
+            settings.quality,
+            settings.lossless,
+            settings.strip_metadata,
+            settings.max_pixels,
+        );
+        progress_bar.inc(1);
+        results.push((file.clone(), result));
+    }
+
+    for chunk_start in (0..normal.len()).step_by(CHUNK_SIZE) {
+        if CANCEL_REQUESTED.load(Ordering::SeqCst) {
+            break;
+        }
+        let end = (chunk_start + CHUNK_SIZE).min(normal.len());
         let chunk: Vec<(PathBuf, Result<FileOutcome>)> = pool.install(|| {
-            convertible_files[chunk_start..end]
+            normal[chunk_start..end]
                 .par_iter()
                 .progress_with(progress_bar.clone())
                 .map(|file| {
                     let result = process_file(
                         file,
-                        &settings.source_folder,
+                        &settings.source_root,
                         output_root,
                         settings.quality,
                         settings.lossless,
                         settings.strip_metadata,
+                        settings.max_pixels,
                     );
                     ((*file).clone(), result)
                 })
@@ -124,7 +216,7 @@ pub fn convert_all(
     let mut file_errors: Vec<FileError> = Vec::new();
 
     for (path, message) in collisions {
-        summary.failed_files += 1;
+        summary.collision_files += 1;
         file_errors.push(FileError {
             path: path.clone(),
             category: "Output name collision",
@@ -159,7 +251,7 @@ pub fn convert_all(
 
 /// Persist all failures for review without requiring terminal scrollback.
 pub fn write_error_report(
-    output_folder: &Path,
+    base_folder: Option<&Path>,
     file_errors: &[FileError],
     override_path: Option<&Path>,
 ) -> Result<Option<PathBuf>> {
@@ -169,7 +261,12 @@ pub fn write_error_report(
 
     let report = match override_path {
         Some(path) => path.to_path_buf(),
-        None => output_folder.join(crate::style::ERROR_REPORT_NAME),
+        None => match base_folder {
+            // A single-file run writes next to the source; only persist a
+            // report when the caller explicitly asked for one.
+            Some(folder) => folder.join(crate::style::ERROR_REPORT_NAME),
+            None => return Ok(None),
+        },
     };
     let mut contents = String::from("PicToWebP conversion errors\n\n");
     for error in file_errors {
@@ -187,13 +284,19 @@ pub fn write_error_report(
     Ok(Some(report))
 }
 
-fn output_collisions(files: &[PathBuf], source_folder: &Path) -> HashMap<PathBuf, String> {
+fn output_collisions(
+    files: &[PathBuf],
+    source_folder: &Path,
+    single_file: bool,
+) -> HashMap<PathBuf, String> {
     let mut destinations: HashMap<PathBuf, Vec<&PathBuf>> = HashMap::new();
     for file in files {
-        let destination = file
-            .strip_prefix(source_folder)
-            .unwrap_or(file)
-            .with_extension(OUTPUT_EXTENSION);
+        let relative = if single_file {
+            Path::new(file.file_name().unwrap_or(file.as_os_str()))
+        } else {
+            file.strip_prefix(source_folder).unwrap_or(file)
+        };
+        let destination = relative.with_extension(OUTPUT_EXTENSION);
         destinations.entry(destination).or_default().push(file);
     }
 
@@ -216,6 +319,10 @@ fn categorize_error(message: &str) -> &'static str {
     let normalized = message.to_ascii_lowercase();
     if normalized.contains("permission denied") || normalized.contains("access is denied") {
         "Permission denied"
+    } else if normalized.contains("too large") {
+        "Image too large"
+    } else if normalized.contains("unsupported input format") {
+        "Unsupported format"
     } else if [
         "cannot identify",
         "invalid",
@@ -250,7 +357,14 @@ pub fn process_file(
     quality: u8,
     lossless: bool,
     strip_metadata: bool,
+    max_pixels: u64,
 ) -> Result<FileOutcome> {
+    if let Some(extension) = unsupported_extension(file_path) {
+        anyhow::bail!(
+            "unsupported input format .{extension}; export the image as JPEG or PNG first"
+        );
+    }
+
     let relative_path = file_path.strip_prefix(source_folder)?;
     let mut destination = output_folder.to_path_buf();
     destination.push(relative_path);
@@ -266,8 +380,24 @@ pub fn process_file(
     // decoding, then re-encode it into the WebP container when requested.
     let reader = image::ImageReader::open(file_path)?.with_guessed_format()?;
     let mut decoder = reader.into_decoder()?;
+    let (width, height) = decoder.dimensions();
+    check_pixel_limit(width, height, max_pixels)?;
+    let orientation = decoder.orientation()?;
+    // A damaged ICC segment should not reject an otherwise decodable image;
+    // treat an unreadable profile as "no profile".
+    let icc = decoder.icc_profile().unwrap_or(None);
     let exif = decoder.exif_metadata()?.as_deref().and_then(normalize_exif);
-    let image = image::DynamicImage::from_decoder(decoder)?;
+    let mut image = image::DynamicImage::from_decoder(decoder)?;
+    if orientation != image::metadata::Orientation::NoTransforms {
+        image.apply_orientation(orientation);
+    }
+    // The pixels are upright now, so the EXIF orientation tag must not rotate
+    // them a second time in a viewer.
+    let exif = if orientation == image::metadata::Orientation::NoTransforms {
+        exif
+    } else {
+        exif.and_then(|payload| upright_exif(&payload))
+    };
 
     let rgba = image.to_rgba8();
     let (width, height) = rgba.dimensions();
@@ -277,14 +407,15 @@ pub fn process_file(
         webp::Encoder::from_rgba(rgba.as_raw(), width, height).encode(f32::from(quality))
     };
 
-    // Embed the source EXIF chunk unless metadata stripping was requested.
-    let payload: Vec<u8> = if strip_metadata {
-        encoded.as_ref().to_vec()
-    } else if let Some(exif) = &exif {
-        embed_exif(encoded.as_ref(), exif).unwrap_or_else(|| encoded.as_ref().to_vec())
+    // EXIF is stripped by default; the color profile is kept so wide-gamut
+    // phone photos do not shift when a viewer honours the profile.
+    let exif_chunk = if strip_metadata {
+        None
     } else {
-        encoded.as_ref().to_vec()
+        exif.as_deref()
     };
+    let payload = embed_metadata(encoded.as_ref(), exif_chunk, icc.as_deref())
+        .unwrap_or_else(|| encoded.as_ref().to_vec());
 
     // Write the payload through a temp file in the same directory then rename
     // so a partial output is never visible as a finished WebP.
@@ -313,13 +444,85 @@ fn normalize_exif(raw: &[u8]) -> Option<Vec<u8>> {
     is_tiff.then(|| data.to_vec())
 }
 
-/// Wrap a simple WebP bitstream in an extended (VP8X) container that carries
-/// the supplied EXIF payload, preserving metadata across the conversion.
-fn embed_exif(simple: &[u8], exif: &[u8]) -> Option<Vec<u8>> {
+/// Set the EXIF orientation tag to `1` (upright) in a TIFF blob.
+///
+/// Returns `Some` unchanged when the tag is absent, and `None` for malformed
+/// data so callers can drop metadata rather than double-rotate the image.
+fn upright_exif(exif: &[u8]) -> Option<Vec<u8>> {
+    if exif.len() < 8 {
+        return None;
+    }
+    let little = match &exif[0..2] {
+        b"II" => true,
+        b"MM" => false,
+        _ => return None,
+    };
+    let read_u16 = |offset: usize| -> Option<u16> {
+        let bytes = exif.get(offset..offset + 2)?;
+        Some(if little {
+            u16::from_le_bytes([bytes[0], bytes[1]])
+        } else {
+            u16::from_be_bytes([bytes[0], bytes[1]])
+        })
+    };
+    let read_u32 = |offset: usize| -> Option<u32> {
+        let bytes = exif.get(offset..offset + 4)?;
+        Some(if little {
+            u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+        } else {
+            u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+        })
+    };
+
+    if read_u16(2)? != 42 {
+        return None;
+    }
+    let ifd = read_u32(4)? as usize;
+    let count = read_u16(ifd)? as usize;
+    for index in 0..count {
+        let entry = ifd.checked_add(2 + index * 12)?;
+        if entry + 12 > exif.len() {
+            return None;
+        }
+        if read_u16(entry)? != 0x0112 {
+            continue;
+        }
+        let kind = read_u16(entry + 2)?;
+        let count = read_u32(entry + 4)?;
+        if kind != 3 || count != 1 {
+            return None;
+        }
+        let mut out = exif.to_vec();
+        let value = entry + 8;
+        if little {
+            out[value] = 1;
+            out[value + 1] = 0;
+        } else {
+            out[value] = 0;
+            out[value + 1] = 1;
+        }
+        return Some(out);
+    }
+    Some(exif.to_vec())
+}
+
+/// Add EXIF and/or ICC profile chunks to a simple WebP bitstream.
+fn embed_metadata(simple: &[u8], exif: Option<&[u8]>, icc: Option<&[u8]>) -> Option<Vec<u8>> {
     use std::ffi::c_void;
     use std::os::raw::c_int;
 
     use libwebp_sys::*;
+
+    let mut chunks: Vec<(&std::ffi::CStr, &[u8])> = Vec::new();
+    if let Some(exif) = exif {
+        chunks.push((c"EXIF", exif));
+    }
+    if let Some(icc) = icc {
+        chunks.push((c"ICCP", icc));
+    }
+    if chunks.is_empty() {
+        return None;
+    }
 
     let webp = WebPData {
         bytes: simple.as_ptr(),
@@ -332,16 +535,18 @@ fn embed_exif(simple: &[u8], exif: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
 
-    let exif_data = WebPData {
-        bytes: exif.as_ptr(),
-        size: exif.len(),
-    };
-    // SAFETY: `mux` and `exif_data` are valid for the duration of the call and
-    // `copy_data = 1` makes the mux copy the EXIF payload.
-    let status = unsafe { WebPMuxSetChunk(mux, c"EXIF".as_ptr(), &exif_data, 1) };
-    if (status as c_int) != (WebPMuxError::WEBP_MUX_OK as c_int) {
-        unsafe { WebPMuxDelete(mux) };
-        return None;
+    for (fourcc, bytes) in chunks {
+        let data = WebPData {
+            bytes: bytes.as_ptr(),
+            size: bytes.len(),
+        };
+        // SAFETY: `mux` and `data` are valid for the call and `copy_data = 1`
+        // makes the mux copy the payload.
+        let status = unsafe { WebPMuxSetChunk(mux, fourcc.as_ptr(), &data, 1) };
+        if (status as c_int) != (WebPMuxError::WEBP_MUX_OK as c_int) {
+            unsafe { WebPMuxDelete(mux) };
+            return None;
+        }
     }
 
     let mut assembled = WebPData {
@@ -359,6 +564,15 @@ fn embed_exif(simple: &[u8], exif: &[u8]) -> Option<Vec<u8>> {
     let out = unsafe { std::slice::from_raw_parts(assembled.bytes, assembled.size) }.to_vec();
     unsafe { WebPFree(assembled.bytes as *mut c_void) };
     Some(out)
+}
+
+/// Formats common on phones that this build cannot decode. A single-file run
+/// gets a clear message instead of a generic "unknown format" error.
+fn unsupported_extension(path: &Path) -> Option<&'static str> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    ["heic", "heif", "dng", "raw", "avif", "jxl"]
+        .into_iter()
+        .find(|candidate| *candidate == extension)
 }
 
 fn write_atomically(destination: &Path, contents: &[u8]) -> Result<()> {
@@ -440,6 +654,7 @@ mod tests {
         let grown = Summary {
             converted_files: 1,
             failed_files: 0,
+            collision_files: 0,
             original_bytes: 100,
             converted_bytes: 150,
         };
@@ -449,6 +664,7 @@ mod tests {
         let shrunk = Summary {
             converted_files: 2,
             failed_files: 0,
+            collision_files: 0,
             original_bytes: 400,
             converted_bytes: 100,
         };
@@ -463,6 +679,37 @@ mod tests {
             "Corrupt or mislabeled image"
         );
         assert_eq!(categorize_error("Permission denied"), "Permission denied");
+        assert_eq!(
+            categorize_error("image is too large: 20000x20000"),
+            "Image too large"
+        );
+    }
+
+    #[test]
+    fn rejects_images_above_the_pixel_limit() {
+        assert!(check_pixel_limit(1000, 1000, 1_000_000).is_ok());
+        let error = check_pixel_limit(1001, 1000, 1_000_000).unwrap_err();
+        assert!(error.to_string().contains("too large"));
+    }
+
+    #[test]
+    fn large_images_are_serialized_at_the_100mp_breakpoint() {
+        assert!(!is_large_dimensions(10_000, 10_000)); // exactly 100 MP
+        assert!(is_large_dimensions(11_648, 8_736)); // 102 MP medium format
+        assert!(is_large_dimensions(14_204, 10_652)); // 151 MP digital back
+        assert!(is_large_dimensions(23_200, 17_400)); // 400 MP multi-shot
+    }
+
+    #[test]
+    fn single_file_relative_name_resolves_against_an_empty_root() {
+        // `pictowebp photo.png` has an empty parent; the file name must still
+        // resolve for destination and collision calculations.
+        assert_eq!(
+            Path::new("photo.png").strip_prefix("").unwrap(),
+            Path::new("photo.png")
+        );
+        let collisions = output_collisions(&[PathBuf::from("photo.png")], Path::new(""), true);
+        assert!(collisions.is_empty());
     }
 
     #[test]
@@ -474,7 +721,7 @@ mod tests {
             source.join("unique.webp"),
         ];
 
-        let collisions = output_collisions(&files, &source);
+        let collisions = output_collisions(&files, &source, false);
 
         assert_eq!(collisions.len(), 2);
         assert!(collisions.contains_key(&source.join("photo.png")));
@@ -497,7 +744,9 @@ mod tests {
             message: "Invalid signature".to_string(),
         }];
 
-        let report = write_error_report(&temp, &errors, None).unwrap().unwrap();
+        let report = write_error_report(Some(&temp), &errors, None)
+            .unwrap()
+            .unwrap();
         let contents = fs::read_to_string(&report).unwrap();
         assert!(contents.contains("Invalid signature"));
         assert!(contents.contains("C:/photos/broken.jpg"));
@@ -522,7 +771,9 @@ mod tests {
             message: "Invalid signature".to_string(),
         }];
 
-        let report = write_error_report(&temp, &errors, None).unwrap().unwrap();
+        let report = write_error_report(Some(&temp), &errors, None)
+            .unwrap()
+            .unwrap();
         let contents = fs::read_to_string(&report).unwrap();
         assert!(!contents.contains(r"\\?\"));
         // Windows renders the path with backslashes; Unix with forward slashes.
@@ -555,7 +806,7 @@ mod tests {
             message: "Invalid signature".to_string(),
         }];
 
-        let report = write_error_report(&temp, &errors, Some(&custom))
+        let report = write_error_report(Some(&temp), &errors, Some(&custom))
             .unwrap()
             .unwrap();
         assert_eq!(report, custom);
@@ -584,6 +835,71 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unsupported_phone_formats_with_a_clear_message() {
+        let root = scratch_dir("e2e-unsupported");
+        let source = root.join("source");
+        fs::create_dir_all(&source).unwrap();
+        let file = source.join("phone.heic");
+        fs::write(&file, b"not really heic").unwrap();
+        let output = root.join("out");
+
+        let error = process_file(
+            &file,
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            crate::settings::DEFAULT_MAX_PIXELS,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("unsupported input format"));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn embeds_icc_profile_into_vp8x_container() {
+        let pixels = vec![64u8; 4 * 4 * 4];
+        let encoded = webp::Encoder::from_rgba(&pixels, 4, 4).encode_lossless();
+        let icc = b"fake-icc-profile";
+
+        let embedded =
+            embed_metadata(encoded.as_ref(), None, Some(icc)).expect("mux should succeed");
+
+        assert!(embedded.windows(4).any(|window| window == b"VP8X"));
+        assert!(embedded.windows(4).any(|window| window == b"ICCP"));
+        let decoded = webp::Decoder::new(&embedded)
+            .decode()
+            .expect("muxed WebP should still decode");
+        assert_eq!((decoded.width(), decoded.height()), (4, 4));
+    }
+
+    #[test]
+    fn rewrites_exif_orientation_to_upright() {
+        // Little-endian TIFF: one IFD entry, Orientation (0x0112) = 6.
+        let mut exif = vec![
+            b'I', b'I', 42, 0, 8, 0, 0, 0, // header, IFD at 8
+            1, 0, // one entry
+            0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, // orientation 6
+            0, 0, 0, 0, // next IFD
+        ];
+        let original = exif.clone();
+
+        let upright = upright_exif(&exif).expect("valid TIFF should be rewritten");
+        assert_eq!(&upright[18..20], &[1, 0]);
+        exif[18..20].copy_from_slice(&[1, 0]);
+        assert_eq!(upright, exif);
+
+        // A TIFF without an orientation tag is returned unchanged.
+        let no_tag = b"II*\0\x08\0\0\0\0\0\0\0\0\0\0\0".to_vec();
+        assert_eq!(upright_exif(&no_tag), Some(no_tag.clone()));
+        // Malformed input is rejected so callers can drop the metadata.
+        assert!(upright_exif(b"not-a-tiff").is_none());
+        assert_ne!(original, upright);
+    }
+
+    #[test]
     fn embeds_exif_into_vp8x_container() {
         // Encode a tiny image with the same crate the app uses, then verify the
         // mux path produces a VP8X container carrying an EXIF chunk that still
@@ -593,7 +909,7 @@ mod tests {
         let simple = encoded.as_ref();
 
         let fake_exif = b"II*\0\x08\0\x00\x00\x00\x00";
-        let embedded = embed_exif(simple, fake_exif).expect("mux should succeed");
+        let embedded = embed_metadata(simple, Some(fake_exif), None).expect("mux should succeed");
 
         assert!(embedded.windows(4).any(|window| window == b"VP8X"));
         assert!(embedded.windows(4).any(|window| window == b"EXIF"));
@@ -611,7 +927,8 @@ mod tests {
         let pixels = vec![10u8; 4 * 8 * 8];
         let encoded = webp::Encoder::from_rgba(&pixels, 8, 8).encode_lossless();
         let exif = b"II*\0\x08\0\x00\x00\x00\x00".to_vec();
-        let muxed = embed_exif(encoded.as_ref(), &exif).expect("mux should succeed");
+        let muxed =
+            embed_metadata(encoded.as_ref(), Some(&exif), None).expect("mux should succeed");
 
         let dir = std::env::temp_dir().join(format!("pictowebp-exif-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -638,7 +955,15 @@ mod tests {
         create_test_image(&source.join("nested/deep/b.jpg"), 16, 16);
 
         let output = root.join("out");
-        let png = process_file(&source.join("a.png"), &source, &output, 80, false, true);
+        let png = process_file(
+            &source.join("a.png"),
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            crate::settings::DEFAULT_MAX_PIXELS,
+        );
         let jpg = process_file(
             &source.join("nested/deep/b.jpg"),
             &source,
@@ -646,6 +971,7 @@ mod tests {
             80,
             false,
             true,
+            crate::settings::DEFAULT_MAX_PIXELS,
         );
 
         assert!(png.is_ok(), "png conversion failed: {png:?}");
@@ -671,6 +997,7 @@ mod tests {
             80,
             false,
             true,
+            crate::settings::DEFAULT_MAX_PIXELS,
         );
 
         assert!(result.is_err());
@@ -695,8 +1022,16 @@ mod tests {
         fs::create_dir_all(&source).unwrap();
         create_test_image(&source.join("photo.png"), 16, 16);
 
-        let stripped =
-            process_file(&source.join("photo.png"), &source, &output, 80, false, true).unwrap();
+        let stripped = process_file(
+            &source.join("photo.png"),
+            &source,
+            &output,
+            80,
+            false,
+            true,
+            crate::settings::DEFAULT_MAX_PIXELS,
+        )
+        .unwrap();
         let kept = process_file(
             &source.join("photo.png"),
             &source,
@@ -704,6 +1039,7 @@ mod tests {
             80,
             false,
             false,
+            crate::settings::DEFAULT_MAX_PIXELS,
         )
         .unwrap();
 
@@ -735,13 +1071,22 @@ mod tests {
         create_test_image(&source.join("nested/collide.jpg"), 8, 8);
 
         let settings = crate::settings::Settings {
-            source_folder: source.clone(),
+            source: source.clone(),
+            source_root: source.clone(),
+            single_file: false,
             quality: 80,
             threads: std::num::NonZeroUsize::new(2).unwrap(),
+            max_pixels: crate::settings::DEFAULT_MAX_PIXELS,
             lossless: false,
             strip_metadata: true,
             no_progress: true,
             report_path: None,
+            allow_report_outside: false,
+            output_dir: None,
+            dry_run: false,
+            json: false,
+            fail_on_error: false,
+            fail_on_empty: false,
         };
         let output = root.join("out");
         let result = convert_all(
@@ -753,7 +1098,8 @@ mod tests {
 
         // good.png + also-good.png convert; broken.png fails; collide.* collide.
         assert_eq!(result.summary.converted_files, 2);
-        assert_eq!(result.summary.failed_files, 3);
+        assert_eq!(result.summary.failed_files, 1);
+        assert_eq!(result.summary.collision_files, 2);
         assert!(output.join("good.webp").is_file());
         assert!(output.join("nested/also-good.webp").is_file());
         let categories: Vec<_> = result.file_errors.iter().map(|e| e.category).collect();
@@ -775,13 +1121,22 @@ mod tests {
         }
 
         let settings = crate::settings::Settings {
-            source_folder: source.clone(),
+            source: source.clone(),
+            source_root: source.clone(),
+            single_file: false,
             quality: 80,
             threads: std::num::NonZeroUsize::new(1).unwrap(),
+            max_pixels: crate::settings::DEFAULT_MAX_PIXELS,
             lossless: false,
             strip_metadata: true,
             no_progress: true,
             report_path: None,
+            allow_report_outside: false,
+            output_dir: None,
+            dry_run: false,
+            json: false,
+            fail_on_error: false,
+            fail_on_empty: false,
         };
         let output = root.join("out");
         // Cancel before any work runs: nothing should be submitted.

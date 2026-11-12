@@ -31,11 +31,26 @@ pub fn supports_color() -> bool {
 }
 
 pub fn paint(value: impl std::fmt::Display, style: &str) -> String {
+    let text = sanitize(&value.to_string());
     if supports_color() {
-        format!("{style}{value}{RESET}")
+        format!("{style}{text}{RESET}")
     } else {
-        value.to_string()
+        text
     }
+}
+
+/// Replace control characters so a hostile file name or decoder message cannot
+/// inject ANSI/terminal control sequences into human output.
+pub fn sanitize(text: &str) -> String {
+    text.chars()
+        .map(|character| {
+            if character.is_control() {
+                '?'
+            } else {
+                character
+            }
+        })
+        .collect()
 }
 
 /// Display a path without the Windows extended-length prefix (``\\?\``).
@@ -49,12 +64,13 @@ pub fn display_path(path: &Path) -> String {
     if let Some(stripped) = text.strip_prefix(r"\\?\") {
         text = stripped.to_string();
     }
-    text
+    sanitize(&text)
 }
 
 pub fn truncate_reason(reason: &str) -> String {
+    let reason = sanitize(reason);
     if reason.chars().count() <= MAX_REASON_DISPLAY_LENGTH {
-        return reason.to_string();
+        return reason;
     }
     let truncated: String = reason.chars().take(MAX_REASON_DISPLAY_LENGTH - 1).collect();
     format!("{truncated}…")
@@ -152,6 +168,12 @@ mod tests {
         let stripped = display_path(Path::new(r"\\?\C:\Users\me\photo.jpg"));
         assert!(!stripped.starts_with(r"\\?\"));
         assert!(stripped.ends_with("photo.jpg"));
+    }
+
+    #[test]
+    fn sanitize_replaces_terminal_control_characters() {
+        assert_eq!(sanitize("a\u{1b}[31mb"), "a?[31mb");
+        assert_eq!(sanitize("ok"), "ok");
     }
 
     #[test]

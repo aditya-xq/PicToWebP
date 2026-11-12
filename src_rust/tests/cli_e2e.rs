@@ -435,7 +435,7 @@ fn lossless_flag_converts() {
 fn interactive_prompt_flow() {
     let source = copy_corpus();
     let mut child = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
-        .args(["--no-progress"])
+        .args(["--no-progress", "--interactive"])
         .current_dir(source.parent().unwrap())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -452,5 +452,296 @@ fn interactive_prompt_flow() {
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(0));
     assert!(output_folder(&source).is_dir());
+    cleanup(&source);
+}
+
+fn run_capture(source: &Path, args: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg(source)
+        .args(args)
+        .current_dir(source.parent().unwrap())
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to spawn the pictowebp binary")
+}
+
+fn json_stdout(output: &std::process::Output) -> serde_json::Value {
+    let text = String::from_utf8(output.stdout.clone()).unwrap();
+    assert_eq!(
+        text.trim().lines().count(),
+        1,
+        "stdout must hold exactly one JSON object, got: {text:?}"
+    );
+    serde_json::from_str(text.trim()).expect("stdout is not valid JSON")
+}
+
+#[test]
+fn json_result_is_one_parseable_object() {
+    let source = copy_corpus();
+    let output = run_capture(&source, &["--json"]);
+    assert_eq!(output.status.code(), Some(0));
+
+    let value = json_stdout(&output);
+    assert_eq!(value["schema"], "pictowebp.result/v1");
+    assert_eq!(value["tool"]["edition"], "rust");
+    assert_eq!(value["counts"]["discovered"], 7);
+    assert_eq!(value["counts"]["converted"], 4);
+    assert_eq!(value["counts"]["failed"], 1);
+    assert_eq!(value["counts"]["collisions"], 2);
+    assert_eq!(value["failures"].as_array().unwrap().len(), 3);
+    assert!(Path::new(value["output"].as_str().unwrap()).is_dir());
+    cleanup(&source);
+}
+
+#[test]
+fn json_run_never_prompts_when_stdin_is_closed() {
+    // No -q / -t: a non-interactive run must use defaults instead of blocking.
+    let source = copy_corpus();
+    let output = run_capture(&source, &["--json"]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(!output.stderr.is_empty(), "human output belongs on stderr");
+    cleanup(&source);
+}
+
+#[test]
+fn info_json_reports_edition_and_capabilities() {
+    let source = copy_corpus();
+    let output = run_capture(&source, &["--info", "--json"]);
+    assert_eq!(output.status.code(), Some(0));
+
+    let value = json_stdout(&output);
+    assert_eq!(value["schema"], "pictowebp.info/v1");
+    assert_eq!(value["edition"], "rust");
+    let capabilities = value["capabilities"].as_array().unwrap();
+    assert!(capabilities.iter().any(|value| value == "json"));
+    assert!(capabilities.iter().any(|value| value == "dry_run"));
+    cleanup(&source);
+}
+
+#[test]
+fn version_and_help_are_machine_clean() {
+    let version = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&version.stdout).contains("(rust)"));
+
+    let help = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&help.stdout).contains("Bulk Image to WebP Converter"));
+}
+
+#[test]
+fn dry_run_writes_nothing() {
+    let source = copy_corpus();
+    let before = fs::read_dir(source.parent().unwrap()).unwrap().count();
+
+    let output = run_capture(&source, &["--json", "--dry-run"]);
+    assert_eq!(output.status.code(), Some(0));
+    let value = json_stdout(&output);
+    assert_eq!(value["dry_run"], true);
+    assert!(value["output"].is_null());
+    assert_eq!(
+        fs::read_dir(source.parent().unwrap()).unwrap().count(),
+        before
+    );
+    cleanup(&source);
+}
+
+#[test]
+fn single_file_converts_and_refuses_to_overwrite() {
+    let source = copy_corpus();
+    let file = source.join("a.png");
+
+    let first = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg(&file)
+        .args(["--json"])
+        .current_dir(source.as_path())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(first.status.code(), Some(0));
+    assert!(source.join("a.webp").is_file());
+
+    let second = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg(&file)
+        .args(["--json"])
+        .current_dir(source.as_path())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(second.status.code(), Some(3));
+    let value = json_stdout(&second);
+    assert_eq!(value["counts"]["failed"], 1);
+    cleanup(&source);
+}
+
+#[test]
+fn out_dir_receives_the_converted_files() {
+    let source = copy_corpus();
+    let destination = source.parent().unwrap().join("dest");
+
+    let output = run_capture(&source, &["--json", "--out", destination.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(destination.join("a.webp").is_file());
+    let value = json_stdout(&output);
+    assert_eq!(value["output"], destination.display().to_string());
+    cleanup(&source);
+}
+
+#[test]
+fn fail_on_empty_exits_5_and_fail_on_error_exits_4() {
+    let empty = env::temp_dir().join(format!("pw-e2e-empty-{}", std::process::id()));
+    fs::create_dir_all(&empty).unwrap();
+    let empty_output = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg(&empty)
+        .args(["--json", "--fail-on-empty"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(empty_output.status.code(), Some(5));
+
+    let source = copy_corpus();
+    let errors = run_capture(&source, &["--json", "--fail-on-error"]);
+    assert_eq!(errors.status.code(), Some(4));
+    cleanup(&source);
+    fs::remove_dir_all(&empty).ok();
+}
+
+#[test]
+fn single_file_with_a_bare_relative_name() {
+    let source = copy_corpus();
+    let output = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg("a.png")
+        .args(["--json"])
+        .current_dir(&source)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0), "{:?}", output);
+    assert!(source.join("a.webp").is_file());
+    let value = json_stdout(&output);
+    assert_eq!(value["counts"]["converted"], 1);
+    cleanup(&source);
+}
+
+#[test]
+fn dry_run_reports_existing_single_file_output_without_failing_the_plan() {
+    let source = copy_corpus();
+    let file = source.join("a.png");
+
+    let first = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg(&file)
+        .args(["--json"])
+        .current_dir(&source)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(first.status.code(), Some(0));
+    assert!(source.join("a.webp").is_file());
+
+    let plan = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg(&file)
+        .args(["--json", "--dry-run"])
+        .current_dir(&source)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(plan.status.code(), Some(0));
+    let value = json_stdout(&plan);
+    assert_eq!(value["dry_run"], true);
+    assert_eq!(value["counts"]["converted"], 0);
+    assert_eq!(value["counts"]["failed"], 1);
+    cleanup(&source);
+}
+
+#[test]
+fn dry_run_of_a_fully_colliding_folder_exits_0() {
+    let root = env::temp_dir().join(format!("pw-e2e-dry-collide-{}", std::process::id()));
+    let source = root.join("source");
+    fs::create_dir_all(&source).unwrap();
+    fs::copy(fixture_root().join("dup.png"), source.join("dup.png")).unwrap();
+    fs::copy(fixture_root().join("dup.jpg"), source.join("dup.jpg")).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg(&source)
+        .args(["--json", "--dry-run"])
+        .current_dir(&root)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    let value = json_stdout(&output);
+    assert_eq!(value["counts"]["collisions"], 2);
+    assert_eq!(value["counts"]["converted"], 0);
+
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn json_argument_errors_are_machine_readable() {
+    let output = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .args(["--json", "-q", "0"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    let value = json_stdout(&output);
+    assert_eq!(value["schema"], "pictowebp.error/v1");
+}
+
+#[test]
+fn report_outside_the_output_folder_requires_a_flag() {
+    let source = copy_corpus();
+    let outside = source.parent().unwrap().join("report.txt");
+
+    let denied = run_capture(&source, &["--json", "--report", outside.to_str().unwrap()]);
+    assert_eq!(denied.status.code(), Some(2));
+    let value = json_stdout(&denied);
+    assert_eq!(value["schema"], "pictowebp.error/v1");
+    assert!(!outside.exists());
+    let parent = source.parent().unwrap();
+    let prefix = format!("{}_webp_", source.file_name().unwrap().to_string_lossy());
+    let left_output = std::fs::read_dir(parent)
+        .unwrap()
+        .flatten()
+        .any(|entry| entry.file_name().to_string_lossy().starts_with(&prefix));
+    assert!(!left_output, "rejected run left an output folder behind");
+
+    let allowed = run_capture(
+        &source,
+        &[
+            "--json",
+            "--report",
+            outside.to_str().unwrap(),
+            "--allow-report-outside",
+        ],
+    );
+    assert_eq!(allowed.status.code(), Some(0));
+    assert!(outside.is_file());
+    cleanup(&source);
+}
+
+#[test]
+fn pixel_limit_skips_oversized_images() {
+    let source = copy_corpus();
+    let output = Command::new(env!("CARGO_BIN_EXE_pictowebp"))
+        .arg(&source)
+        .args(["--json", "--no-progress"])
+        .env("PICTOWEBP_MAX_PIXELS", "1")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3));
+    let value = json_stdout(&output);
+    assert_eq!(value["counts"]["converted"], 0);
+    let failures = value["failures"].as_array().unwrap();
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure["category"] == "Image too large")
+    );
     cleanup(&source);
 }

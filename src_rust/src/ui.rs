@@ -2,6 +2,7 @@
 
 use std::io;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use indicatif::{ProgressBar, ProgressStyle};
@@ -13,6 +14,35 @@ use crate::style::{self, BOLD_CYAN, CYAN, DIM, GREEN, LINE, RED, YELLOW, paint, 
 const BYTES_PER_KIB: f64 = 1024.0;
 const BYTES_PER_MIB: f64 = 1024.0 * 1024.0;
 const BYTES_PER_GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+
+/// When set, human-facing output goes to stderr so stdout stays reserved for a
+/// single JSON object.
+static JSON_MODE: AtomicBool = AtomicBool::new(false);
+
+pub fn set_json_mode(enabled: bool) {
+    JSON_MODE.store(enabled, Ordering::Relaxed);
+}
+
+pub fn is_json_mode() -> bool {
+    JSON_MODE.load(Ordering::Relaxed)
+}
+
+/// Write one line of human output to the active stream.
+pub fn emit_line(text: impl std::fmt::Display) {
+    if is_json_mode() {
+        use std::io::Write as _;
+        let _ = writeln!(io::stderr(), "{text}");
+    } else {
+        println!("{text}");
+    }
+}
+
+/// Print an inline prompt without a trailing newline.
+pub fn prompt_text(text: &str) {
+    use std::io::Write as _;
+    print!("{text}");
+    let _ = io::stdout().flush();
+}
 
 /// Format a count with thousands separators (e.g. `2590` -> `2,590`).
 pub fn format_count(value: usize) -> String {
@@ -52,21 +82,21 @@ pub fn format_duration(seconds: f64) -> String {
 
 /// Print a welcome banner.
 pub fn print_banner() {
-    println!();
-    println!("  {}", paint("PicToWebP", BOLD_CYAN));
-    println!("  {}", paint("Bulk Image to WebP Converter", DIM));
-    println!();
+    emit_line("");
+    emit_line(format!("  {}", paint("PicToWebP", BOLD_CYAN)));
+    emit_line(format!("  {}", paint("Bulk Image to WebP Converter", DIM)));
+    emit_line("");
 }
 
 /// Print how many images were discovered and their combined size.
 pub fn print_found(count: usize, total_bytes: u64) {
-    println!(
+    emit_line(format!(
         "  {} {} images ({})",
         paint("Found", DIM),
         format_count(count),
         format_bytes(total_bytes)
-    );
-    println!();
+    ));
+    emit_line("");
 }
 
 /// Open a folder in the OS file explorer (best-effort, errors ignored).
@@ -83,15 +113,18 @@ pub fn open_folder(path: &Path) {
 /// Ask whether to open the output folder, and do it when confirmed.
 ///
 /// Only prompts when stdin and stdout are interactive terminals, so piped and
-/// scripted runs are never interrupted.
-pub fn maybe_open_output_folder(output_folder: &Path, converted: u64) {
+/// scripted runs are never interrupted. JSON runs never prompt at all.
+pub fn maybe_open_output_folder(output_folder: &Path, converted: u64, allow_prompt: bool) {
     use std::io::IsTerminal;
-    if converted == 0 || !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+    if !allow_prompt
+        || is_json_mode()
+        || converted == 0
+        || !std::io::stdin().is_terminal()
+        || !std::io::stdout().is_terminal()
+    {
         return;
     }
-    print!("  Open the output folder? [Y/n] ");
-    use std::io::Write as _;
-    let _ = std::io::stdout().flush();
+    prompt_text("  Open the output folder? [Y/n] ");
     let answer = read_trimmed_line().unwrap_or_else(|| "n".to_string());
     if answer.is_empty() || answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes") {
         open_folder(output_folder);
@@ -126,23 +159,35 @@ pub fn read_trimmed_line() -> Option<String> {
 }
 
 fn section(title: &str, style: &str) {
-    println!("  {}", paint(LINE, DIM));
-    println!("   {}", paint(title, style));
-    println!("  {}", paint(LINE, DIM));
+    emit_line(format!("  {}", paint(LINE, DIM)));
+    emit_line(format!("   {}", paint(title, style)));
+    emit_line(format!("  {}", paint(LINE, DIM)));
 }
 
 /// Print an aligned `Label: value` pair (mirrors the Python CLI's `field`).
 fn field(label: &str, value: impl std::fmt::Display) {
-    println!("  {} {value}", paint(label, CYAN));
+    emit_line(format!(
+        "  {} {}",
+        paint(label, CYAN),
+        style::sanitize(&value.to_string())
+    ));
 }
 
 /// Print the settings banner before conversion starts.
-pub fn print_settings(source: &Path, output: &Path, threads: usize, settings: &Settings) {
-    println!();
+pub fn print_settings(source: &Path, output: Option<&Path>, threads: usize, settings: &Settings) {
+    emit_line("");
     section("Configuration", BOLD_CYAN);
-    println!();
+    emit_line("");
     field("Source:", style::display_path(source));
-    field("Output:", style::display_path(output));
+    field(
+        "Output:",
+        match output {
+            Some(path) if !path.as_os_str().is_empty() => style::display_path(path),
+            Some(_) => "current folder".to_string(),
+            None if settings.dry_run => "would be created next to the source".to_string(),
+            None => "created next to the source".to_string(),
+        },
+    );
     field(
         "Quality:",
         format!(
@@ -152,6 +197,7 @@ pub fn print_settings(source: &Path, output: &Path, threads: usize, settings: &S
         ),
     );
     field("Threads:", threads);
+    field("Max pixels:", settings.max_pixels);
     field(
         "Mode:",
         if settings.lossless {
@@ -168,7 +214,11 @@ pub fn print_settings(source: &Path, output: &Path, threads: usize, settings: &S
             "keep"
         },
     );
-    println!();
+    emit_line("");
+}
+
+fn total_files(summary: &Summary) -> usize {
+    summary.converted_files as usize + summary.failed_files + summary.collision_files
 }
 
 /// Print the post-conversion summary, including failure groups.
@@ -179,22 +229,22 @@ pub fn print_summary(
     file_errors: &[FileError],
     error_report: Option<&Path>,
 ) {
-    println!();
+    emit_line("");
 
-    if summary.failed_files == 0 {
+    if summary.failed_files == 0 && summary.collision_files == 0 {
         section("✓ Conversion Complete", GREEN);
     } else {
         section("Conversion Complete (with errors)", YELLOW);
     }
 
-    println!();
+    emit_line("");
     field("Output folder:", style::display_path(output_folder));
     field(
         "Images converted:",
         format!(
             "{}/{}",
             format_count(summary.converted_files as usize),
-            format_count((summary.converted_files + summary.failed_files as u64) as usize)
+            format_count(total_files(summary))
         ),
     );
     field(
@@ -209,24 +259,47 @@ pub fn print_summary(
 
     print_failure_groups(file_errors, error_report);
 
-    println!("  {}", paint(LINE, DIM));
-    println!();
+    emit_line(format!("  {}", paint(LINE, DIM)));
+    emit_line("");
+}
+
+/// Print a dry-run summary without claiming that files were written.
+pub fn print_dry_run(
+    summary: &Summary,
+    discovered: usize,
+    file_errors: &[FileError],
+    elapsed: Duration,
+) {
+    emit_line("");
+    section("Dry run (nothing written)", YELLOW);
+    emit_line("");
+    field("Images found:", format_count(discovered));
+    field(
+        "Would convert:",
+        format_count(summary.converted_files as usize),
+    );
+    field(
+        "Would skip:",
+        format_count(summary.collision_files + summary.failed_files),
+    );
+    field("Time taken:", format_duration(elapsed.as_secs_f64()));
+    print_failure_groups(file_errors, None);
+    emit_line(format!("  {}", paint(LINE, DIM)));
+    emit_line("");
 }
 
 /// Print the cancellation message after a Ctrl+C interrupt.
 pub fn print_cancelled(result: &ConvertResult, output_folder: &Path, elapsed: Duration) {
-    println!();
+    emit_line("");
     section("Cancelled by user", YELLOW);
-    println!();
+    emit_line("");
     field("Output folder:", style::display_path(output_folder));
     field(
         "Files completed:",
         format!(
             "{}/{}",
             format_count(result.summary.converted_files as usize),
-            format_count(
-                (result.summary.converted_files + result.summary.failed_files as u64) as usize
-            )
+            format_count(total_files(&result.summary))
         ),
     );
     field(
@@ -238,8 +311,8 @@ pub fn print_cancelled(result: &ConvertResult, output_folder: &Path, elapsed: Du
         print_failure_groups(&result.file_errors, None);
     }
 
-    println!("  {}", paint(LINE, DIM));
-    println!();
+    emit_line(format!("  {}", paint(LINE, DIM)));
+    emit_line("");
 }
 
 fn print_failure_groups(file_errors: &[FileError], error_report: Option<&Path>) {
@@ -247,9 +320,9 @@ fn print_failure_groups(file_errors: &[FileError], error_report: Option<&Path>) 
         return;
     }
 
-    println!();
+    emit_line("");
     section(&format!("Files Not Converted ({})", file_errors.len()), RED);
-    println!();
+    emit_line("");
 
     // Group errors by (category, message), preserving first-seen order.
     let mut groups: Vec<((&str, &str), Vec<&Path>)> = Vec::new();
@@ -272,22 +345,22 @@ fn print_failure_groups(file_errors: &[FileError], error_report: Option<&Path>) 
     for ((category, reason), paths) in &groups {
         let display_reason = truncate_reason(reason);
         if paths.len() == 1 {
-            println!(
+            emit_line(format!(
                 "  {} {display_reason}",
                 paint(format!("{category}:"), YELLOW)
-            );
-            println!("    {}", paint(style::display_path(paths[0]), DIM));
+            ));
+            emit_line(format!("    {}", paint(style::display_path(paths[0]), DIM)));
         } else {
-            println!(
+            emit_line(format!(
                 "  {} {display_reason} ({})",
                 paint(format!("{category}:"), YELLOW),
                 format_count(paths.len())
-            );
+            ));
             for path in paths {
-                println!("    {}", paint(style::display_path(path), DIM));
+                emit_line(format!("    {}", paint(style::display_path(path), DIM)));
             }
         }
-        println!();
+        emit_line("");
     }
 
     if let Some(report) = error_report {
@@ -297,11 +370,11 @@ fn print_failure_groups(file_errors: &[FileError], error_report: Option<&Path>) 
 
 /// Print the "no files found" message.
 pub fn print_no_files_found(source: &Path) {
-    println!();
+    emit_line("");
     section("No convertible images found", YELLOW);
-    println!();
+    emit_line("");
     field("Source:", style::display_path(source));
-    println!();
+    emit_line("");
 }
 
 /// Print a free-space warning when the destination is low.
@@ -309,12 +382,12 @@ pub fn print_disk_warning(disk: &crate::style::DiskSpace) {
     if let Some(free) = disk.free_bytes {
         if disk.low {
             let free_mib = free as f64 / (1024.0 * 1024.0);
-            println!(
+            emit_line(format!(
                 "  {} only {:.0} MiB free in {} — conversion may run out of space.",
                 paint("Warning:", YELLOW),
                 free_mib,
                 style::display_path(&disk.path)
-            );
+            ));
         }
     }
 }
@@ -352,6 +425,18 @@ mod tests {
     fn maybe_open_output_folder_never_prompts_when_not_a_tty() {
         // Tests run with non-TTY stdio; the helper must return without
         // reading stdin (which would block or consume test input).
-        maybe_open_output_folder(Path::new("."), 5);
+        maybe_open_output_folder(Path::new("."), 5, false);
+    }
+
+    #[test]
+    fn summary_total_includes_collisions() {
+        let summary = Summary {
+            converted_files: 2,
+            failed_files: 1,
+            collision_files: 3,
+            original_bytes: 0,
+            converted_bytes: 0,
+        };
+        assert_eq!(total_files(&summary), 6);
     }
 }
