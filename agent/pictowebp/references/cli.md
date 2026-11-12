@@ -1,7 +1,7 @@
 # CLI reference
 
-Both editions accept the same flags. The contract is normative in
-`docs/agent-contract.md`.
+Both editions accept the same agent flags, except `--mcp` (Rust) and
+`--no-log` (Python). The contract is normative in `docs/agent-contract.md`.
 
 ## Usage
 
@@ -32,6 +32,7 @@ pictowebp [OPTIONS] [PATH]
 | `--fail-on-error` | off | Exit `4` if anything failed or collided. |
 | `--fail-on-empty` | off | Exit `5` if nothing was discovered. |
 | `--no-log` | off | Python only. Implied by `--json`. |
+| `--mcp` | off | Rust 0.4.0+: run a local stdio MCP server instead of converting. See `references/mcp.md`. |
 
 ## Examples
 

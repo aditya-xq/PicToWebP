@@ -10,12 +10,13 @@ warnings, and the progress bar go to stderr.
   "schema": "pictowebp.info/v1",
   "name": "pictowebp",
   "edition": "rust",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "target": "x86_64-windows",
   "exe": "C:\\Users\\me\\AppData\\Local\\Programs\\pictowebp\\pictowebp.exe",
   "capabilities": [
     "json", "info", "non_interactive", "interactive", "dry_run", "out_dir",
-    "single_file", "fail_on_error", "fail_on_empty", "lossless", "keep_metadata"
+    "single_file", "fail_on_error", "fail_on_empty", "lossless", "keep_metadata",
+    "mcp"
   ]
 }
 ```
@@ -25,6 +26,7 @@ warnings, and the progress bar go to stderr.
 - `target` is `<arch>-<os>` (for example `aarch64-macos`).
 - `capabilities` is the feature-detection surface. Check membership, not
   version numbers.
+- `mcp` is advertised by binaries that expose `--mcp` (Rust 0.4.0+).
 - `--info` makes no network call, so it is safe in offline environments.
 - `exe` may be `null` when the running executable cannot be determined (for
   example `python -m pictowebp` without a console script).
@@ -35,7 +37,7 @@ warnings, and the progress bar go to stderr.
 {
   "schema": "pictowebp.result/v1",
   "ok": true,
-  "tool": { "name": "pictowebp", "edition": "rust", "version": "0.3.0",
+  "tool": { "name": "pictowebp", "edition": "rust", "version": "0.4.0",
             "target": "x86_64-windows" },
   "source": "C:\\imgs",
   "output": "C:\\imgs_webp_1762...",

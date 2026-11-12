@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aditya-xq.github.io/PicToWebP/agent/pictowebp/schemas/error-v1.json",
+  "title": "pictowebp.error/v1",
+  "type": "object",
+  "required": ["schema", "error"],
+  "properties": {
+    "schema": { "const": "pictowebp.error/v1" },
+    "error": { "type": "string", "minLength": 1 },
+    "ok": { "type": "boolean" }
+  }
+}

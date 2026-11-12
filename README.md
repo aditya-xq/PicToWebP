@@ -125,22 +125,24 @@ in 46 seconds. Failures are grouped by reason, listed on screen, and saved to
 
 ### For AI agents and coding assistants 🤖
 
-PicToWebP ships an agent-facing contract and a installable skill, so an
-assistant can install it, run it, and read the result without scraping terminal
-output:
+PicToWebP ships an agent-facing contract, an installable skill, and a local MCP
+server, so an assistant can install it, run it, and read the result without
+scraping terminal output:
 
 ```bash
 pictowebp ./public/images --json --no-progress -q 82
 pictowebp ./hero.png --json          # single image
 pictowebp . --json --dry-run         # plan only, writes nothing
 pictowebp --info --json              # edition, version, capabilities
+pictowebp --mcp                      # stdio MCP server (Rust 0.4.0+)
 ```
 
 `--json` keeps stdout to exactly one object and routes human output to stderr.
 Runs never prompt when stdio is not a terminal, so a scripted call cannot hang.
 
 - Point your agent at **[`agent/`](agent/)** — a self-contained skill with
-  installers, flag reference, JSON schemas, and guardrails.
+  installers, flag reference, machine-readable schemas, and guardrails.
+- [`llms.txt`](llms.txt) is a compact entry point for crawlers and assistants.
 - opencode users can add the hosted catalog in one line:
   `"skills": ["https://aditya-xq.github.io/PicToWebP/agent/"]`
 - The normative contract lives in
@@ -160,6 +162,7 @@ Runs never prompt when stdio is not a terminal, so a scripted call cannot hang.
 | Plan first | `pictowebp DIR --json --dry-run` |
 | Deterministic output | `pictowebp DIR --json --out DIR-webp` |
 | Strict CI signal | `pictowebp DIR --json --fail-on-error` |
+| MCP server (Rust) | `pictowebp --mcp` |
 
 Exit codes: `0` ok, `2` bad arguments/path, `3` nothing converted, `4`
 failures with `--fail-on-error`, `5` empty with `--fail-on-empty`, `130`

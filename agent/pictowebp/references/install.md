@@ -10,9 +10,9 @@ rights, no `PATH` edits.
 | Windows | `%LOCALAPPDATA%\Programs\pictowebp` | `pictowebp.exe` |
 | macOS / Linux | `~/.local/bin` | `pictowebp` |
 
-On ARM64 Windows there is no native build yet; the installer installs the x64
-binary and warns that it runs under emulation. Linux ARM64 uses the static
-musl asset, so it runs on any distribution regardless of glibc version.
+On ARM64 Windows a native build is published; releases without one fall back
+to the x64 binary with a warning (it runs under emulation). Linux ARM64 uses the
+static musl asset, so it runs on any distribution regardless of glibc version.
 
 Override with `--install-dir` / `-InstallDir` or `$PICTOWEBP_INSTALL_DIR`.
 
@@ -71,7 +71,7 @@ sh install.sh --from-file ./pictowebp --sha256 <hash>
 ## CI
 
 ```bash
-sh install.sh --version 0.3.0 --install-dir ./.tools --json
+sh install.sh --version 0.4.0 --install-dir ./.tools --json
 ./.tools/pictowebp ./assets --json --out ./dist/img --fail-on-error
 ```
 
@@ -100,8 +100,8 @@ environments), download `install.sh` / `install.ps1` from the versioned
 release asset instead of the Pages site, and add `--require-attestation`:
 
 ```bash
-curl -fsSLO https://github.com/aditya-xq/PicToWebP/releases/download/rust-v0.3.0/install.sh
-sh install.sh --version 0.3.0 --require-attestation --json
+curl -fsSLO https://github.com/aditya-xq/PicToWebP/releases/download/rust-v0.4.0/install.sh
+sh install.sh --version 0.4.0 --require-attestation --json
 ```
 
 `install.json` is a local marker, not a signature. `--require-attestation`

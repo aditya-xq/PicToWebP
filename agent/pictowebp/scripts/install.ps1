@@ -30,8 +30,9 @@ $ManifestSchema = "pictowebp.release/v1"
 $ExeName = "pictowebp.exe"
 
 function Get-Target {
-    # No native ARM64 Windows asset is published yet; the x64 binary runs
-    # under emulation on ARM64 Windows.
+    if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -eq "Arm64") {
+        return "aarch64-pc-windows-msvc"
+    }
     return "x86_64-pc-windows-msvc"
 }
 
@@ -79,11 +80,8 @@ function Write-Result {
     }
 }
 
+$architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 $target = Get-Target
-$emulated = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -eq "Arm64"
-if ($emulated) {
-    Write-Warning "No native ARM64 Windows build yet; installing the x64 binary (runs under emulation)."
-}
 if ($RequireAttestation) {
     if ($SkipAttestation) { throw "-RequireAttestation conflicts with -SkipAttestation" }
     if (-not (Test-GhReady)) {
@@ -170,6 +168,11 @@ try {
             if ($manifest.schema -ne $ManifestSchema) { throw "Unexpected manifest schema: $($manifest.schema)" }
             if (-not $Version) { $Version = $manifest.version }
             $asset = $manifest.assets.$target
+            if (-not $asset -and $architecture -eq "Arm64") {
+                Write-Warning "No native ARM64 build in this release; installing the x64 binary (runs under emulation)."
+                $target = "x86_64-pc-windows-msvc"
+                $asset = $manifest.assets.$target
+            }
             if (-not $asset) { throw "No release asset for target $target" }
             $AssetUrl = $asset.url
             if (-not $Sha256) { $Sha256 = $asset.sha256 }

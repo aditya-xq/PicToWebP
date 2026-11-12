@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aditya-xq.github.io/PicToWebP/agent/pictowebp/schemas/install-v1.json",
+  "title": "pictowebp.install/v1",
+  "type": "object",
+  "required": ["schema"],
+  "properties": {
+    "schema": { "const": "pictowebp.install/v1" }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/result" },
+    { "$ref": "#/$defs/manifest" },
+    { "$ref": "#/$defs/error" }
+  ],
+  "$defs": {
+    "result": {
+      "type": "object",
+      "required": [
+        "action", "version", "target", "path", "sha256",
+        "on_path", "verified", "dry_run"
+      ],
+      "properties": {
+        "action": { "enum": ["install", "verify", "uninstall", "plan"] },
+        "version": { "type": "string" },
+        "target": { "type": "string" },
+        "path": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^(?:[0-9a-f]{64})?$" },
+        "on_path": { "type": "boolean" },
+        "verified": { "type": "boolean" },
+        "dry_run": { "type": "boolean" }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["version", "target", "sha256", "verified", "path", "installed"],
+      "properties": {
+        "version": { "type": "string" },
+        "target": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "verified": { "type": "boolean" },
+        "path": { "type": "string" },
+        "installed": { "type": "string" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["error"],
+      "properties": {
+        "error": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

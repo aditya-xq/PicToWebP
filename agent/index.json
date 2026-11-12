@@ -2,13 +2,19 @@
   "skills": [
     {
       "name": "pictowebp",
-      "version": "6",
+      "version": "7",
       "files": [
         "SKILL.md",
         "references/cli.md",
+        "references/mcp.md",
         "references/json-schema.md",
         "references/install.md",
         "references/troubleshooting.md",
+        "schemas/info-v1.json",
+        "schemas/result-v1.json",
+        "schemas/error-v1.json",
+        "schemas/install-v1.json",
+        "schemas/release-v1.json",
         "scripts/install.ps1",
         "scripts/install.sh"
       ]

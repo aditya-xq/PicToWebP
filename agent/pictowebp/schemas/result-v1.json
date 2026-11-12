@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aditya-xq.github.io/PicToWebP/agent/pictowebp/schemas/result-v1.json",
+  "title": "pictowebp.result/v1",
+  "type": "object",
+  "required": [
+    "schema", "ok", "tool", "source", "output", "dry_run", "cancelled",
+    "settings", "counts", "bytes", "duration_ms", "failures",
+    "failures_truncated", "report"
+  ],
+  "properties": {
+    "schema": { "const": "pictowebp.result/v1" },
+    "ok": { "type": "boolean" },
+    "tool": { "$ref": "#/$defs/tool" },
+    "source": { "type": "string" },
+    "output": { "type": ["string", "null"] },
+    "dry_run": { "type": "boolean" },
+    "cancelled": { "type": "boolean" },
+    "settings": {
+      "type": "object",
+      "required": ["quality", "lossless", "threads", "max_pixels", "metadata"],
+      "properties": {
+        "quality": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "lossless": { "type": "boolean" },
+        "threads": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "max_pixels": { "type": "integer", "minimum": 1 },
+        "metadata": { "enum": ["strip", "keep"] }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["discovered", "converted", "failed", "collisions"],
+      "properties": {
+        "discovered": { "type": "integer", "minimum": 0 },
+        "converted": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "collisions": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "bytes": {
+      "type": "object",
+      "required": ["source", "output", "saved", "reduction_percent"],
+      "properties": {
+        "source": { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "saved": { "type": "integer", "minimum": 0 },
+        "reduction_percent": { "type": "number" }
+      }
+    },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "failures": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/failure" }
+    },
+    "failures_truncated": { "type": "boolean" },
+    "report": { "type": ["string", "null"] }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "required": ["name", "edition", "version", "target"],
+      "properties": {
+        "name": { "const": "pictowebp" },
+        "edition": { "enum": ["rust", "python"] },
+        "version": { "type": "string", "minLength": 1 },
+        "target": { "type": "string", "minLength": 1 }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "required": ["path", "category", "message"],
+      "properties": {
+        "path": { "type": "string" },
+        "category": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

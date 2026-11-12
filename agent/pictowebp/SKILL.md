@@ -71,6 +71,13 @@ pictowebp ./public/images --json --out ./public/images-webp
 
 `--json` implies no progress bar and keeps stdout machine-clean.
 
+### MCP clients
+
+If your host speaks MCP and `pictowebp --info --json` lists `mcp`, start
+`pictowebp --mcp` and use the `info` and `convert` tools instead of shelling
+out. The server is local-only, never prompts, and returns the same
+`pictowebp.*/v1` payloads. See `references/mcp.md`.
+
 ## 4. Read the result
 
 One JSON object on stdout, human logs on stderr. Use `counts`, `output`,
@@ -101,6 +108,8 @@ any failures with their category. Link the report file when it exists.
 ## References
 
 - `references/cli.md` — every flag, default, and exit code
+- `references/mcp.md` — stdio MCP server tools and payloads
 - `references/json-schema.md` — full payload shapes
+- `schemas/` — machine-readable JSON Schemas for the payloads
 - `references/install.md` — installer options, offline and CI installs
 - `references/troubleshooting.md` — common failures and their fixes

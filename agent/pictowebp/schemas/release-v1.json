@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aditya-xq.github.io/PicToWebP/agent/pictowebp/schemas/release-v1.json",
+  "title": "pictowebp.release/v1",
+  "type": "object",
+  "required": ["schema", "version", "assets"],
+  "properties": {
+    "schema": { "const": "pictowebp.release/v1" },
+    "version": { "type": "string", "minLength": 1 },
+    "assets": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["url", "sha256"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}

@@ -29,7 +29,8 @@ Agents are not humans with a terminal. They need:
 
 ## Flags
 
-Both CLIs accept the same flags. `-q`, `-t`, `--lossless`, `--keep-metadata`,
+Both CLIs accept the same core flags; `--mcp` is Rust-only and `--no-log` is
+Python-only. `-q`, `-t`, `--lossless`, `--keep-metadata`,
 `--no-progress`, `--report` are the original set; the agent set is:
 
 | Flag | Behaviour |
@@ -46,6 +47,7 @@ Both CLIs accept the same flags. `-q`, `-t`, `--lossless`, `--keep-metadata`,
 | `--allow-report-outside` | Permit `--report` outside the output folder. |
 | `--max-pixels N` | Decoded-pixel cap per image (default `500000000`). |
 | `--no-log` | Python only: do not write a log file. Implied by `--json`. |
+| `--mcp` | Rust only: run a local stdio MCP server instead of converting. See [MCP](#mcp). |
 
 Without `--yes`, `--json`, or a real terminal, the CLIs already fall back to
 defaults. `--yes` exists for shells that allocate a pseudo-terminal.
@@ -70,6 +72,21 @@ defaults. `--yes` exists for shells that allocate a pseudo-terminal.
 | folder, no `--out` | `<source>_webp_<timestamp>` sibling |
 | `--dry-run` | nothing is created; `output` is `null` when unpredictable |
 
+## MCP (`--mcp`, Rust)
+
+`pictowebp --mcp` serves newline-delimited JSON-RPC 2.0 on stdin/stdout for
+local MCP clients:
+
+- tools: `info` (read-only) and `convert` (folder or single image)
+- `convert` arguments: `source`, `output_dir`, `quality`, `lossless`,
+  `keep_metadata`, `dry_run`, `threads`, `max_pixels`
+- successful results expose the `pictowebp.result/v1` object as
+  `structuredContent` and as a text content block
+- invalid arguments/unusable paths return `pictowebp.error/v1` with
+  `isError: true`
+- stdout carries only protocol messages; all human output goes to stderr
+- the server never prompts and never touches the network
+
 ## `pictowebp.info/v1`
 
 ```json
@@ -77,12 +94,12 @@ defaults. `--yes` exists for shells that allocate a pseudo-terminal.
   "schema": "pictowebp.info/v1",
   "name": "pictowebp",
   "edition": "rust",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "target": "x86_64-windows",
   "exe": "C:\\Users\\me\\AppData\\Local\\Programs\\pictowebp\\pictowebp.exe",
   "capabilities": ["json", "info", "non_interactive", "interactive", "dry_run",
                    "out_dir", "single_file", "fail_on_error", "fail_on_empty",
-                   "lossless", "keep_metadata"]
+                   "lossless", "keep_metadata", "mcp"]
 }
 ```
 
@@ -96,7 +113,7 @@ the running executable cannot be determined.
 {
   "schema": "pictowebp.result/v1",
   "ok": true,
-  "tool": { "name": "pictowebp", "edition": "rust", "version": "0.3.0",
+  "tool": { "name": "pictowebp", "edition": "rust", "version": "0.4.0",
             "target": "x86_64-windows" },
   "source": "C:\\imgs",
   "output": "C:\\imgs_webp_1762...",
@@ -170,7 +187,7 @@ refuses drive roots and the home directory.
 The installer writes `install.json` next to the binary:
 
 ```json
-{ "schema": "pictowebp.install/v1", "version": "0.3.0",
+{ "schema": "pictowebp.install/v1", "version": "0.4.0",
   "target": "x86_64-pc-windows-msvc", "sha256": "...",
   "verified": true, "path": "C:\\Users\\me\\AppData\\Local\\Programs\\pictowebp\\pictowebp.exe",
   "installed": "2026-11-11" }
@@ -184,7 +201,7 @@ when available.
 ## Versioning
 
 - The Rust crate and the Python package are versioned independently. Their
-  numbers do not align (`rust 0.3.0` vs `python 1.1.0`); compare `edition` and
+  numbers do not align (`rust 0.4.0` vs `python 1.1.0`); compare `edition` and
   `capabilities`, not versions.
 - Rust releases use the tag `rust-vX.Y.Z` and a rolling `rust-latest` tag.
   `/releases/latest` is never used because other products share the repository.

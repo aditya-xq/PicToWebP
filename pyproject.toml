@@ -52,6 +52,7 @@ dev = [
     "fastapi>=0.141",
     "uvicorn>=0.52",
     "python-multipart>=0.0.20",
+    "jsonschema>=4.23",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aditya-xq.github.io/PicToWebP/agent/pictowebp/schemas/info-v1.json",
+  "title": "pictowebp.info/v1",
+  "type": "object",
+  "required": ["schema", "name", "edition", "version", "target", "exe", "capabilities"],
+  "properties": {
+    "schema": { "const": "pictowebp.info/v1" },
+    "name": { "const": "pictowebp" },
+    "edition": { "enum": ["rust", "python"] },
+    "version": { "type": "string", "minLength": 1 },
+    "target": { "type": "string", "minLength": 1 },
+    "exe": { "type": ["string", "null"] },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    }
+  }
+}

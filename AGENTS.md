@@ -39,7 +39,7 @@ cd web-ts && npm run test:e2e                   # static Playwright smoke (chrom
 cd web-ts && npm run test:e2e:python            # python-backend Playwright smoke
 ```
 
-All suites are expected green before committing (currently 130 pytest, 76 cargo
+All suites are expected green before committing (currently 139 pytest, 77 cargo
 test, 24 vitest, 10 Playwright e2e).
 
 Every tool is covered by a **live e2e regression suite** that runs the real
@@ -130,6 +130,8 @@ Features shared across editions , keep them consistent when changing one:
   the same change and keep the parity tests green.
 - `--json` writes exactly one object to stdout. Human output goes through
   `pictowebp/output.py` (Python) or `ui::emit_line` (Rust) to stderr.
+- `--mcp` (Rust) runs a local stdio MCP server exposing `info` and `convert`;
+  it shares the JSON payloads and never touches the network.
 - Parse arguments before printing the banner so `--help`/`--version` stay
   machine-clean.
 - Runs never prompt when stdio is not a terminal; `--interactive` restores the
