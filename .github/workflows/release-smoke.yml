@@ -1,0 +1,84 @@
+name: Release smoke
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to install and test
+        required: true
+        default: rust-v0.3.0
+
+permissions:
+  contents: read
+  attestations: read
+
+concurrency:
+  group: release-smoke-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  install:
+    name: Install on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Resolve tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          tag="${RELEASE_TAG:-rust-v0.3.0}"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "VERSION=${tag#rust-v}" >> "$GITHUB_ENV"
+
+      - name: Install, convert, uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $install = Join-Path $env:RUNNER_TEMP "pictowebp"
+          ./agent/pictowebp/scripts/install.ps1 -Version $env:VERSION `
+            -InstallDir $install -RequireAttestation -Json
+          & "$install\pictowebp.exe" --info --json
+          & "$install\pictowebp.exe" --version
+
+          $source = Join-Path $env:RUNNER_TEMP "source"
+          New-Item -ItemType Directory -Path $source -Force | Out-Null
+          Copy-Item tests/e2e/fixtures/a.png $source
+          $out = Join-Path $env:RUNNER_TEMP "out"
+          & "$install\pictowebp.exe" $source --out $out --json | Out-Null
+          if (-not (Test-Path (Join-Path $out "a.webp"))) {
+            throw "conversion output missing"
+          }
+
+          ./agent/pictowebp/scripts/install.ps1 -Uninstall -InstallDir $install -Json
+
+      - name: Install, convert, uninstall (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          install_dir="$RUNNER_TEMP/pictowebp"
+          sh agent/pictowebp/scripts/install.sh --version "$VERSION" \
+            --install-dir "$install_dir" --require-attestation --json
+          "$install_dir/pictowebp" --info --json
+          "$install_dir/pictowebp" --version
+
+          mkdir -p "$RUNNER_TEMP/source"
+          cp tests/e2e/fixtures/a.png "$RUNNER_TEMP/source/"
+          "$install_dir/pictowebp" "$RUNNER_TEMP/source" \
+            --out "$RUNNER_TEMP/out" --json > /dev/null
+          test -f "$RUNNER_TEMP/out/a.webp"
+
+          sh agent/pictowebp/scripts/install.sh --uninstall \
+            --install-dir "$install_dir" --json

@@ -1,0 +1,109 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+
+      - name: Install
+        run: uv sync --frozen --extra web
+
+      - name: Lint
+        run: |
+          uv run ruff check src_py tests
+          uv run ruff format --check src_py tests
+
+      - name: Type-check
+        run: uv run pyright
+
+      - name: Test
+        env:
+          # Keep PR feedback fast; the scheduled security workflow exercises the
+          # real-photo dataset.
+          PICTOWEBP_SKIP_REAL_DOWNLOAD: "1"
+        run: uv run pytest -q
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Format
+        working-directory: src_rust
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: src_rust
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        working-directory: src_rust
+        run: cargo test --locked
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web-ts/package-lock.json
+
+      - name: Install
+        working-directory: web-ts
+        run: npm ci
+
+      - name: Unit tests
+        working-directory: web-ts
+        run: npm test
+
+      - name: Build both profiles
+        working-directory: web-ts
+        run: |
+          npm run build
+          npm run build:python
+          test -f dist/index.html
+          grep -q 'Content-Security-Policy' dist/index.html
+
+      - name: Install browser
+        working-directory: web-ts
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser e2e
+        working-directory: web-ts
+        run: npm run test:e2e
