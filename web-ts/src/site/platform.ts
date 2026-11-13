@@ -5,9 +5,9 @@
  * JavaScript needs: the commands and expected output stay in the static markup
  * so there is no second source of truth to drift.
  */
-export type InstallTab = 'unix' | 'windows' | 'docker';
+export type InstallTab = 'unix' | 'windows';
 
-export const INSTALL_TAB_IDS: readonly InstallTab[] = ['unix', 'windows', 'docker'];
+export const INSTALL_TAB_IDS: readonly InstallTab[] = ['unix', 'windows'];
 
 interface NavigatorLike {
   userAgentData?: { platform?: string };

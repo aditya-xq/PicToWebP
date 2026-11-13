@@ -61,7 +61,7 @@ test.describe('PicToWebP browser edition', () => {
 
     const local = page.locator('#local');
     await expect(local).toBeVisible();
-    await expect(page.locator('#install-tabs [role="tab"]')).toHaveCount(3);
+    await expect(page.locator('#install-tabs [role="tab"]')).toHaveCount(2);
 
     // Exactly one panel is open, whichever the platform default picked
     // (covered by the unit test; the runner may be Windows or Linux).

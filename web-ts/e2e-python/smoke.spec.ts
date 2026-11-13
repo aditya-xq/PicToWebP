@@ -33,7 +33,7 @@ test.describe('PicToWebP unified SPA over the Python backend', () => {
     await expect(page.locator('[data-when="lossless"]')).toBeHidden();
 
     // Install instructions must still be present in the served edition.
-    await expect(page.locator('#install-tabs [role="tab"]')).toHaveCount(3);
+    await expect(page.locator('#install-tabs [role="tab"]')).toHaveCount(2);
     await expect(page.locator('#cmd-skills')).toContainText('npx skills add');
   });
 

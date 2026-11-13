@@ -337,8 +337,6 @@
                 aria-controls="local-panel-unix" aria-selected="true" tabindex="0">macOS / Linux</button>
         <button class="tab" id="local-tab-windows" type="button" role="tab"
                 aria-controls="local-panel-windows" aria-selected="false" tabindex="-1">Windows</button>
-        <button class="tab" id="local-tab-docker" type="button" role="tab"
-                aria-controls="local-panel-docker" aria-selected="false" tabindex="-1">Docker</button>
       </div>
 
       <div class="tabpanel" id="local-panel-unix" role="tabpanel" aria-labelledby="local-tab-unix" tabindex="0">
@@ -406,22 +404,6 @@ sh install.sh --json</code></pre>
           Installs to <code>%LOCALAPPDATA%\Programs\pictowebp</code> and writes an
           <code>install.json</code> manifest beside the binary. Use <code>-RequireAttestation</code>
           with <code>gh</code> 2.49+ to enforce the Sigstore check.
-        </p>
-      </div>
-
-      <div class="tabpanel" id="local-panel-docker" role="tabpanel" aria-labelledby="local-tab-docker" tabindex="0" hidden>
-        <div class="codeblock">
-          <div class="codeblock-head">
-            <span class="codeblock-label">Self-host the web UI</span>
-            <button class="copy-btn" type="button" data-copy="cmd-docker">Copy</button>
-          </div>
-          <pre id="cmd-docker"><code>docker build -t pictowebp .
-docker run --rm -p 127.0.0.1:8000:8000 pictowebp</code></pre>
-        </div>
-        <p class="panel-note">
-          Needs a checkout. Opens the same UI as this page at
-          <code>http://127.0.0.1:8000</code>; the port is published to loopback only, so nothing is
-          reachable from your network.
         </p>
       </div>
 

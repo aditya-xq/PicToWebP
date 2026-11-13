@@ -54,14 +54,17 @@ JavaScript, so adding these sections cannot cause layout shift.
 
 ### 3.1 `#local` — Rust first
 
-Three tabs. Default tab from `navigator.userAgentData?.platform ??
+Two tabs. Default tab from `navigator.userAgentData?.platform ??
 navigator.platform`, never from a network probe.
 
 | Tab | Command block |
 | --- | --- |
 | macOS / Linux (default) | `curl -fsSLO https://github.com/aditya-xq/PicToWebP/releases/download/rust-latest/install.sh` then `sh install.sh --json` |
 | Windows | `irm https://github.com/aditya-xq/PicToWebP/releases/download/rust-latest/install.ps1 -OutFile install.ps1` then `.\install.ps1 -Json` |
-| Docker | `docker build -t pictowebp .` then `docker run --rm -p 127.0.0.1:8000:8000 pictowebp` |
+
+A Docker tab was in the first cut and removed: it needs a checkout, so it is the
+same audience as the from-source footnote, and the README already documents the
+container path. It stays out of the page.
 
 Each panel carries:
 
@@ -77,8 +80,8 @@ A single footnote under the tabs, not a fourth tab:
 > `pip install pictowebp` does not exist yet.
 
 The Python edition stays in the editions table as a column, not as an install
-path. Docker is the supported way to run the web UI locally without a checkout
-toolchain.
+path. The container route for running its local server UI lives in the README,
+not on the page.
 
 Three copy decisions that need to be right:
 
@@ -86,9 +89,9 @@ Three copy decisions that need to be right:
   The local `src_rust/target` build is 0.3.0; published releases are 0.4.0 and
   the capability list differs (0.4.0 includes `mcp`). The plan is to install
   0.4.0 once and paste the real output.
-- **Bind Docker to loopback.** `README.md:103` publishes `-p 8000:8000`, which
-  exposes the server on every interface. Use `-p 127.0.0.1:8000:8000` on the
-  page and fix the README to match; the privacy strip claims local-only.
+- **Bind Docker to loopback.** `README.md:103` published `-p 8000:8000`, which
+  exposes the server on every interface. Fix the README to
+  `-p 127.0.0.1:8000:8000`; the privacy strip claims local-only.
 - **Do not imply the Docker image bundles the prebuilt SPA.** It runs
   `npm run build:python` inside the build stage, so the image is correct, but
   the contributor footnote should still say that `pictowebp-web` from a
@@ -140,8 +143,8 @@ and the note under the table is swapped by capability:
 That reuses the existing capability model instead of restating it.
 
 The Python column stays factual and is never presented as something to
-install: the Docker tab is the supported way to run its local server UI, and
-the footnote under `#local` points contributors at `CONTRIBUTING.md`.
+install: the footnote under `#local` points at `CONTRIBUTING.md`, and the
+README documents the container route.
 
 ### 3.4 `#cli` — flags and exit codes
 
@@ -283,15 +286,11 @@ Confirm `capabilities` contains `mcp` before the `#agents` MCP block goes live.
             aria-controls="local-panel-unix" aria-selected="true" tabindex="0">macOS / Linux</button>
     <button class="tab" role="tab" id="local-tab-windows"
             aria-controls="local-panel-windows" aria-selected="false" tabindex="-1">Windows</button>
-    <button class="tab" role="tab" id="local-tab-docker"
-            aria-controls="local-panel-docker" aria-selected="false" tabindex="-1">Docker</button>
   </div>
   <div class="tabpanel" role="tabpanel" id="local-panel-unix"
        aria-labelledby="local-tab-unix" tabindex="0"> … </div>
   <div class="tabpanel" role="tabpanel" id="local-panel-windows"
        aria-labelledby="local-tab-windows" tabindex="0" hidden> … </div>
-  <div class="tabpanel" role="tabpanel" id="local-panel-docker"
-       aria-labelledby="local-tab-docker" tabindex="0" hidden> … </div>
   <p class="footnote">Building from source, or running the Python edition's
      local server? See
      <a href="https://github.com/aditya-xq/PicToWebP/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.
@@ -315,7 +314,7 @@ JavaScript actually needs live here; the commands and expected output stay in
 the static markup so there is no second source of truth:
 
 ```ts
-export type InstallTab = 'unix' | 'windows' | 'docker'
+export type InstallTab = 'unix' | 'windows'
 export const INSTALL_TAB_IDS: readonly InstallTab[]
 export function defaultTab(nav?: { userAgentData?: { platform?: string }; platform?: string }): InstallTab
 ```
@@ -381,7 +380,7 @@ permissions: ['clipboard-read', 'clipboard-write'],
 
 - `web-ts/src/site/platform.test.ts`: `defaultTab` maps `Win32`/`Windows` →
   `windows`, `macOS`/`Linux` → `unix`, absent navigator → `unix`.
-- `web-ts/e2e/smoke.spec.ts`: `#local` renders three tabs; clicking Windows
+- `web-ts/e2e/smoke.spec.ts`: `#local` renders two tabs; clicking Windows
   makes `local-panel-windows` visible and hides the unix panel; the copy button
   flips to `Copied` and `navigator.clipboard.readText()` equals the command;
   `.section-nav a[href="#local"]` updates `location.hash`.
@@ -494,7 +493,7 @@ deployed page shows the section with no console errors and no CLS.
   above; no new section appears before it.
 - The `.section-nav` row is keyboard reachable, and every link resolves to a
   section that exists in the same build.
-- A user on macOS, Windows, Linux or Docker can copy one block and end with a
+- A user on macOS, Windows or Linux can copy one block and end with a
   working `pictowebp --version` without leaving the page.
 - `npx skills add https://xqbuilds.com/pictowebp/` appears once, verbatim, and
   matches what CI verifies.
