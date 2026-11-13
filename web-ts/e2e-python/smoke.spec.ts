@@ -25,10 +25,10 @@ test.describe('PicToWebP unified SPA over the Python backend', () => {
 
     // Same markup as the static build; the highlight and the notes come from
     // the backend capabilities rather than from a per-profile template.
-    await expect(page.locator('.edition-card.is-current')).toHaveAttribute(
-      'data-edition',
-      'python',
-    );
+    // The page lists the browser and CLI editions only; the Python server is a
+    // contributor path, so nothing is highlighted when it serves this page.
+    await expect(page.locator('.edition-card')).toHaveCount(2);
+    await expect(page.locator('.edition-card.is-current')).toHaveCount(0);
     await expect(page.locator('[data-when="metadata"]')).toBeHidden();
     await expect(page.locator('[data-when="lossless"]')).toBeHidden();
 

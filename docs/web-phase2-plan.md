@@ -79,9 +79,8 @@ A single footnote under the tabs, not a fourth tab:
 > `CONTRIBUTING.md`. The Python package is not published on PyPI, so
 > `pip install pictowebp` does not exist yet.
 
-The Python edition stays in the editions table as a column, not as an install
-path. The container route for running its local server UI lives in the README,
-not on the page.
+The Python edition is not shown as an install path or as a card: the container
+route and the from-source workflow live in the README and CONTRIBUTING.
 
 Three copy decisions that need to be right:
 
@@ -119,22 +118,26 @@ Below the command, three short blocks:
   also published at `/.well-known/agent-skills/pictowebp/` and can be dropped
   into any agent's skills folder.
 
-### 3.3 `#editions` — three cards, capability-driven
+### 3.3 `#editions` — two cards, capability-driven
 
-The content matrix below, rendered as three cards (one per edition) so the
+The content matrix below, rendered as two cards (browser and CLI) so the
 current one can be highlighted and the list stays readable on mobile:
 
-| | Browser | Rust CLI | Python server |
-| --- | --- | --- | --- |
-| Install | none | signed binary | from source, contributors only |
-| Lossless | no | yes | yes |
-| Keep metadata | no | yes | yes |
-| MCP | no | yes | no |
-| Fastest on batches | — | yes | — |
-| Needs a runtime | no | no | Python 3.11+ |
+| | Browser | Rust CLI |
+| --- | --- | --- |
+| Install | none | signed binary |
+| Lossless | no | yes |
+| Keep metadata | no | yes |
+| MCP | no | yes |
+| Fastest on batches | — | yes |
+| Needs a runtime | no | no |
 
-The row for the **currently running** edition is highlighted from `cap.kind`,
-and the note under the table is swapped by capability:
+The Python server edition is deliberately absent: it is a contributor path, and
+the page is where a visitor decides how to use the tool. When the Python build
+serves this page nothing matches `cap.kind`, so no card is highlighted.
+
+The card for the **currently running** edition is highlighted from `cap.kind`,
+and the note under the cards is swapped by capability:
 
 - `cap.metadataControl === false` → "This edition cannot preserve metadata;
   canvas decoding drops it before the encoder runs."
@@ -142,9 +145,8 @@ and the note under the table is swapped by capability:
 
 That reuses the existing capability model instead of restating it.
 
-The Python column stays factual and is never presented as something to
-install: the footnote under `#local` points at `CONTRIBUTING.md`, and the
-README documents the container route.
+The footnote under `#local` is the only Python mention on the page, and it
+points at `CONTRIBUTING.md`; the README documents the container route.
 
 ### 3.4 `#cli` — flags and exit codes
 

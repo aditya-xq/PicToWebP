@@ -106,7 +106,8 @@ test.describe('PicToWebP browser edition', () => {
   test('editions highlight the running backend and hide its limitations', async ({ page }) => {
     await page.goto('/');
 
-    // The static build runs the browser backend.
+    // Two editions are advertised: the browser and the CLI.
+    await expect(page.locator('.edition-card')).toHaveCount(2);
     await expect(page.locator('.edition-card.is-current')).toHaveAttribute(
       'data-edition',
       'browser',

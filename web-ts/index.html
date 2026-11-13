@@ -525,35 +525,21 @@ sh install.sh --json</code></pre>
             <li>Runtime: none</li>
           </ul>
         </article>
-
-        <article class="edition-card" data-edition="python">
-          <div class="edition-head">
-            <h3 class="edition-name">Python server</h3>
-            <span class="current-badge" data-current-badge hidden>You are here</span>
-          </div>
-          <p class="edition-sub">The same UI served from localhost, plus a Python API.</p>
-          <ul class="panel-list">
-            <li>Lossless: yes</li>
-            <li>Metadata: stripped by default, can be kept</li>
-            <li>MCP: no</li>
-            <li>Runtime: Python 3.11+</li>
-          </ul>
-        </article>
       </div>
 
       <p class="panel-note" data-when="metadata" hidden>
         This edition cannot preserve metadata: canvas decoding drops it before the encoder runs.
-        Use one of the CLIs if you need EXIF or GPS kept.
+        Use the Rust CLI if you need EXIF or GPS kept.
       </p>
       <p class="panel-note" data-when="lossless" hidden>
-        This edition has no lossless mode. The CLI editions do.
+        This edition has no lossless mode. The Rust CLI does.
       </p>
     </section>
 
     <section id="cli" class="section" aria-labelledby="cli-title">
       <h2 class="section-title" id="cli-title">CLI reference</h2>
       <p class="section-lede">
-        Identical in the Rust and Python editions. The normative contract is
+        The same flags and exit codes in every edition. The normative contract is
         <a href="__BASE__agent/agent-contract.md">docs/agent-contract.md</a>.
       </p>
 

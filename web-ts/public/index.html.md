@@ -12,29 +12,32 @@ not parse HTML.
 
 PicToWebP converts JPEG, PNG and WebP images to WebP, in bulk (a whole folder,
 recursively) or one at a time. It never uploads anything: the browser edition
-decodes and re-encodes in an `OffscreenCanvas` worker, and the CLI and local
-server editions run entirely on the machine.
+decodes and re-encodes in an `OffscreenCanvas` worker, and the CLI runs entirely
+on the machine.
 
 Default result: about 55-80% smaller files at the same dimensions, depending on
 quality and input.
 
-## Three editions, one behaviour
+## Two editions, one behaviour
 
 | Edition | Get it | Best for |
 | --- | --- | --- |
-| Browser | <https://aditya-xq.github.io/PicToWebP/> | no install, drag a folder and convert |
-| Python CLI + local server | `pip install .[web]` from a checkout, then `pictowebp-web` | lossless, metadata control, open-folder |
-| Rust CLI | signed binaries from the releases page, or a cargo build | fastest, no runtime |
+| Browser | <https://xqbuilds.com/pictowebp/> | no install, drag a folder and convert |
+| Rust CLI | signed binaries from the releases page, or a cargo build | fastest, no runtime, lossless, metadata control |
 
-The two CLIs share the same flags and exit codes. The web UI is one codebase
-driven by a backend capability model, so only the controls an edition can honour
-are shown.
+A Python edition also exists behind the same CLI contract, but it is not
+published on PyPI and is not the supported install path; see
+<https://github.com/aditya-xq/PicToWebP/blob/main/CONTRIBUTING.md>.
+
+The web UI is one codebase driven by a backend capability model, so only the
+controls an edition can honour are shown.
 
 ## Options
 
 - **Quality** , 1 to 100, default 80. Presets: Web 60, Balanced 80, High 95,
   Max 100.
-- **Lossless** , every pixel preserved, larger output. Python and Rust only.
+- **Lossless** , every pixel preserved, larger output. The Rust CLI only; the
+  browser edition cannot.
 - **Strip metadata** , removes EXIF and GPS by default. The browser edition
   cannot preserve metadata at all, so the toggle is hidden there.
 
