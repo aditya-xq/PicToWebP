@@ -169,30 +169,36 @@ export function agentSurfaces(): Plugin {
       // dot-directories safe if the deployment method ever changes.
       await writeFile(path.join(out, '.nojekyll'), '')
     },
-    transformIndexHtml() {
+    transformIndexHtml(html) {
       const base = config.base.endsWith('/') ? config.base : `${config.base}/`
-      return [
-        {
-          tag: 'link',
-          attrs: {
-            rel: 'alternate',
-            type: 'text/markdown',
-            href: `${base}index.html.md`,
-            title: 'Markdown version of this page',
+      return {
+        // `<a href>` is not an asset attribute, so Vite leaves it alone. The
+        // `__BASE__` token keeps artifact links correct in both profiles and
+        // lets the xqbuilds sync rewrite them like everything else.
+        html: html.split('__BASE__').join(base),
+        tags: [
+          {
+            tag: 'link',
+            attrs: {
+              rel: 'alternate',
+              type: 'text/markdown',
+              href: `${base}index.html.md`,
+              title: 'Markdown version of this page',
+            },
+            injectTo: 'head',
           },
-          injectTo: 'head',
-        },
-        {
-          tag: 'link',
-          attrs: { rel: 'describedby', href: `${base}llms.txt` },
-          injectTo: 'head',
-        },
-        {
-          tag: 'link',
-          attrs: { rel: 'ard', href: `${base}.well-known/ard.json` },
-          injectTo: 'head',
-        },
-      ]
+          {
+            tag: 'link',
+            attrs: { rel: 'describedby', href: `${base}llms.txt` },
+            injectTo: 'head',
+          },
+          {
+            tag: 'link',
+            attrs: { rel: 'ard', href: `${base}.well-known/ard.json` },
+            injectTo: 'head',
+          },
+        ],
+      }
     },
   }
 }

@@ -89,9 +89,10 @@ quality and thread count; just press `Enter` to accept the defaults). Every run
 creates a fresh `images_webp_<timestamp>` folder next to the source, mirroring
 its structure. Quality defaults to `80`; add `--lossless` to keep every pixel.
 
-Prefer converting in your browser but with Python's format support? Serve the local web UI (requires the `web` extra):
+Prefer converting in your browser but with Python's format support? Serve the local web UI (requires the `web` extra, and the SPA has to be built once first):
 
 ```bash
+cd web-ts && npm run build:python && cd ..   # builds the UI the server serves
 pip install .[web]
 pictowebp-web            # serves http://127.0.0.1:8000
 ```
@@ -100,8 +101,11 @@ Prefer containers? 🐳
 
 ```bash
 docker build -t pictowebp .
-docker run --rm -p 8000:8000 pictowebp
+docker run --rm -p 127.0.0.1:8000:8000 pictowebp
 ```
+
+The port is published to loopback so the server is never reachable from your
+network.
 
 ### Rust 🦀 (for best performance and heavy workloads)
 

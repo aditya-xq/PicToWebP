@@ -49,7 +49,8 @@ from a pull request.
     ├── public/               # robots.txt, sitemap.xml, index.html.md twin
     ├── src/
     │   ├── main.ts           # UI state machine + interactions (backend-agnostic)
-    │   ├── ui/               # DOM helpers (dom.ts)
+    │   ├── site/             # always-on page sections (install tabs, copy, editions)
+    │   ├── ui/               # DOM helpers (dom.ts, toasts.ts, copy.ts)
     │   ├── backend/          # ConversionBackend contract
     │   │   ├── types.ts      #   interface + capabilities + shared types
     │   │   ├── browser.ts    #   in-browser engine (workers + FS access + JSZip)
@@ -196,6 +197,18 @@ origin is where artifacts are served (so `llms.txt` and the manifests name it),
 while `xqbuilds.com/pictowebp/` is the canonical public page (so `rel=canonical`,
 Open Graph, `robots.txt` and `sitemap.xml` name that). `xqbuilds` vendors this
 build on every Vercel deploy; see its `scripts/sync-pictowebp.mjs`.
+
+The page sections below the converter (`#local`, `#agents`, `#editions`, `#cli`)
+are static markup in `index.html`, mounted by `web-ts/src/site/init.ts` from
+`DOMContentLoaded`. Two rules keep them honest:
+
+- Links to published artifacts use a `__BASE__` token (`href="__BASE__llms.txt"`)
+  because Vite does not rewrite `<a href>` and the two profiles have different
+  bases. `transformIndexHtml` replaces it, and the validator fails if it leaks
+  into `dist`.
+- Every `--flag` named in `#cli` must appear in `docs/agent-contract.md`. The
+  build fails otherwise, so the page cannot quietly become a second source of
+  truth for the CLI.
 
 Two things the workflow needs from repository settings:
 

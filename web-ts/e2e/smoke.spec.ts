@@ -86,6 +86,47 @@ test.describe('PicToWebP browser edition', () => {
     expect(clipboard).toContain('-Json');
   });
 
+  test('agent section documents the skill install and MCP', async ({ page }) => {
+    await page.goto('/');
+
+    await expect(page.locator('#agents')).toBeVisible();
+    await expect(page.locator('#cmd-skills')).toHaveText(
+      'npx skills add https://xqbuilds.com/pictowebp/',
+    );
+    await expect(page.locator('#cmd-mcp')).toContainText('"args": ["--mcp"]');
+    await expect(page.locator('#agents .panel-tag')).toHaveText('Rust 0.4.0+');
+
+    // The "read next" links must resolve in the built artifact.
+    for (const href of ['llms.txt', 'llms-full.txt', 'agent/agent-contract.md']) {
+      const response = await page.request.get(new URL(href, page.url()).toString());
+      expect(response.status(), href).toBe(200);
+    }
+  });
+
+  test('editions highlight the running backend and hide its limitations', async ({ page }) => {
+    await page.goto('/');
+
+    // The static build runs the browser backend.
+    await expect(page.locator('.edition-card.is-current')).toHaveAttribute(
+      'data-edition',
+      'browser',
+    );
+    await expect(page.locator('.edition-card.is-current .current-badge')).toBeVisible();
+    await expect(page.locator('.edition-card[data-edition="rust"] .current-badge')).toBeHidden();
+
+    // Browser cannot preserve metadata or go lossless, so both notes show.
+    await expect(page.locator('[data-when="metadata"]')).toBeVisible();
+    await expect(page.locator('[data-when="lossless"]')).toBeVisible();
+  });
+
+  test('CLI reference documents flags and exit codes', async ({ page }) => {
+    await page.goto('/');
+
+    await expect(page.locator('#cli .ref-table')).toHaveCount(2);
+    await expect(page.locator('#cli')).toContainText('--fail-on-empty');
+    await expect(page.locator('#cli')).toContainText('130');
+  });
+
   test('section nav anchors resolve to sections', async ({ page }) => {
     await page.goto('/');
 

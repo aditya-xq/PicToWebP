@@ -30,12 +30,14 @@ Agents are not humans with a terminal. They need:
 ## Flags
 
 Both CLIs accept the same core flags; `--mcp` is Rust-only and `--no-log` is
-Python-only. `-q`, `-t`, `--lossless`, `--keep-metadata`,
-`--no-progress`, `--report` are the original set; the agent set is:
+Python-only. The original set is `-q/--quality`, `-t/--threads`, `--lossless`,
+`--keep-metadata`, `--no-progress`, `--report`; the agent set is:
 
 | Flag | Behaviour |
 |------|-----------|
 | `--json` | Print exactly one JSON object to stdout. All human output goes to stderr. Implies `--no-progress`. The Python CLI also disables its log file. |
+| `--quality N` | WebP quality, 1-100, default `80`. Short form `-q`. |
+| `--threads N` | Conversion workers, default all cores. Short form `-t`. |
 | `--info` | Print tool metadata and exit without touching the filesystem. Combine with `--json` for the machine form. |
 | `--yes` | Never prompt. Omitted `-q`/`-t` fall back to defaults. |
 | `--interactive` | Force the prompt flow even when stdio is not a terminal. Used by the interactive e2e tests. |

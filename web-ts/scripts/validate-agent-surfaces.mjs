@@ -256,6 +256,7 @@ if (html !== null) {
   check(/rel="ard"/.test(html), 'index.html must link rel="ard" to the discovery manifest')
   check(/rel="describedby"/.test(html), 'index.html must link rel="describedby" to llms.txt')
   check(/type="text\/markdown"/.test(html), 'index.html must advertise the markdown twin')
+  check(!html.includes('__BASE__'), 'index.html still contains an unreplaced __BASE__ token')
   check(/Content-Security-Policy/.test(html), 'index.html is missing the CSP meta tag')
 
   // Self-references name the public page, which is the branded host, not the
@@ -274,6 +275,20 @@ if (html !== null) {
       const expected = name === 'og:image' ? `${CANONICAL_URL}og-image.png` : CANONICAL_URL
       check(found[1] === expected, `${name} must be ${expected}, got ${found[1]}`)
     }
+  }
+
+  // The `#cli` section must not become a second source of truth for the CLI:
+  // every flag it names has to be documented in the normative contract.
+  // Scoped to that section so `docker run --rm` and installer flags in `#local`
+  // are not mistaken for converter flags.
+  const cliSection = /<section id="cli"[\s\S]*?<\/section>/.exec(html)?.[0] ?? ''
+  check(cliSection !== '', 'index.html is missing the #cli section')
+  const contract = readFileSync(path.join(repo, 'docs', 'agent-contract.md'), 'utf8')
+  for (const [flag] of new Set([...cliSection.matchAll(/--[a-z][a-z-]*/g)].map((m) => m[0])).entries()) {
+    check(
+      contract.includes(flag),
+      `#cli names ${flag}, which docs/agent-contract.md does not document`,
+    )
   }
 }
 

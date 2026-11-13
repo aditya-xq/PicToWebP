@@ -1025,7 +1025,7 @@ function initUI(): void {
 document.addEventListener('DOMContentLoaded', () => {
   // Outside the probe gate on purpose: the install instructions have to work
   // even when the conversion backend is unavailable.
-  initSiteSections();
+  initSiteSections(backend.capabilities);
 
   void backend
     .probe()
