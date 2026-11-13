@@ -177,7 +177,15 @@ mod tests {
                 .subsec_nanos()
         ));
         fs::create_dir_all(&root).unwrap();
-        root
+        // Some Windows runners expose TEMP through an 8.3 short name
+        // (`C:\Users\RUNNER~1\...`). Canonicalize once so the source, the
+        // requested output and the comparison all start from the long
+        // spelling. Without this, a failed `canonicalize()` on one side lets
+        // the resolver fall back to `std::path::absolute()` with the short
+        // spelling while the other side resolved long, so `is_inside()`
+        // compares different names for the same folder and the assertion
+        // fails intermittently.
+        root.canonicalize().unwrap_or(root)
     }
 
     #[test]
