@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
       outDir: isPython ? 'dist-python' : 'dist',
       emptyOutDir: true,
       rollupOptions: {
-        input: resolve(__dirname, 'index.html'),
+        input: resolve(import.meta.dirname, 'index.html'),
       },
       target: 'es2020',
       minify: 'esbuild',
