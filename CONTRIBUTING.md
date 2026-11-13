@@ -191,6 +191,12 @@ sources into the web stage — the container build publishes the full surface.
 re-checks the published URLs after deploying. Removing that flag silently
 unpublishes `.well-known/`.
 
+Two hosts are involved, and `web-ts/build/site.mjs` keeps them apart: the Pages
+origin is where artifacts are served (so `llms.txt` and the manifests name it),
+while `xqbuilds.com/pictowebp/` is the canonical public page (so `rel=canonical`,
+Open Graph, `robots.txt` and `sitemap.xml` name that). `xqbuilds` vendors this
+build on every Vercel deploy; see its `scripts/sync-pictowebp.mjs`.
+
 Two things the workflow needs from repository settings:
 
 - **Actions permissions** must be *Allow all actions and reusable workflows*

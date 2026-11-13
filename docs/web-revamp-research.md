@@ -300,10 +300,15 @@ because both fail silently:
    prefixed correctly, but any hand-written absolute URL inside a manifest still
    has to name the project subpath.
 
-Not yet addressed, and out of scope for Phase 1: the build still emits a
-`rel="canonical"` and Open Graph block pointing at `xqbuilds.com/pictowebp/`
-while the site is deployed at `aditya-xq.github.io/PicToWebP/`. Pick one host
-before adding more crawlable content.
+**Two hosts, on purpose.** `web-ts/build/site.mjs` keeps them apart: the build
+is published and served from `aditya-xq.github.io/PicToWebP/`, so every
+machine-readable URL (`llms.txt`, `ard.json`, the skill) names that host, while
+`xqbuilds.com/pictowebp/` is the canonical public page and names itself in
+`rel="canonical"`, `og:url`, `og:image`, the JSON-LD `url`, `robots.txt` and
+`sitemap.xml`. `xqbuilds` vendors this build into `static/pictowebp/` on every
+Vercel deploy via `scripts/sync-pictowebp.mjs`, rewriting publish URLs to its
+own host. The validator enforces both halves, so the hosts cannot drift apart
+silently.
 
 
 ## 6. Phased plan

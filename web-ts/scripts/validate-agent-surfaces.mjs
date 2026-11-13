@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SITE_BASE, SITE_ORIGIN } from '../build/site.mjs'
+import { CANONICAL_URL, PUBLISH_BASE, PUBLISH_ORIGIN } from '../build/site.mjs'
 
 const SKILLS_INDEX_SCHEMA = 'https://schemas.agentskills.io/discovery/0.2.0/schema.json'
 const URN = /^urn:air:[a-zA-Z0-9.-]+(:[a-zA-Z0-9._-]+)+$/
@@ -99,12 +99,12 @@ function checkTarget(href, fromDir, label) {
       failures.push(`${label}: ${href} is not a valid URL`)
       return
     }
-    if (url.origin !== SITE_ORIGIN) return
-    if (!url.pathname.startsWith(SITE_BASE)) {
-      failures.push(`${label}: ${href} is on the site origin but outside ${SITE_BASE}`)
+    if (url.origin !== PUBLISH_ORIGIN) return
+    if (!url.pathname.startsWith(PUBLISH_BASE)) {
+      failures.push(`${label}: ${href} is on the site origin but outside ${PUBLISH_BASE}`)
       return
     }
-    checkDistPath(url.pathname.slice(SITE_BASE.length), href, label)
+    checkDistPath(url.pathname.slice(PUBLISH_BASE.length), href, label)
     return
   }
 
@@ -258,10 +258,9 @@ if (html !== null) {
   check(/type="text\/markdown"/.test(html), 'index.html must advertise the markdown twin')
   check(/Content-Security-Policy/.test(html), 'index.html is missing the CSP meta tag')
 
-  // Every self-reference has to name the host this surface is published on,
-  // otherwise search engines and agents are pointed at a copy that may not
-  // carry the manifests. `build/site.mjs` is the one place to change it.
-  const pageUrl = `${SITE_ORIGIN}${SITE_BASE}`
+  // Self-references name the public page, which is the branded host, not the
+  // Pages deploy the artifacts are served from. `build/site.mjs` is the one
+  // place either can change.
   const selfReferences = [
     ['rel="canonical"', /<link rel="canonical" href="([^"]+)"/],
     ['og:url', /<meta property="og:url" content="([^"]+)"/],
@@ -272,7 +271,7 @@ if (html !== null) {
     const found = pattern.exec(html)
     check(found !== null, `index.html is missing ${name}`)
     if (found) {
-      const expected = name === 'og:image' ? `${pageUrl}og-image.png` : pageUrl
+      const expected = name === 'og:image' ? `${CANONICAL_URL}og-image.png` : CANONICAL_URL
       check(found[1] === expected, `${name} must be ${expected}, got ${found[1]}`)
     }
   }
@@ -281,14 +280,14 @@ if (html !== null) {
 // The static files Vite copies verbatim must agree with the same host.
 const sitemap = read('sitemap.xml')
 if (sitemap !== null) {
-  check(sitemap.includes(`<loc>${SITE_ORIGIN}${SITE_BASE}</loc>`), `sitemap.xml must list ${SITE_ORIGIN}${SITE_BASE}`)
+  check(sitemap.includes(`<loc>${CANONICAL_URL}</loc>`), `sitemap.xml must list ${CANONICAL_URL}`)
 }
 
 const robots = read('robots.txt')
 if (robots !== null) {
   check(
-    robots.includes(`${SITE_ORIGIN}${SITE_BASE}sitemap.xml`),
-    `robots.txt must point at ${SITE_ORIGIN}${SITE_BASE}sitemap.xml`,
+    robots.includes(`${CANONICAL_URL}sitemap.xml`),
+    `robots.txt must point at ${CANONICAL_URL}sitemap.xml`,
   )
 }
 

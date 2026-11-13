@@ -24,7 +24,7 @@ import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Plugin, ResolvedConfig } from 'vite'
-import { siteUrl } from './site.mjs'
+import { publishUrl } from './site.mjs'
 
 /** Agent Skills Discovery index schema (Cloudflare RFC, v0.2.0). */
 const SKILLS_INDEX_SCHEMA = 'https://schemas.agentskills.io/discovery/0.2.0/schema.json'
@@ -107,7 +107,7 @@ export function agentSurfaces(): Plugin {
         '> CLI contract, the installable skill, and every reference page. Generated',
         '> from the repository at build time.',
         '',
-        `Compact version: ${siteUrl('llms.txt')}`,
+        `Compact version: ${publishUrl('llms.txt')}`,
       ]
       for (const { file, title } of FULL_TEXT_SOURCES) {
         const body = await readFile(path.join(repo, file), 'utf8')
@@ -146,7 +146,7 @@ export function agentSurfaces(): Plugin {
             identifier: 'urn:air:aditya-xq.github.io:pictowebp:skill',
             displayName: 'PicToWebP agent skill',
             type: 'text/markdown',
-            url: siteUrl(`.well-known/agent-skills/${SKILL_NAME}/SKILL.md`),
+            url: publishUrl(`.well-known/agent-skills/${SKILL_NAME}/SKILL.md`),
             description,
             tags: ['image', 'webp', 'compression', 'cli', 'offline'],
             capabilities: ['convert_folder', 'convert_image', 'dry_run'],
