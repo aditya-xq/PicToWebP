@@ -20,6 +20,6 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.2"
   }
 }
