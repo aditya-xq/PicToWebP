@@ -79,6 +79,10 @@ jobs:
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: web-ts/dist
+          # `.well-known/` and `.nojekyll` are hidden files, and this action
+          # excludes top-level dot entries by default. Without this flag the
+          # discovery manifests are built, verified, and then silently dropped.
+          include-hidden-files: true
 
   deploy:
     needs: build
@@ -92,3 +96,24 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+
+      # The build verifies the surface on disk, but the upload step can still
+      # drop files (it excluded every dot entry until include-hidden-files was
+      # set). Check what is actually served, with retries for CDN lag.
+      - name: Verify published agent surface
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          fail=0
+          for path in llms.txt llms-full.txt index.html.md \
+                      .well-known/ard.json .well-known/agent-skills/index.json; do
+            code=000
+            for attempt in 1 2 3 4 5 6; do
+              code=$(curl -sS -o /dev/null -w '%{http_code}' "${PAGE_URL}${path}" || true)
+              [ "$code" = "200" ] && break
+              sleep 5
+            done
+            echo "${path} -> ${code}"
+            [ "$code" = "200" ] || fail=1
+          done
+          exit "$fail"

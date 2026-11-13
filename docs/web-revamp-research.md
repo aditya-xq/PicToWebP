@@ -290,10 +290,12 @@ full surface.
 Two Pages-specific hazards remain worth verifying after the first deploy,
 because both fail silently:
 
-1. **Dot-directories actually served.** Artifact-based Pages deploys serve files
-   as-is and do not run Jekyll, so `.well-known/` should survive. Confirm with
-   `curl -sI https://aditya-xq.github.io/PicToWebP/.well-known/agent-skills/index.json`
-   and check for `200` plus `application/json`.
+1. **Dot-directories actually served.** This one is not hypothetical: the first
+   deploy shipped without them. `actions/upload-pages-artifact` excludes every
+   top-level dot entry (`--exclude=.[^/]*`) unless `include-hidden-files: true`
+   is set, so `.well-known/` was built and verified in `dist/` and then dropped
+   at upload. The workflow now sets the flag and re-checks the live URLs after
+   deploying.
 2. **Base path.** `base: '/PicToWebP/'` means the injected `<link>` tags are
    prefixed correctly, but any hand-written absolute URL inside a manifest still
    has to name the project subpath.

@@ -186,6 +186,11 @@ The generator needs the repository around `web-ts/`: it reads `agent/`,
 skips with it instead of failing. That is why the `Dockerfile` copies the three
 sources into the web stage — the container build publishes the full surface.
 
+`actions/upload-pages-artifact` drops top-level dot entries unless
+`include-hidden-files: true` is set, which is why the workflow passes it and
+re-checks the published URLs after deploying. Removing that flag silently
+unpublishes `.well-known/`.
+
 Two things the workflow needs from repository settings:
 
 - **Actions permissions** must be *Allow all actions and reusable workflows*
