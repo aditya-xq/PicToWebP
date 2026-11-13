@@ -1,18 +1,61 @@
 version: 2
+# Patch and minor updates are grouped per ecosystem so a weekly run opens one
+# reviewable PR instead of a dozen. Major updates stay ungrouped on purpose:
+# they are migrations (see vite 8 / vitest 5 / typescript 7) and get their own
+# change with the required code and CI updates.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: cargo
     directory: /src_rust
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # webp 0.3.1 pins libwebp-sys ^0.9.3, so a 0.14 bump would link two
+      # copies of libwebp (0.9.6 for Encoder/Decoder, 0.14 for WebPMux).
+      # Revisit when webp supports 0.14 or convert.rs moves to direct bindings.
+      - dependency-name: libwebp-sys
+        update-types:
+          - version-update:semver-major
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      pip-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: npm
     directory: /web-ts
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
