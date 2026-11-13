@@ -27,7 +27,7 @@ npm run test:e2e            # static / browser-backend build
 npm run test:e2e:python     # python-backend build served by FastAPI
 ```
 All suites are expected green before committing , currently
-**96 pytest, 43 cargo, 24 vitest, 10 Playwright e2e**.
+**140 pytest, 77 cargo, 24 vitest, 10 Playwright e2e**.
 
 ## The shared fixture corpus 🗂️
 
