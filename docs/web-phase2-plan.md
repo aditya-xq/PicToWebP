@@ -116,7 +116,10 @@ Below the command, three short blocks:
   also published at `/.well-known/agent-skills/pictowebp/` and can be dropped
   into any agent's skills folder.
 
-### 3.3 `#editions` — three columns, capability-driven
+### 3.3 `#editions` — three cards, capability-driven
+
+The content matrix below, rendered as three cards (one per edition) so the
+current one can be highlighted and the list stays readable on mobile:
 
 | | Browser | Rust CLI | Python server |
 | --- | --- | --- | --- |
@@ -156,14 +159,22 @@ New modules, all small and side-effect free at import time:
 
 | File | Responsibility | Rough size |
 | --- | --- | --- |
-| `web-ts/src/site/content.ts` | typed content: tabs, commands, edition rows, flags | 120 lines |
+| `web-ts/src/site/platform.ts` | `defaultTab()` + tab ids; no duplicated commands | 25 lines |
 | `web-ts/src/site/tabs.ts` | `role="tablist"` wiring, arrow keys, roving tabindex | 60 lines |
 | `web-ts/src/ui/copy.ts` | `copyText` + "Copied" state + clipboard fallback | 45 lines |
 | `web-ts/src/site/init.ts` | mount sections: tabs, copy buttons, edition highlight | 70 lines |
-| `web-ts/src/ui.css` | `.section`, `.section-nav`, `.codeblock`, `.tabs`, `.cmd-grid`, `.edition-grid` | +200 lines |
+| `web-ts/src/ui.css` | `.section`, `.section-nav`, `.codeblock`, `.copy-btn`, `.edition-card`, `.footnote` | +200 lines |
 
-`main.ts` gains one call in `initUI()`: `initSiteSections(backend.capabilities)`.
-No existing element IDs change.
+`main.ts` gains one call in the `DOMContentLoaded` handler:
+`initSiteSections()`. It is deliberately **not** inside `initUI()`: that only
+runs after `backend.probe()` succeeds, and the install instructions have to work
+in a browser where conversion cannot start. No existing element IDs change.
+
+One small addition to the existing build plugin: `index.html` uses a `__BASE__`
+token for links to published artifacts (`href="__BASE__llms.txt"`), because Vite
+does not rewrite `<a href>` and the two profiles have different bases.
+`transformIndexHtml` returns `{ html: html.replaceAll('__BASE__', base), tags }`
+and the validator fails if the token survives into `dist`.
 
 Markup uses the same primitives as the app: `.card` for panels, `.btn`,
 `.chips`/`.chip` shapes for tabs, `--font-mono` for commands, and the existing
@@ -180,8 +191,8 @@ and then quietly lies. Two guards, both cheap:
    `dist/index.html` and fail if one is missing from
    `docs/agent-contract.md`. Adding a flag to the UI without documenting it
    breaks the build.
-2. **Capability copy is generated, not asserted.** The edition table's
-   highlight and the two notes under it are computed from
+2. **Capability copy is generated, not asserted.** The edition card highlight
+   and the two notes under it are computed from
    `backend.capabilities` at runtime, so a capability flip in
    `backend/browser.ts` changes the page.
 
@@ -218,16 +229,264 @@ Playwright needs `permissions: ['clipboard-read', 'clipboard-write']` for the
 copy assertion; the config uses `Desktop Chrome`, so that is a one-line
 addition to `playwright.config.ts` and the python config.
 
-## 8. Slices
+## 8. Step-by-step
 
-Each slice is independently shippable and leaves the page coherent.
+Four shippable slices plus a prerequisite step. Every step names its files and
+the command that proves it is done. Nothing is committed until its slice's
+verification line is green.
 
-| Slice | Contents | Why this order |
-| --- | --- | --- |
-| **A** | `#local` + `.section-nav` (with its `#local` link) + `.section`/`.codeblock` styles + copy buttons | Answers the question the page currently cannot answer; highest value per line |
-| **B** | `#agents` + tab component + the `#agents` nav link | Makes the Phase 1 surface discoverable from the page |
-| **C** | `#editions` + `#cli` + the `#cli` nav link + the flag guard | Supporting detail, most prone to drift, so it ships with its guard |
-| **D** | footer links, anchors, `scroll-margin-top`, README fixes (Docker port, `build:python` note) | Polish and the two documentation corrections found while planning |
+### Step 0 — capture the real 0.4.0 facts (blocking, ~10 min)
+
+The page must not publish fabricated output. `rust-latest/latest.json` reports
+`version: 0.4.0`, which is the release the tabs point at.
+
+```bash
+cd /tmp && curl -fsSLO https://github.com/aditya-xq/PicToWebP/releases/download/rust-latest/install.sh
+sh install.sh --install-dir ./pw-capture --json   # capture this JSON
+./pw-capture/pictowebp --info --json              # capture this JSON
+./pw-capture/pictowebp --version
+```
+
+Record three strings for the panels in `index.html` later:
+
+1. the `install.sh --json` object (trimmed to the fields worth showing:
+   `action`, `version`, `path`, `verified`);
+2. the `--info --json` object, formatted to fit ~78 columns but with byte-exact
+   values;
+3. `pictowebp --version` output.
+
+Confirm `capabilities` contains `mcp` before the `#agents` MCP block goes live.
+
+---
+
+### Slice A — `#local` (ships alone)
+
+**A1. Nav row** — `web-ts/index.html`, after `</div>` of `.privacy-strip`
+(line 101), before `<div class="work">` (line 103):
+
+```html
+<nav class="section-nav" aria-label="On this page">
+  <a href="#local">Run locally</a>
+</nav>
+```
+
+**A2. Section markup** — `web-ts/index.html`, between the close of `.work`
+(line 320) and `<footer>` (line 322):
+
+```html
+<section id="local" class="section" aria-labelledby="local-title">
+  <h2 class="section-title" id="local-title">Run it locally</h2>
+  <p class="section-lede">A single signed binary. No runtime, no admin rights,
+     no PATH edits.</p>
+  <div class="tabs" role="tablist" aria-label="Install method">
+    <button class="tab" role="tab" id="local-tab-unix"
+            aria-controls="local-panel-unix" aria-selected="true" tabindex="0">macOS / Linux</button>
+    <button class="tab" role="tab" id="local-tab-windows"
+            aria-controls="local-panel-windows" aria-selected="false" tabindex="-1">Windows</button>
+    <button class="tab" role="tab" id="local-tab-docker"
+            aria-controls="local-panel-docker" aria-selected="false" tabindex="-1">Docker</button>
+  </div>
+  <div class="tabpanel" role="tabpanel" id="local-panel-unix"
+       aria-labelledby="local-tab-unix" tabindex="0"> … </div>
+  <div class="tabpanel" role="tabpanel" id="local-panel-windows"
+       aria-labelledby="local-tab-windows" tabindex="0" hidden> … </div>
+  <div class="tabpanel" role="tabpanel" id="local-panel-docker"
+       aria-labelledby="local-tab-docker" tabindex="0" hidden> … </div>
+  <p class="footnote">Building from source, or running the Python edition's
+     local server? See
+     <a href="https://github.com/aditya-xq/PicToWebP/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.
+     …</p>
+</section>
+```
+
+Each panel repeats this shape, one `.codeblock` per command:
+
+```html
+<div class="codeblock">
+  <div class="codeblock-head"><span>Install</span>
+    <button class="copy-btn" type="button" data-copy="cmd-unix-install">Copy</button></div>
+  <pre id="cmd-unix-install"><code>curl -fsSLO …/install.sh
+sh install.sh --json</code></pre>
+</div>
+```
+
+**A3. Platform default** — new `web-ts/src/site/platform.ts`. Only the values
+JavaScript actually needs live here; the commands and expected output stay in
+the static markup so there is no second source of truth:
+
+```ts
+export type InstallTab = 'unix' | 'windows' | 'docker'
+export const INSTALL_TAB_IDS: readonly InstallTab[]
+export function defaultTab(nav?: { userAgentData?: { platform?: string }; platform?: string }): InstallTab
+```
+
+`defaultTab` is pure and takes the navigator as an argument so vitest can call
+it directly.
+
+**A4. Tabs** — new `web-ts/src/site/tabs.ts`:
+
+```ts
+export function wireTabs(tablist: HTMLElement): { activate(id: string): void }
+```
+
+Click, `ArrowLeft`/`ArrowRight`/`Home`/`End`, `aria-selected`, `tabindex`
+roving, panel `hidden` toggling, focus follows the selected tab.
+
+**A5. Copy** — new `web-ts/src/ui/copy.ts`:
+
+```ts
+export function wireCopyButtons(root: ParentNode, notify: (message: string) => void): void
+```
+
+Resolves `data-copy` to the `<pre>` text, writes via
+`navigator.clipboard.writeText`, sets the label to `Copied` for 2 s and calls
+`notify`, which is the existing `showToast`. If the clipboard API is missing or
+rejects, select the `<pre>` contents and toast "Press Ctrl+C to copy".
+
+**A6. Mount** — new `web-ts/src/site/init.ts`:
+
+```ts
+export function initSiteSections(): void
+```
+
+Wires every `.tabs` under `.main`, every `.copy-btn`, and activates
+`defaultTab()`.
+
+Call it from the `DOMContentLoaded` handler in `main.ts`, **not** from
+`initUI()`: `initUI()` only runs after `backend.probe()` succeeds, and the
+install instructions must work on a browser where conversion cannot start.
+
+**A7. Styles** — `web-ts/src/ui.css`, appended in the existing section order:
+
+| Class | Notes |
+| --- | --- |
+| `.section` | `margin-top: 40px`, `scroll-margin-top: 24px` |
+| `.section-title`, `.section-lede` | display font, `--text-1`, `--text-2` |
+| `.section-nav` | flex row, small caps, `--text-3`, `--brand-300` on hover |
+| `.codeblock`, `.codeblock-head`, `.codeblock pre` | `--surface-deep`, `--font-mono`, horizontal scroll, `--radius-m` |
+| `.copy-btn` | reuses `.btn-ghost` metrics, 32px, `aria-live` handled by the toast |
+| `.tabs .tab[aria-selected='true']` | existing `.tab` styling drives the rest; this adds the selected state |
+| `.footnote` | `--text-3`, 13px |
+
+No new tokens, no new fonts, no gradients.
+
+**A8. Clipboard in Playwright** — add to `use` in `web-ts/playwright.config.ts`
+and `web-ts/playwright.python.config.ts`:
+
+```ts
+permissions: ['clipboard-read', 'clipboard-write'],
+```
+
+**A9. Tests**
+
+- `web-ts/src/site/platform.test.ts`: `defaultTab` maps `Win32`/`Windows` →
+  `windows`, `macOS`/`Linux` → `unix`, absent navigator → `unix`.
+- `web-ts/e2e/smoke.spec.ts`: `#local` renders three tabs; clicking Windows
+  makes `local-panel-windows` visible and hides the unix panel; the copy button
+  flips to `Copied` and `navigator.clipboard.readText()` equals the command;
+  `.section-nav a[href="#local"]` updates `location.hash`.
+
+**A10. Verify**
+
+```bash
+cd web-ts && npm run typecheck && npm run build && npm test && npm run test:e2e
+cd web-ts && npm run build:python && npm run test:e2e:python
+```
+
+---
+
+### Slice B — `#agents`
+
+**B1. Section markup** — `index.html`, after `#local`: heading, the
+`npx skills add https://xqbuilds.com/pictowebp/` block with a copy button, and
+three cards — *What the agent gets*, *MCP (Rust 0.4.0+)*, *Manual install*.
+
+**B2. Doc links.** The three links (`llms.txt`, `llms-full.txt`,
+`agent/agent-contract.md`) need the build base, and `<a href>` is not rewritten
+by Vite. Use a token and replace it in the existing plugin:
+
+- markup: `<a href="__BASE__llms.txt">`
+- `web-ts/build/agent-surfaces.ts`: `transformIndexHtml(html)` returns
+  `{ html: html.replaceAll('__BASE__', base), tags: […] }`
+- `validate-agent-surfaces.mjs`: fail if `dist/index.html` still contains
+  `__BASE__`.
+
+This keeps the links working in both profiles and lets the xqbuilds sync
+rewrite them the same way it rewrites everything else.
+
+**B3. Nav link** — append `<a href="#agents">Use with an agent</a>`.
+
+**B4. Tests** — assert the command string appears exactly once and matches the
+constant used in `#local`'s skill link; `GET llms.txt` and `llms-full.txt`
+return 200 from the section's links.
+
+---
+
+### Slice C — `#editions` and `#cli`
+
+**C1. Editions cards** — three `<article class="edition-card">` blocks rather
+than a table: easier to highlight and to read on mobile. Each gets
+`data-edition="browser|rust|python"`; `initSiteSections()` adds `.is-current`
+and a *You are here* badge to the card matching `backend.capabilities.kind`,
+and swaps the two capability notes described in §3.3.
+
+**C2. CLI tables** — flags table and exit-code table, static markup in
+`index.html`. The page is the single list; the validator reads the built HTML,
+so nothing has to stay in sync by hand.
+
+**C3. Flag guard** — in `validate-agent-surfaces.mjs`:
+
+```js
+const contract = readFileSync(path.join(repo, 'docs/agent-contract.md'), 'utf8')
+const pageFlags = new Set([...html.matchAll(/--[a-z][a-z-]*/g)].map((m) => m[0]))
+for (const flag of pageFlags) {
+  check(contract.includes(flag), `index.html names ${flag}, which docs/agent-contract.md does not document`)
+}
+```
+
+**C4. Nav link** — append `<a href="#cli">CLI reference</a>`.
+
+**C5. Tests** — static profile: browser card is current, metadata note present.
+Python profile (`e2e-python/smoke.spec.ts`): python card is current, note
+absent, server-edition line present.
+
+---
+
+### Slice D — polish and the two documentation fixes
+
+**D1. Footer** — replace the single row with the section links plus
+`llms.txt`, GitHub and the existing colophon.
+
+**D2. Anchors** — `scroll-margin-top` on `.section`; smooth scrolling only under
+`@media (prefers-reduced-motion: no-preference)`.
+
+**D3. `README.md`** — two corrections found while planning:
+
+- line 103: `docker run --rm -p 127.0.0.1:8000:8000 pictowebp`, matching the
+  privacy claim;
+- the Python section must say `npm run build:python` is required before
+  `pictowebp-web`, not just in the 503 message.
+
+**D4. Contributor docs** — `CONTRIBUTING.md` and `AGENTS.md`: list
+`src/site/`, the `__BASE__` token rule, and the flag guard, so the next person
+extends the page instead of forking it.
+
+**D5. Regression check** — `npx lighthouse https://aditya-xq.github.io/PicToWebP/
+--only-categories=agentic-browsing,accessibility,performance
+--chrome-flags="--headless"` and compare CLS and accessibility against the
+pre-Phase-2 report in `docs/web-revamp-research.md`.
+
+**D6. Final verify** — typecheck, both builds, both Playwright suites, vitest,
+validator, then deploy and re-run the post-deploy URL check in
+`deploy-web-ts.yml`.
+
+---
+
+### Definition of done per slice
+
+A slice is done when: both build profiles pass, the agent-surface validator
+passes, the new Playwright assertions are green in both configs, and the
+deployed page shows the section with no console errors and no CLS.
 
 ## 9. Acceptance criteria
 
