@@ -34,6 +34,7 @@ cd src_rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings &&
 
 # Web UI , one SPA, two build profiles
 cd web-ts && npm test && npm run build          # static (browser backend) → dist/
+cd web-ts && npm run typecheck                  # app + build-tooling types
 cd web-ts && npm run build:python               # server profile → dist-python/
 cd web-ts && npm run test:e2e                   # static Playwright smoke (chromium)
 cd web-ts && npm run test:e2e:python            # python-backend Playwright smoke
@@ -159,12 +160,14 @@ Features shared across editions , keep them consistent when changing one:
 
 ## Deployment
 
-- Pushing to `main` with changes under `web-ts/**`, `agent/**`, or the workflow
-  file triggers `.github/workflows/deploy-web-ts.yml`: npm ci → test → build →
-  CSP verification → GitHub Pages publish at
+- Pushing to `main` with changes under `web-ts/**`, `agent/**`, `llms.txt`,
+  `docs/agent-contract.md`, or the workflow file triggers
+  `.github/workflows/deploy-web-ts.yml`: npm ci → test → build → CSP and agent
+  surface verification → GitHub Pages publish at
   `https://aditya-xq.github.io/PicToWebP/`. The static profile
-  (`npm run build`) is the deploy artifact; the agent catalog and `llms.txt` are
-  copied into it.
+  (`npm run build`) is the deploy artifact; the agent surface is generated into
+  it by `web-ts/build/agent-surfaces.ts` and validated by
+  `web-ts/scripts/validate-agent-surfaces.mjs`, which `npm run build` runs.
 - The workflow requires repo Actions permissions set to *Allow all actions*
   (not `local_only`) and Pages source *GitHub Actions*; the `github-pages`
   environment has a branch policy for `main`.

@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite';
 import { resolve } from 'path';
+import { agentSurfaces } from './build/agent-surfaces.ts';
 
 /**
  * Two build profiles of the same SPA:
@@ -67,6 +68,6 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       open: true,
     },
-    plugins: [cspPlugin(isPython ? "'self'" : "'none'")],
+    plugins: [cspPlugin(isPython ? "'self'" : "'none'"), agentSurfaces()],
   };
 });

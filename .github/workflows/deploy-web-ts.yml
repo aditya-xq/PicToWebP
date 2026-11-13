@@ -6,6 +6,8 @@ on:
     paths:
       - 'web-ts/**'
       - 'agent/**'
+      - 'llms.txt'
+      - 'docs/agent-contract.md'
       - '.github/workflows/deploy-web-ts.yml'
   workflow_dispatch:
 
@@ -60,11 +62,19 @@ jobs:
           test -f dist/index.html
           grep -q 'Content-Security-Policy' dist/index.html
 
-      - name: Publish agent catalog
+      # `npm run build` publishes and validates the agent surface (see
+      # web-ts/build/agent-surfaces.ts). This step is a second, explicit gate so
+      # a future build change cannot silently drop the manifests.
+      - name: Verify agent surfaces
+        working-directory: web-ts
         run: |
-          mkdir -p web-ts/dist/agent
-          cp -r agent/. web-ts/dist/agent/
-          cp llms.txt web-ts/dist/llms.txt
+          test -f dist/llms.txt
+          test -f dist/llms-full.txt
+          test -f dist/index.html.md
+          test -f dist/.well-known/agent-skills/index.json
+          test -f dist/.well-known/ard.json
+          test -f dist/agent/pictowebp/SKILL.md
+          grep -q 'rel="ard"' dist/index.html
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:

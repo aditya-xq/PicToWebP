@@ -1,0 +1,291 @@
+#!/usr/bin/env node
+/**
+ * Verifies that the built site still publishes a valid agent surface.
+ *
+ * The `llms.txt` format and the two discovery manifests are checked strictly
+ * on purpose: Lighthouse treats a *present but malformed* `llms.txt` or
+ * `ard.json` as a failure, while a missing one is "not applicable". Publishing
+ * a broken file is therefore worse than publishing none, so this guard runs in
+ * CI before anything is deployed.
+ *
+ * When the repository sources are absent (a vendored `web-ts/`, a stripped
+ * container stage) the generator skips and this script skips with it. That is
+ * distinct from a missing *output* next to present sources, which is a real
+ * regression and fails.
+ *
+ * Usage: node scripts/validate-agent-surfaces.mjs [dist]
+ */
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { SITE_BASE, SITE_ORIGIN } from '../build/site.mjs'
+
+const SKILLS_INDEX_SCHEMA = 'https://schemas.agentskills.io/discovery/0.2.0/schema.json'
+const URN = /^urn:air:[a-zA-Z0-9.-]+(:[a-zA-Z0-9._-]+)+$/
+const MEDIA_TYPE = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/
+const DIGEST = /^sha256:[0-9a-f]{64}$/
+const SKILL_NAME = /^[a-z0-9-]{1,64}$/
+const SKILL = 'pictowebp'
+
+/** A file list item: any markdown bullet, a link, and optional trailing notes. */
+const FILE_LIST_ITEM = /^[-*+] \[[^\]]+\]\([^)]+\)/
+
+const dist = path.resolve(process.argv[2] ?? 'dist')
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+const failures = []
+
+function check(condition, message) {
+  if (!condition) failures.push(message)
+}
+
+function read(relative) {
+  const file = path.join(dist, relative)
+  if (!existsSync(file)) {
+    failures.push(`missing ${relative}`)
+    return null
+  }
+  return readFileSync(file, 'utf8')
+}
+
+function sha256(file) {
+  return createHash('sha256').update(readFileSync(file)).digest('hex')
+}
+
+/**
+ * Resolves a `/`-separated path inside `dist`, matching every segment with
+ * exact case. `existsSync` alone is case-insensitive on Windows and macOS, so a
+ * link that works locally would 404 on GitHub Pages; comparing against the
+ * real directory entries keeps this check identical on every OS.
+ */
+function distEntry(relative) {
+  const segments = relative.split('/').filter((segment) => segment !== '' && segment !== '.')
+  let current = dist
+  for (const segment of segments) {
+    if (!existsSync(current)) return null
+    const match = readdirSync(current).find((name) => name === segment)
+    if (match === undefined) return null
+    current = path.join(current, match)
+  }
+  return current
+}
+
+function checkDistPath(relative, href, label) {
+  const target = distEntry(relative)
+  if (relative === '' || relative === '.') {
+    check(existsSync(dist), `${label} points at ${href}, but the build output is missing`)
+    return
+  }
+  check(
+    target !== null && statSync(target).isFile(),
+    `${label} points at ${href}, which is not in the build`,
+  )
+}
+
+/**
+ * Resolves a published link to a file in `dist`, or to `null` when the link
+ * leaves the site. Links on the site's own origin are always checked: one that
+ * points outside the project subpath, or at a path with different casing, is a
+ * broken link rather than an external one.
+ */
+function checkTarget(href, fromDir, label) {
+  if (href.startsWith('#')) return
+
+  if (/^https?:\/\//i.test(href)) {
+    let url
+    try {
+      url = new URL(href)
+    } catch {
+      failures.push(`${label}: ${href} is not a valid URL`)
+      return
+    }
+    if (url.origin !== SITE_ORIGIN) return
+    if (!url.pathname.startsWith(SITE_BASE)) {
+      failures.push(`${label}: ${href} is on the site origin but outside ${SITE_BASE}`)
+      return
+    }
+    checkDistPath(url.pathname.slice(SITE_BASE.length), href, label)
+    return
+  }
+
+  if (href.startsWith('/')) {
+    checkDistPath(href.replace(/^\/+/, ''), href, label)
+    return
+  }
+
+  checkDistPath(path.posix.relative(path.posix.dirname(fromDir), href.split('#')[0]), href, label)
+}
+
+// --- skip when this is not a full checkout --------------------------------
+
+const sources = ['llms.txt', 'agent/pictowebp/SKILL.md', 'docs/agent-contract.md']
+const missingSources = sources.filter((source) => !existsSync(path.join(repo, source)))
+
+if (missingSources.length > 0) {
+  console.warn(
+    `agent surfaces: skipped, repository sources not found (${missingSources.join(', ')}); ` +
+      'the build ran outside a full checkout',
+  )
+  process.exit(0)
+}
+
+// --- llms.txt -------------------------------------------------------------
+
+const llms = read('llms.txt')
+
+if (llms !== null) {
+  const text = llms.replace(/^\uFEFF/, '')
+  const lines = text.split(/\r?\n/)
+  const firstLine = lines.find((line) => line.trim() !== '') ?? ''
+
+  check(/^# \S/.test(firstLine), 'llms.txt must start with an H1 naming the site')
+  check(
+    lines.some((line) => line.trim().startsWith('> ')),
+    'llms.txt must contain a blockquote summary',
+  )
+
+  // Every H2 section is a "file list": list items, each a markdown link.
+  const sections = text.split(/^## /m).slice(1)
+  check(sections.length > 0, 'llms.txt must have at least one H2 file list')
+  for (const section of sections) {
+    const [heading, ...body] = section.split(/\r?\n/)
+    for (const line of body) {
+      const trimmed = line.trim()
+      if (trimmed === '') continue
+      check(
+        FILE_LIST_ITEM.test(trimmed),
+        `llms.txt section "${heading}": expected a "[name](url)" list item, got "${trimmed}"`,
+      )
+    }
+  }
+
+  for (const [, href] of text.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+    checkTarget(href, '.', 'llms.txt')
+  }
+}
+
+// --- llms-full.txt and the markdown twin ----------------------------------
+
+const full = read('llms-full.txt')
+if (full !== null) {
+  check(full.length > 4000, 'llms-full.txt looks too small to be the full reference')
+  check(full.startsWith('# PicToWebP'), 'llms-full.txt must start with the project H1')
+}
+read('index.html.md')
+
+// --- the verbatim catalog -------------------------------------------------
+
+read('agent/index.json')
+read('agent/agent-contract.md')
+const publishedSkill = read(`.well-known/agent-skills/${SKILL}/SKILL.md`)
+if (publishedSkill !== null) {
+  check(/^---\r?\n/.test(publishedSkill), 'published SKILL.md is missing YAML frontmatter')
+  check(
+    new RegExp(`^name:\\s*${SKILL}$`, 'm').test(publishedSkill),
+    `published SKILL.md frontmatter must declare name: ${SKILL}`,
+  )
+}
+
+// --- .well-known/agent-skills/index.json ----------------------------------
+
+const indexDir = '.well-known/agent-skills'
+const indexRaw = read(path.posix.join(indexDir, 'index.json'))
+let skillsIndex = null
+if (indexRaw !== null) {
+  try {
+    skillsIndex = JSON.parse(indexRaw)
+  } catch (error) {
+    failures.push(`.well-known/agent-skills/index.json is not valid JSON: ${error.message}`)
+  }
+}
+
+if (skillsIndex) {
+  check(skillsIndex.$schema === SKILLS_INDEX_SCHEMA, `skills index $schema must be ${SKILLS_INDEX_SCHEMA}`)
+  check(Array.isArray(skillsIndex.skills) && skillsIndex.skills.length > 0, 'skills index has no skills')
+  for (const skill of skillsIndex.skills ?? []) {
+    check(SKILL_NAME.test(skill.name ?? ''), `skills index: invalid skill name "${skill.name}"`)
+    check(['skill-md', 'archive'].includes(skill.type), `skills index: invalid type for ${skill.name}`)
+    check(typeof skill.description === 'string' && skill.description.length > 20, `skills index: ${skill.name} needs a description`)
+    check(DIGEST.test(skill.digest ?? ''), `skills index: ${skill.name} needs a sha256 digest`)
+    check(typeof skill.url === 'string', `skills index: ${skill.name} needs a url`)
+
+    const relative = skill.url && /^https?:\/\//.test(skill.url)
+      ? null
+      : path.posix.normalize(path.posix.join(indexDir, skill.url ?? ''))
+    if (relative) {
+      const file = distEntry(relative)
+      check(file !== null, `skills index: ${skill.name} url ${skill.url} is not in the build`)
+      if (file !== null && DIGEST.test(skill.digest ?? '')) {
+        check(
+          `sha256:${sha256(file)}` === skill.digest,
+          `skills index: digest for ${skill.name} does not match ${relative}`,
+        )
+      }
+    }
+  }
+}
+
+// --- .well-known/ard.json -------------------------------------------------
+
+const ardRaw = read('.well-known/ard.json')
+let ard = null
+if (ardRaw !== null) {
+  try {
+    ard = JSON.parse(ardRaw)
+  } catch (error) {
+    failures.push(`.well-known/ard.json is not valid JSON: ${error.message}`)
+  }
+}
+
+if (ard) {
+  check(Array.isArray(ard.entries) && ard.entries.length > 0, 'ard.json has no entries')
+  check(!('collections' in ard), 'ard.json must not have a top-level collections field')
+  for (const entry of ard.entries ?? []) {
+    check(URN.test(entry.identifier ?? ''), `ard.json: identifier "${entry.identifier}" is not a urn:air URN`)
+    check(typeof entry.displayName === 'string' && entry.displayName.length > 0, `ard.json: ${entry.identifier} needs a displayName`)
+    check(MEDIA_TYPE.test(entry.type ?? ''), `ard.json: ${entry.identifier} has an invalid media type "${entry.type}"`)
+    check(Boolean(entry.url) !== Boolean(entry.data), `ard.json: ${entry.identifier} needs exactly one of url or data`)
+    if (entry.url) checkTarget(entry.url, '.well-known', `ard.json (${entry.identifier})`)
+  }
+}
+
+// --- the page itself ------------------------------------------------------
+
+const html = read('index.html')
+if (html !== null) {
+  check(/rel="ard"/.test(html), 'index.html must link rel="ard" to the discovery manifest')
+  check(/rel="describedby"/.test(html), 'index.html must link rel="describedby" to llms.txt')
+  check(/type="text\/markdown"/.test(html), 'index.html must advertise the markdown twin')
+  check(/Content-Security-Policy/.test(html), 'index.html is missing the CSP meta tag')
+
+  // Not a failure: choosing the public host is a product decision. But the
+  // hand-written metadata still advertises xqbuilds.com while the agent
+  // surface is published on the Pages origin, and that should not pass silently.
+  const canonical = /<link rel="canonical" href="([^"]+)"/.exec(html)
+  if (canonical) {
+    // A relative canonical is legal HTML, so only compare when it parses.
+    let canonicalOrigin = null
+    try {
+      canonicalOrigin = new URL(canonical[1]).origin
+    } catch {
+      canonicalOrigin = null
+    }
+    if (canonicalOrigin !== null && canonicalOrigin !== SITE_ORIGIN) {
+      console.warn(
+        `agent surfaces: warning: rel="canonical" points at ${canonicalOrigin} but the agent ` +
+          `surface is published on ${SITE_ORIGIN}; pick one host and update ` +
+          'web-ts/build/site.mjs, index.html, robots.txt and sitemap.xml together',
+      )
+    }
+  }
+}
+
+// --- report ---------------------------------------------------------------
+
+if (failures.length > 0) {
+  console.error(`agent surfaces: ${failures.length} problem(s) in ${dist}`)
+  for (const failure of failures) console.error(`  - ${failure}`)
+  process.exit(1)
+}
+
+console.log('agent surfaces: ok')

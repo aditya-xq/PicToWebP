@@ -147,8 +147,13 @@ Runs never prompt when stdio is not a terminal, so a scripted call cannot hang.
 
 - Point your agent at **[`agent/`](agent/)** — a self-contained skill with
   installers, flag reference, machine-readable schemas, and guardrails.
-- [`llms.txt`](llms.txt) is a compact entry point for crawlers and assistants;
-  schemas are indexed at
+- Install the skill into Claude Code, Codex, Cursor, opencode or any other
+  supported agent in one line:
+  `npx skills add https://aditya-xq.github.io/PicToWebP/`
+- [`llms.txt`](llms.txt) is a compact entry point for crawlers and assistants,
+  and [`llms-full.txt`](https://aditya-xq.github.io/PicToWebP/llms-full.txt)
+  concatenates the contract and every reference for agents that prefer one
+  fetch. Schemas are indexed at
   [`agent/pictowebp/schemas/index.json`](agent/pictowebp/schemas/index.json).
 - opencode users can add the hosted catalog in one line:
   `"skills": ["https://aditya-xq.github.io/PicToWebP/agent/"]`
