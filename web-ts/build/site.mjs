@@ -3,12 +3,10 @@
  *
  * Both the build-time generator (`build/agent-surfaces.ts`) and the build-time
  * validator (`scripts/validate-agent-surfaces.mjs`) import these values, so a
- * host change is a one-line edit instead of a hunt through generated manifests
- * and hand-written markdown.
- *
- * Keep this in sync with `web-ts/index.html` (`rel="canonical"`, `og:url`) and
- * `web-ts/public/{robots.txt,sitemap.xml}`, which still advertise
- * `https://xqbuilds.com/pictowebp/`.
+ * host change is a one-line edit here. The validator then enforces the rest:
+ * `index.html` (`rel="canonical"`, `og:url`, `og:image`, JSON-LD),
+ * `public/robots.txt` and `public/sitemap.xml` must all agree with this file,
+ * and the build fails if they don't.
  */
 export const SITE_ORIGIN = 'https://aditya-xq.github.io'
 

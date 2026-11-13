@@ -258,26 +258,38 @@ if (html !== null) {
   check(/type="text\/markdown"/.test(html), 'index.html must advertise the markdown twin')
   check(/Content-Security-Policy/.test(html), 'index.html is missing the CSP meta tag')
 
-  // Not a failure: choosing the public host is a product decision. But the
-  // hand-written metadata still advertises xqbuilds.com while the agent
-  // surface is published on the Pages origin, and that should not pass silently.
-  const canonical = /<link rel="canonical" href="([^"]+)"/.exec(html)
-  if (canonical) {
-    // A relative canonical is legal HTML, so only compare when it parses.
-    let canonicalOrigin = null
-    try {
-      canonicalOrigin = new URL(canonical[1]).origin
-    } catch {
-      canonicalOrigin = null
-    }
-    if (canonicalOrigin !== null && canonicalOrigin !== SITE_ORIGIN) {
-      console.warn(
-        `agent surfaces: warning: rel="canonical" points at ${canonicalOrigin} but the agent ` +
-          `surface is published on ${SITE_ORIGIN}; pick one host and update ` +
-          'web-ts/build/site.mjs, index.html, robots.txt and sitemap.xml together',
-      )
+  // Every self-reference has to name the host this surface is published on,
+  // otherwise search engines and agents are pointed at a copy that may not
+  // carry the manifests. `build/site.mjs` is the one place to change it.
+  const pageUrl = `${SITE_ORIGIN}${SITE_BASE}`
+  const selfReferences = [
+    ['rel="canonical"', /<link rel="canonical" href="([^"]+)"/],
+    ['og:url', /<meta property="og:url" content="([^"]+)"/],
+    ['og:image', /<meta property="og:image" content="([^"]+)"/],
+    ['JSON-LD url', /"url":\s*"([^"]+)"/],
+  ]
+  for (const [name, pattern] of selfReferences) {
+    const found = pattern.exec(html)
+    check(found !== null, `index.html is missing ${name}`)
+    if (found) {
+      const expected = name === 'og:image' ? `${pageUrl}og-image.png` : pageUrl
+      check(found[1] === expected, `${name} must be ${expected}, got ${found[1]}`)
     }
   }
+}
+
+// The static files Vite copies verbatim must agree with the same host.
+const sitemap = read('sitemap.xml')
+if (sitemap !== null) {
+  check(sitemap.includes(`<loc>${SITE_ORIGIN}${SITE_BASE}</loc>`), `sitemap.xml must list ${SITE_ORIGIN}${SITE_BASE}`)
+}
+
+const robots = read('robots.txt')
+if (robots !== null) {
+  check(
+    robots.includes(`${SITE_ORIGIN}${SITE_BASE}sitemap.xml`),
+    `robots.txt must point at ${SITE_ORIGIN}${SITE_BASE}sitemap.xml`,
+  )
 }
 
 // --- report ---------------------------------------------------------------
