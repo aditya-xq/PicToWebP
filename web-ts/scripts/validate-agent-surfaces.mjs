@@ -23,7 +23,7 @@ import { CANONICAL_URL, PUBLISH_BASE, PUBLISH_ORIGIN } from '../build/site.mjs'
 
 const SKILLS_INDEX_SCHEMA = 'https://schemas.agentskills.io/discovery/0.2.0/schema.json'
 const URN = /^urn:air:[a-zA-Z0-9.-]+(:[a-zA-Z0-9._-]+)+$/
-const MEDIA_TYPE = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/
+const MEDIA_TYPE = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+(;\s*[a-z0-9-]+=("[^"]*"|[a-z0-9.+-]+))*$/i
 const DIGEST = /^sha256:[0-9a-f]{64}$/
 const SKILL_NAME = /^[a-z0-9-]{1,64}$/
 const SKILL = 'pictowebp'

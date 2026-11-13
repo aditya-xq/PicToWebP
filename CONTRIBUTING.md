@@ -210,6 +210,13 @@ are static markup in `index.html`, mounted by `web-ts/src/site/init.ts` from
   build fails otherwise, so the page cannot quietly become a second source of
   truth for the CLI.
 
+One thing that looks like a bug and is not: Lighthouse's `agentic-browsing`
+audits fetch both discovery files from inside the page, and the static build's
+`default-src 'none'` blocks that request, so `llms-txt` and `ard-schema` report
+failures on the deployed site while both files are served and valid. That CSP is
+a product guarantee. Verify the surface with `curl` or `npx skills add`, and do
+not relax the policy to satisfy an experimental audit.
+
 Two things the workflow needs from repository settings:
 
 - **Actions permissions** must be *Allow all actions and reusable workflows*

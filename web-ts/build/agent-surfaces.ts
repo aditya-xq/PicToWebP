@@ -145,11 +145,18 @@ export function agentSurfaces(): Plugin {
           {
             identifier: 'urn:air:aditya-xq.github.io:pictowebp:skill',
             displayName: 'PicToWebP agent skill',
-            type: 'text/markdown',
+            // The ARD profile parameter is what marks an entry as a skill.
+            type: 'text/markdown; profile="urn:air:agent-skills"',
             url: publishUrl(`.well-known/agent-skills/${SKILL_NAME}/SKILL.md`),
             description,
             tags: ['image', 'webp', 'compression', 'cli', 'offline'],
             capabilities: ['convert_folder', 'convert_image', 'dry_run'],
+            representativeQueries: [
+              'convert images to webp',
+              'compress jpeg and png files',
+              'bulk convert a folder of photos',
+              'shrink images for a website',
+            ],
           },
           {
             identifier: 'urn:air:aditya-xq.github.io:pictowebp:cli',
@@ -160,6 +167,11 @@ export function agentSurfaces(): Plugin {
               'Local, offline image-to-WebP converter. Rust and Python editions share one contract: --json, --info, --dry-run, stable exit codes and a stdio MCP server.',
             tags: ['image', 'webp', 'compression', 'cli', 'offline', 'mcp'],
             capabilities: ['info', 'convert', 'mcp'],
+            representativeQueries: [
+              'install pictowebp from the command line',
+              'convert images to webp in a script',
+              'reduce repository image weight',
+            ],
           },
         ],
       }
