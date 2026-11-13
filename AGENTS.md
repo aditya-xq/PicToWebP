@@ -39,6 +39,8 @@ cd web-ts && npm run test:e2e                   # static Playwright smoke (chrom
 cd web-ts && npm run test:e2e:python            # python-backend Playwright smoke
 ```
 
+The web UI requires Node 22.12+ (Vite 8 and Vitest 5 engines); CI pins Node 22.
+
 All suites are expected green before committing (currently 140 pytest, 77 cargo
 test, 24 vitest, 10 Playwright e2e).
 
