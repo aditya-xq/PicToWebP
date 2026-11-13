@@ -55,4 +55,43 @@ test.describe('PicToWebP browser edition', () => {
     });
     expect(foreign).toEqual([]);
   });
+
+  test('run-it-locally section installs, switches tabs and copies', async ({ page }) => {
+    await page.goto('/');
+
+    const local = page.locator('#local');
+    await expect(local).toBeVisible();
+    await expect(page.locator('#install-tabs [role="tab"]')).toHaveCount(3);
+
+    // Exactly one panel is open, whichever the platform default picked
+    // (covered by the unit test; the runner may be Windows or Linux).
+    await expect(page.locator('.tabpanel:visible')).toHaveCount(1);
+
+    await page.locator('#local-tab-unix').click();
+    await expect(page.locator('#local-panel-unix')).toBeVisible();
+    await expect(page.locator('#cmd-unix-install')).toContainText(
+      'releases/download/rust-latest/install.sh',
+    );
+
+    await page.locator('#local-tab-windows').click();
+    await expect(page.locator('#local-panel-windows')).toBeVisible();
+    await expect(page.locator('#local-panel-unix')).toBeHidden();
+    await expect(page.locator('#local-tab-windows')).toHaveAttribute('aria-selected', 'true');
+
+    await page.locator('#local-panel-windows .copy-btn').first().click();
+    await expect(page.locator('#local-panel-windows .copy-btn').first()).toHaveText('Copied');
+
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboard).toContain('install.ps1');
+    expect(clipboard).toContain('-Json');
+  });
+
+  test('section nav anchors resolve to sections', async ({ page }) => {
+    await page.goto('/');
+
+    const link = page.locator('.section-nav a[href="#local"]');
+    await expect(link).toBeVisible();
+    await link.click();
+    await expect(page).toHaveURL(/#local$/);
+  });
 });

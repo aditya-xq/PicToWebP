@@ -100,6 +100,10 @@
       </span>
     </div>
 
+    <nav class="section-nav" aria-label="On this page">
+      <a href="#local">Run locally</a>
+    </nav>
+
     <div class="work">
       <!-- Options (horizontal bar: quality | toggles + notes | convert) -->
       <div class="card fade-in options-card">
@@ -318,6 +322,114 @@
         </div>
       </div>
     </div>
+
+    <section id="local" class="section" aria-labelledby="local-title">
+      <h2 class="section-title" id="local-title">Run it locally</h2>
+      <p class="section-lede">
+        One signed binary: no runtime, no admin rights, no <code>PATH</code> edits. The installer
+        checks the SHA-256 from the release manifest before it writes anything.
+      </p>
+
+      <div class="tabs" id="install-tabs" role="tablist" aria-label="Install method">
+        <button class="tab" id="local-tab-unix" type="button" role="tab"
+                aria-controls="local-panel-unix" aria-selected="true" tabindex="0">macOS / Linux</button>
+        <button class="tab" id="local-tab-windows" type="button" role="tab"
+                aria-controls="local-panel-windows" aria-selected="false" tabindex="-1">Windows</button>
+        <button class="tab" id="local-tab-docker" type="button" role="tab"
+                aria-controls="local-panel-docker" aria-selected="false" tabindex="-1">Docker</button>
+      </div>
+
+      <div class="tabpanel" id="local-panel-unix" role="tabpanel" aria-labelledby="local-tab-unix" tabindex="0">
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="codeblock-label">Install</span>
+            <button class="copy-btn" type="button" data-copy="cmd-unix-install">Copy</button>
+          </div>
+          <pre id="cmd-unix-install"><code>curl -fsSLO https://github.com/aditya-xq/PicToWebP/releases/download/rust-latest/install.sh
+sh install.sh --json</code></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="codeblock-label">Check it worked</span>
+            <button class="copy-btn" type="button" data-copy="cmd-unix-verify">Copy</button>
+          </div>
+          <pre id="cmd-unix-verify"><code>pictowebp --info --json</code></pre>
+        </div>
+        <pre class="output"><code>{
+  "schema": "pictowebp.info/v1",
+  "name": "pictowebp",
+  "edition": "rust",
+  "version": "0.4.0",
+  "target": "x86_64-unknown-linux-musl",
+  "exe": "/home/you/.local/bin/pictowebp",
+  "capabilities": ["json", "info", "non_interactive", "interactive", "dry_run",
+                   "out_dir", "single_file", "fail_on_error", "fail_on_empty",
+                   "lossless", "keep_metadata", "mcp"]
+}</code></pre>
+        <p class="panel-note">
+          Installs to <code>~/.local/bin</code> without touching <code>PATH</code>. Add
+          <code>--require-attestation</code> if you have <code>gh</code> 2.49+ and want the Sigstore
+          attestation enforced.
+        </p>
+      </div>
+
+      <div class="tabpanel" id="local-panel-windows" role="tabpanel" aria-labelledby="local-tab-windows" tabindex="0" hidden>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="codeblock-label">Install</span>
+            <button class="copy-btn" type="button" data-copy="cmd-win-install">Copy</button>
+          </div>
+          <pre id="cmd-win-install"><code>irm https://github.com/aditya-xq/PicToWebP/releases/download/rust-latest/install.ps1 -OutFile install.ps1
+.\install.ps1 -Json</code></pre>
+        </div>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="codeblock-label">Check it worked</span>
+            <button class="copy-btn" type="button" data-copy="cmd-win-verify">Copy</button>
+          </div>
+          <pre id="cmd-win-verify"><code>pictowebp --info --json</code></pre>
+        </div>
+        <pre class="output"><code>{
+  "schema": "pictowebp.info/v1",
+  "name": "pictowebp",
+  "edition": "rust",
+  "version": "0.4.0",
+  "target": "x86_64-windows",
+  "exe": "C:\\Users\\you\\AppData\\Local\\Programs\\pictowebp\\pictowebp.exe",
+  "capabilities": ["json", "info", "non_interactive", "interactive", "dry_run",
+                   "out_dir", "single_file", "fail_on_error", "fail_on_empty",
+                   "lossless", "keep_metadata", "mcp"]
+}</code></pre>
+        <p class="panel-note">
+          Installs to <code>%LOCALAPPDATA%\Programs\pictowebp</code> and writes an
+          <code>install.json</code> manifest beside the binary. Use <code>-RequireAttestation</code>
+          with <code>gh</code> 2.49+ to enforce the Sigstore check.
+        </p>
+      </div>
+
+      <div class="tabpanel" id="local-panel-docker" role="tabpanel" aria-labelledby="local-tab-docker" tabindex="0" hidden>
+        <div class="codeblock">
+          <div class="codeblock-head">
+            <span class="codeblock-label">Self-host the web UI</span>
+            <button class="copy-btn" type="button" data-copy="cmd-docker">Copy</button>
+          </div>
+          <pre id="cmd-docker"><code>docker build -t pictowebp .
+docker run --rm -p 127.0.0.1:8000:8000 pictowebp</code></pre>
+        </div>
+        <p class="panel-note">
+          Needs a checkout. Opens the same UI as this page at
+          <code>http://127.0.0.1:8000</code>; the port is published to loopback only, so nothing is
+          reachable from your network.
+        </p>
+      </div>
+
+      <p class="footnote">
+        Building from source, or running the Python edition's local server? See
+        <a href="https://github.com/aditya-xq/PicToWebP/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.
+        The Python package is not published on PyPI, so <code>pip install pictowebp</code> does not
+        exist yet.
+      </p>
+    </section>
 
     <footer class="site-footer">
       <span>&copy; 2026</span>

@@ -24,6 +24,7 @@ import { entriesFromDrop, hasFiles } from './ui/drop';
 import { setFocusTrap } from './ui/focus';
 import { shareStats, type ShareStats } from './ui/share';
 import { showToast } from './ui/toasts';
+import { initSiteSections } from './site/init';
 
 type Mode = 'folder' | 'single';
 type AppState = 'idle' | 'running' | 'complete' | 'error';
@@ -1022,6 +1023,10 @@ function initUI(): void {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Outside the probe gate on purpose: the install instructions have to work
+  // even when the conversion backend is unavailable.
+  initSiteSections();
+
   void backend
     .probe()
     .then((ok) => {

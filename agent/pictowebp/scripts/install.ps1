@@ -51,11 +51,25 @@ function Test-InstalledOnPath {
 
 function Test-GhReady {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { return $false }
-    & gh auth token 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { return $false }
-    # Older gh versions authenticate but have no `gh attestation` command.
-    & gh attestation verify --help 2>$null | Out-Null
-    return $LASTEXITCODE -eq 0
+    # `gh` reports problems on stderr, and $ErrorActionPreference = "Stop" turns
+    # that into a terminating error: an unauthenticated or pre-2.49 gh would
+    # abort the whole install instead of skipping attestation. A probe must
+    # only ever return a boolean.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & gh auth token 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) { return $false }
+        # Older gh versions authenticate but have no `gh attestation` command.
+        & gh attestation verify --help 2>$null | Out-Null
+        return $LASTEXITCODE -eq 0
+    }
+    catch {
+        return $false
+    }
+    finally {
+        $ErrorActionPreference = $previous
+    }
 }
 
 function Get-DefaultInstallDir {

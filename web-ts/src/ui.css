@@ -1312,3 +1312,114 @@ kbd {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ----------------------- Page sections (#local) ---------------------- */
+.section { margin-top: 44px; scroll-margin-top: 24px; }
+.section-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-1);
+  letter-spacing: 0.2px;
+}
+.section-lede {
+  margin-top: 6px;
+  max-width: 64ch;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.section-lede code,
+.panel-note code,
+.footnote code { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-2); }
+
+.section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 18px 0 2px;
+  font-size: 12px;
+}
+.section-nav a {
+  color: var(--text-3);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+}
+.section-nav a:hover { color: var(--brand-300); border-bottom-color: rgba(227, 154, 47, 0.4); }
+
+.section .tabs { margin-top: 16px; }
+
+.codeblock {
+  margin-top: 12px;
+  overflow: hidden;
+  background: var(--surface-deep);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-m);
+}
+.codeblock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid var(--glass-border-soft);
+}
+.codeblock-label {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.codeblock pre {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-1);
+}
+.codeblock code { font-family: inherit; }
+
+.output {
+  margin: 10px 0 0;
+  padding: 12px;
+  overflow-x: auto;
+  background: var(--surface-tint-faint);
+  border: 1px dashed var(--glass-border-soft);
+  border-radius: var(--radius-m);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.output code { font-family: inherit; }
+
+.copy-btn {
+  min-height: 28px;
+  padding: 5px 10px;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 8px;
+  background: var(--surface-tint);
+  color: var(--text-2);
+  border: 1px solid rgba(216, 180, 134, 0.18);
+  cursor: pointer;
+}
+.copy-btn:hover { color: var(--text-1); background: rgba(216, 180, 134, 0.15); }
+.copy-btn.is-copied { color: var(--brand-300); border-color: rgba(227, 154, 47, 0.42); }
+
+.panel-note { margin-top: 10px; font-size: 12.5px; color: var(--text-3); max-width: 66ch; }
+.footnote { margin-top: 16px; font-size: 12.5px; color: var(--text-3); max-width: 68ch; }
+.footnote a { color: var(--text-2); }
+.footnote a:hover { color: var(--brand-300); }
+
+@media (max-width: 640px) {
+  .section { margin-top: 32px; }
+  .section-title { font-size: 21px; }
+  .section .tabs .tab { font-size: 11px; padding: 8px 4px; }
+  .codeblock pre { font-size: 12px; }
+}
